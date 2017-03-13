@@ -3,20 +3,16 @@ from setuptools import setup, find_packages
 from codecs import open
 from os import path
 
-here = path.abspath(path.dirname(__file__))
-
-with open(path.join(here, 'README.md'), encoding='utf-8') as f:
-    long_description = f.read()
 
 setup(
     name='sentenai',
-    version='0.1.0',
+    version='0.1.1.1',
     description='Client library for Sentenai',
-    long_description=long_description,
+    long_description="",
     url='https://github.com/sentenai/py-sentenai',
 
-    author='Brendan Kohler',
-    author_email='brendan@sentenai.com',
+    author='Sentenai, Inc.',
+    author_email='info@sentenai.com',
 
     license='BSD',
 
@@ -24,7 +20,7 @@ setup(
         'Development Status :: 4 - Beta',
 
         'Intended Audience :: Developers',
-        'Topic :: Database :: Internet',
+        'Topic :: Database',
 
         'License :: OSI Approved :: BSD License',
 
@@ -35,7 +31,7 @@ setup(
     keywords='sentenai cloud sensor database',
     packages=['sentenai'],
 
-    install_requires=['dateutil', 'gevent', 'grequests', 'pandas', 'pytz', 'requests'],
+    install_requires=['dateutils', 'gevent', 'grequests', 'pandas', 'pytz', 'requests'],
     extras_require={},
     package_data={},
     data_files=[],
