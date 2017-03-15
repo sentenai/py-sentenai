@@ -814,11 +814,12 @@ class Sentenai(object):
         status_codes(resp.status_code)
 
 
-    def query(self, query, returning=None):
+    def query(self, query, returning=None, limit=None):
         """Execute a flare query
 
            Arguments:
            query     -- A query object created via the `select` function.
+           limit     -- A limit to the number of result spans returned.
            returning -- An optional dictionary object mapping streams to
                         projections. Each projection is a JSON-serializable
                         dictionary where each value is either a literal
@@ -838,7 +839,7 @@ class Sentenai(object):
                                 }
                             }
         """
-        return FlareCursor(self, query, returning)()
+        return FlareCursor(self, query, returning, limit)()
 
 
     def newest(self, o):
