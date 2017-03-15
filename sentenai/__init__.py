@@ -1,4 +1,3 @@
-from __future__ import unicode_literals
 import inspect, json, re, sys, time
 import dateutil, requests, numpy, gevent, grequests
 import pandas as pd
