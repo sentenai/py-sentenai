@@ -1056,8 +1056,7 @@ class FlareCursor(object):
     def __str__(self):
         return str(self._query)
 
-    def __call__(self, limit=None):
-        self._limit = limit
+    def __call__(self):
         return FlareResult(self._client, self._query, self._execute(self._query), self._returning)
 
     def _execute(self, query):
