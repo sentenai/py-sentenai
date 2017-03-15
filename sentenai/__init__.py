@@ -1074,30 +1074,32 @@ class FlareCursor(object):
         q = query()
         if self._returning:
             q['projections'] = []
-        for s,v in self._returning.items():
-            nd = {}
-            q['projections'].append({'stream': s(), 'projection': nd})
+            for s,v in self._returning.items():
+                if not isinstance(s, Stream):
+                    raise FlareSyntaxError("returning dict top-level keys must be streams.")
+                nd = {}
+                q['projections'].append({'stream': s(), 'projection': nd})
 
-            l = [(v, nd)]
-            while l:
-                old, new = l.pop(0)
-                for k,v in old.items():
-                    if isinstance(v, EventPath):
-                        z = v()
-                        new[k] = [{'var': z['path'][1:]}]
-                    elif isinstance(v, float):
-                        new[k] = [{'lit': {'val': v, 'type': 'double'}}]
-                    elif isinstance(v, int):
-                        new[k] = [{'lit': {'val': v, 'type': 'int'}}]
-                    elif isinstance(v, str):
-                        new[k] = [{'lit': {'val': v, 'type': 'string'}}]
-                    elif isinstance(v, bool):
-                        new[k] = [{'lit': {'val': v, 'type': 'bool'}}]
-                    elif isinstance(v, dict):
-                        new[k] = {}
-                        l.append((v,new[k]))
-                    else:
-                        raise FlareSyntaxError("%s: %s is unsupported." % (k, v.__class__))
+                l = [(v, nd)]
+                while l:
+                    old, new = l.pop(0)
+                    for k,v in old.items():
+                        if isinstance(v, EventPath):
+                            z = v()
+                            new[k] = [{'var': z['path'][1:]}]
+                        elif isinstance(v, float):
+                            new[k] = [{'lit': {'val': v, 'type': 'double'}}]
+                        elif isinstance(v, int):
+                            new[k] = [{'lit': {'val': v, 'type': 'int'}}]
+                        elif isinstance(v, str):
+                            new[k] = [{'lit': {'val': v, 'type': 'string'}}]
+                        elif isinstance(v, bool):
+                            new[k] = [{'lit': {'val': v, 'type': 'bool'}}]
+                        elif isinstance(v, dict):
+                            new[k] = {}
+                            l.append((v,new[k]))
+                        else:
+                            raise FlareSyntaxError("%s: %s is unsupported." % (k, v.__class__))
 
         resp = requests.post(url, json = q, headers = headers )
         #print("finding spans took:", time.time() - a)
