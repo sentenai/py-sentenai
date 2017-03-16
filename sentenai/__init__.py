@@ -253,7 +253,7 @@ class Stream(object):
     name -- the name of a stream stored at https://api.senten.ai/streams/<name>.
     """
     def __init__(self, name, meta=None):
-        self._name = quote(name)
+        self._name = quote(name.encode('utf-8'))
         if not meta:
             self._meta = {}
         else:
@@ -793,11 +793,12 @@ class Sentenai(object):
         """Get list of available streams."""
         url = "/".join([self.host, "streams"])
         headers = {'auth-key': self.auth_key}
-        resp = requests.get(url, heades=headers)
+        resp = requests.get(url, headers=headers)
         status_codes(resp.status_code)
         try:
             return [stream(**v) for v in resp.json()]
-        except:
+        except Exception, e:
+            raise
             raise SentenaiException("Something went wrong")
 
 
