@@ -423,7 +423,7 @@ class Par(Flare):
         self.query = q
 
     def __str__(self):
-        if len(q) < 1:
+        if len(self.query) < 1:
             raise FlareSyntaxError
         elif len(self.query) == 1:
             return str(self.query[0]) if PY3 else str(self.query[0]).decode('utf-8')
