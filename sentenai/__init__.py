@@ -431,7 +431,7 @@ class Par(Flare):
             return self._f + " " + ",\n    ".join(ms)
 
     def __call__(self):
-        if len(q) < 1:
+        if len(self.query) < 1:
             raise FlareSyntaxError
         elif len(self.query) == 1:
             return self.query[0]()
