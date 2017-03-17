@@ -1,4 +1,3 @@
-from __future__ import unicode_literals
 import inspect, json, re, sys, time
 import dateutil, requests, numpy, gevent, grequests
 import pandas as pd
@@ -254,7 +253,7 @@ class Stream(object):
     name -- the name of a stream stored at https://api.senten.ai/streams/<name>.
     """
     def __init__(self, name, meta=None):
-        self._name = quote(name)
+        self._name = quote(name.encode('utf-8'))
         if not meta:
             self._meta = {}
         else:
@@ -794,11 +793,12 @@ class Sentenai(object):
         """Get list of available streams."""
         url = "/".join([self.host, "streams"])
         headers = {'auth-key': self.auth_key}
-        resp = requests.get(url, heades=headers)
+        resp = requests.get(url, headers=headers)
         status_codes(resp.status_code)
         try:
             return [stream(**v) for v in resp.json()]
-        except:
+        except Exception, e:
+            raise
             raise SentenaiException("Something went wrong")
 
 
@@ -814,11 +814,12 @@ class Sentenai(object):
         status_codes(resp.status_code)
 
 
-    def query(self, query, returning=None):
+    def query(self, query, returning=None, limit=None):
         """Execute a flare query
 
            Arguments:
            query     -- A query object created via the `select` function.
+           limit     -- A limit to the number of result spans returned.
            returning -- An optional dictionary object mapping streams to
                         projections. Each projection is a JSON-serializable
                         dictionary where each value is either a literal
@@ -838,7 +839,7 @@ class Sentenai(object):
                                 }
                             }
         """
-        return FlareCursor(self, query, returning)()
+        return FlareCursor(self, query, returning, limit)()
 
 
     def newest(self, o):
@@ -1056,8 +1057,7 @@ class FlareCursor(object):
     def __str__(self):
         return str(self._query)
 
-    def __call__(self, limit=None):
-        self._limit = limit
+    def __call__(self):
         return FlareResult(self._client, self._query, self._execute(self._query), self._returning)
 
     def _execute(self, query):
@@ -1075,30 +1075,32 @@ class FlareCursor(object):
         q = query()
         if self._returning:
             q['projections'] = []
-        for s,v in self._returning.items():
-            nd = {}
-            q['projections'].append({'stream': s(), 'projection': nd})
+            for s,v in self._returning.items():
+                if not isinstance(s, Stream):
+                    raise FlareSyntaxError("returning dict top-level keys must be streams.")
+                nd = {}
+                q['projections'].append({'stream': s(), 'projection': nd})
 
-            l = [(v, nd)]
-            while l:
-                old, new = l.pop(0)
-                for k,v in old.items():
-                    if isinstance(v, EventPath):
-                        z = v()
-                        new[k] = [{'var': z['path'][1:]}]
-                    elif isinstance(v, float):
-                        new[k] = [{'lit': {'val': v, 'type': 'double'}}]
-                    elif isinstance(v, int):
-                        new[k] = [{'lit': {'val': v, 'type': 'int'}}]
-                    elif isinstance(v, str):
-                        new[k] = [{'lit': {'val': v, 'type': 'string'}}]
-                    elif isinstance(v, bool):
-                        new[k] = [{'lit': {'val': v, 'type': 'bool'}}]
-                    elif isinstance(v, dict):
-                        new[k] = {}
-                        l.append((v,new[k]))
-                    else:
-                        raise FlareSyntaxError("%s: %s is unsupported." % (k, v.__class__))
+                l = [(v, nd)]
+                while l:
+                    old, new = l.pop(0)
+                    for k,v in old.items():
+                        if isinstance(v, EventPath):
+                            z = v()
+                            new[k] = [{'var': z['path'][1:]}]
+                        elif isinstance(v, float):
+                            new[k] = [{'lit': {'val': v, 'type': 'double'}}]
+                        elif isinstance(v, int):
+                            new[k] = [{'lit': {'val': v, 'type': 'int'}}]
+                        elif isinstance(v, str):
+                            new[k] = [{'lit': {'val': v, 'type': 'string'}}]
+                        elif isinstance(v, bool):
+                            new[k] = [{'lit': {'val': v, 'type': 'bool'}}]
+                        elif isinstance(v, dict):
+                            new[k] = {}
+                            l.append((v,new[k]))
+                        else:
+                            raise FlareSyntaxError("%s: %s is unsupported." % (k, v.__class__))
 
         resp = requests.post(url, json = q, headers = headers )
         #print("finding spans took:", time.time() - a)
