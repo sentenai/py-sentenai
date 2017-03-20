@@ -231,7 +231,7 @@ class Cond(Flare):
         else:
             vt = 'string'
 
-        d = {'op': self.op, 'val': {'type': vt, 'val': self.val}}
+        d = {'op': self.op, 'arg': {'type': vt, 'val': self.val}}
         if self.path.stream:
             d['type'] = 'span'
         if stream:
@@ -1074,12 +1074,12 @@ class FlareCursor(object):
 
         q = query()
         if self._returning:
-            q['projections'] = []
+            q['projections'] = {'explicit': []}
             for s,v in self._returning.items():
                 if not isinstance(s, Stream):
                     raise FlareSyntaxError("returning dict top-level keys must be streams.")
                 nd = {}
-                q['projections'].append({'stream': s(), 'projection': nd})
+                q['projections']['explicit'].append({'stream': s(), 'projection': nd})
 
                 l = [(v, nd)]
                 while l:
