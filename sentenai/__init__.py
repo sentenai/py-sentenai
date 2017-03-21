@@ -797,8 +797,7 @@ class Sentenai(object):
         status_codes(resp.status_code)
         try:
             return [stream(**v) for v in resp.json()]
-        except Exception, e:
-            raise
+        except:
             raise SentenaiException("Something went wrong")
 
 
