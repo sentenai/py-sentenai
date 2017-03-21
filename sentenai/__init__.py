@@ -445,7 +445,7 @@ class Or(Flare):
         self.query = q
 
     def __call__(self):
-        return {'type': '||', 'args': [q() for q in self.query]}
+        return {'expr': '||', 'args': [q() for q in self.query]}
 
     def __str__(self):
         qs = []
@@ -569,7 +569,7 @@ class Span(Flare):
                 d['type'] = 'span'
                 d.update(self.query[0]())
         else:
-            d['type'] = '&&'
+            d['expr'] = '&&'
             d['args'] = [q() for q in self.query]
         return d
 
