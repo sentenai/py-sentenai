@@ -6,7 +6,7 @@ from os import path
 
 setup(
     name='sentenai',
-    version='0.1.2.0',
+    version='0.2.0.0',
     description='Client library for Sentenai',
     long_description="",
     url='https://github.com/sentenai/py-sentenai',
