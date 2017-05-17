@@ -828,6 +828,16 @@ class Sentenai(object):
 
 
     def range(self, stream, start, end):
+        """Get all events in stream between start (inclusive) and end (exclusive).
+
+           Arguments:
+           stream -- A stream object corresponding to a stream stored in Sentenai.
+           start -- A datetime object representing the start of the requested time range.
+           end -- A datetime object representing the end of the requested time range.
+
+           Result:
+           A time ordered list of all events in a stream from `start` to `end`
+        """
         url = "/".join([self.host, "streams", stream()['name'], "events", iso8601(start), iso8601(end)])
         headers = {'auth-key': self.auth_key}
         resp = requests.get(url, headers=headers)
