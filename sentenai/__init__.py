@@ -162,6 +162,8 @@ class Select(Flare):
         if not self._query:
             raise FlareSyntaxError("Use .span method to start select")
         else:
+            if "after" not in kwargs and "within" not in kwargs:
+                kwargs["within"] = delta(seconds=0)
             self._query.append(Span(*q, **kwargs))
         return self
 
@@ -259,6 +261,13 @@ class Stream(object):
             self._meta = {}
         else:
             self._meta = meta
+
+    def __eq__(self, other):
+        try:
+            return self._name == other._name
+        except AttributeError:
+            return False
+
 
     def __hash__(self):
         return hash(self._name)
@@ -479,6 +488,8 @@ class Serial(Flare):
                 self.query.append(x)
 
     def then(self, *q, **kwargs):
+        if "after" not in kwargs and "within" not in kwargs:
+            kwargs["within"] = delta(seconds=0)
         self.query.append(Span(*q, **kwargs))
         return self
 
@@ -540,6 +551,8 @@ class Span(Flare):
         return cs
 
     def then(self, *q, **kwargs):
+        if "after" not in kwargs and "within" not in kwargs:
+            kwargs["within"] = delta(seconds=0)
         return Serial(self, Span(*q, **kwargs))
 
     def __call__(self):
@@ -818,8 +831,9 @@ class Sentenai(object):
         url = "/".join([self.host, "streams", stream()['name'], "events", iso8601(start), iso8601(end)])
         headers = {'auth-key': self.auth_key}
         resp = requests.get(url, headers=headers)
-        print(resp)
+        status_codes(resp)
         return [json.loads(line) for line in resp.text.splitlines()]
+
 
 
     def query(self, query, returning=None, limit=None):
