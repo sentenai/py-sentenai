@@ -841,7 +841,7 @@ class Sentenai(object):
         url = "/".join([self.host, "streams", stream()['name'], "events", iso8601(start), iso8601(end)])
         headers = {'auth-key': self.auth_key}
         resp = requests.get(url, headers=headers)
-        status_codes(resp)
+        status_codes(resp.status_code)
         return [json.loads(line) for line in resp.text.splitlines()]
 
 
