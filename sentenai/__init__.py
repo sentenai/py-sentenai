@@ -2,7 +2,7 @@ import inspect, json, re, sys, time
 import dateutil, requests, numpy, gevent, grequests
 import pandas as pd
 from pandas.io.json import json_normalize
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
 try:
     from urllib.parse import quote
 except:
@@ -46,6 +46,7 @@ def status_codes(code):
 
     elif code >= 400:
         raise SentenaiException("something went wrong")
+
 
 #### Constants
 
@@ -166,16 +167,16 @@ class Select(Flare):
 
     def __call__(self):
         if self._after and self._before:
-            s = {'between': [self._after.isoformat(), self._before.isoformat()]}
+            s = {'between': [iso8601(self._after), iso8601(self._before)]}
         elif self._after:
-            s = {'after': self._after.isoformat()}
+            s = {'after': iso8601(self._after)}
         elif self._before:
-            s = {'before': self._before.isoformat()}
+            s = {'before': iso8601(self._before)}
         else:
             s = {}
 
         if len(self._query) == 0:
-            raise FlareSyntaxError("Empty Select")
+            s['select'] = {"expr": "true"}
         elif len(self._query) == 1:
             s['select'] = self._query[0]()
         else:
@@ -627,7 +628,7 @@ def cts(ts):
 
 def dts(obj):
     if isinstance(obj, datetime):
-        serial = obj.isoformat()
+        serial = iso8601(obj)
         return serial
     else:
         return obj
@@ -769,7 +770,7 @@ class Sentenai(object):
         jd = event
 
         if timestamp:
-            headers['timestamp'] = timestamp.isoformat()
+            headers['timestamp'] = iso8601(timestamp)
 
         if id:
             url = '{host}/streams/{sid}/events/{eid}'.format(sid=stream()['name'], host=self.host, eid=id)
@@ -813,6 +814,14 @@ class Sentenai(object):
         status_codes(resp.status_code)
 
 
+    def range(self, stream, start, end):
+        url = "/".join([self.host, "streams", stream()['name'], "events", iso8601(start), iso8601(end)])
+        headers = {'auth-key': self.auth_key}
+        resp = requests.get(url, headers=headers)
+        print(resp)
+        return [json.loads(line) for line in resp.text.splitlines()]
+
+
     def query(self, query, returning=None, limit=None):
         """Execute a flare query
 
@@ -841,18 +850,18 @@ class Sentenai(object):
         return FlareCursor(self, query, returning, limit)()
 
 
-    def newest(self, o):
-        if isinstance(o, Stream):
-            raise NotImplementedError
-        else:
-            raise SentenaiException("Must be called on stream")
+#   def newest(self, o):
+#       if isinstance(o, Stream):
+#           raise NotImplementedError
+#       else:
+#           raise SentenaiException("Must be called on stream")
 
 
-    def oldest(self, o):
-        if isinstance(o, Stream):
-            raise NotImplementedError
-        else:
-            raise SentenaiException("Must be called on stream")
+#   def oldest(self, o):
+#       if isinstance(o, Stream):
+#           raise NotImplementedError
+#       else:
+#           raise SentenaiException("Must be called on stream")
 
 
 class FlareResult(object):
@@ -1078,28 +1087,31 @@ class FlareCursor(object):
                 if not isinstance(s, Stream):
                     raise FlareSyntaxError("returning dict top-level keys must be streams.")
                 nd = {}
-                q['projections']['explicit'].append({'stream': s(), 'projection': nd})
+                if v is True:
+                    q['projections']['explicit'].append({'stream': s(), 'projection': "default"})
+                else:
+                    q['projections']['explicit'].append({'stream': s(), 'projection': nd})
 
-                l = [(v, nd)]
-                while l:
-                    old, new = l.pop(0)
-                    for k,v in old.items():
-                        if isinstance(v, EventPath):
-                            z = v()
-                            new[k] = [{'var': z['path'][1:]}]
-                        elif isinstance(v, float):
-                            new[k] = [{'lit': {'val': v, 'type': 'double'}}]
-                        elif isinstance(v, int):
-                            new[k] = [{'lit': {'val': v, 'type': 'int'}}]
-                        elif isinstance(v, str):
-                            new[k] = [{'lit': {'val': v, 'type': 'string'}}]
-                        elif isinstance(v, bool):
-                            new[k] = [{'lit': {'val': v, 'type': 'bool'}}]
-                        elif isinstance(v, dict):
-                            new[k] = {}
-                            l.append((v,new[k]))
-                        else:
-                            raise FlareSyntaxError("%s: %s is unsupported." % (k, v.__class__))
+                    l = [(v, nd)]
+                    while l:
+                        old, new = l.pop(0)
+                        for k,v in old.items():
+                            if isinstance(v, EventPath):
+                                z = v()
+                                new[k] = [{'var': z['path'][1:]}]
+                            elif isinstance(v, float):
+                                new[k] = [{'lit': {'val': v, 'type': 'double'}}]
+                            elif isinstance(v, int):
+                                new[k] = [{'lit': {'val': v, 'type': 'int'}}]
+                            elif isinstance(v, str):
+                                new[k] = [{'lit': {'val': v, 'type': 'string'}}]
+                            elif isinstance(v, bool):
+                                new[k] = [{'lit': {'val': v, 'type': 'bool'}}]
+                            elif isinstance(v, dict):
+                                new[k] = {}
+                                l.append((v,new[k]))
+                            else:
+                                raise FlareSyntaxError("%s: %s is unsupported." % (k, v.__class__))
 
         resp = requests.post(url, json = q, headers = headers )
         #print("finding spans took:", time.time() - a)
@@ -1121,3 +1133,11 @@ class FlareCursor(object):
         else:
             return data
 
+
+class UTC(tzinfo):
+    def utcoffset(self, dt): return timedelta()
+
+def iso8601(dt):
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC())
+    return dt.isoformat()
