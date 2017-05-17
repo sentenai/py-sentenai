@@ -202,7 +202,7 @@ class Select(Flare):
         elif not self._before:
             s = "select after {s:%Y-%m-%d %H:%M:%S%z}{sep}{q}".format(q=q, s=self._after, sep=sep)
         elif not self._after:
-            s = "select before {s:%Y-%m-%d %H:%M:%S%z}{sep}{q}".format(q=q, e=self._before, sep=sep)
+            s = "select before {e:%Y-%m-%d %H:%M:%S%z}{sep}{q}".format(q=q, e=self._before, sep=sep)
         else:
             s = "select from {s:%Y-%m-%d %H:%M:%S%z} until {e:%Y-%m-%d %H:%M:%S%z}{sep}{q}".format(q=q, s=self._after, e=self._before, sep=sep)
         return s
