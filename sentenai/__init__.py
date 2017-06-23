@@ -255,12 +255,9 @@ class Stream(object):
     Keywords arguments:
     name -- the name of a stream stored at https://api.senten.ai/streams/<name>.
     """
-    def __init__(self, name, meta=None):
+    def __init__(self, name, *filters):
         self._name = quote(name.encode('utf-8'))
-        if not meta:
-            self._meta = {}
-        else:
-            self._meta = meta
+        self._filters = filters
 
     def __eq__(self, other):
         try:
@@ -296,11 +293,21 @@ class Stream(object):
         if sub and val: 
             return val
         else:
-            return '(stream "{}")'.format(self._name)
+            if not self._filters:
+                return '(stream "{}")'.format(self._name)
+            else:
+                return '(stream "{}" with {})'.format(self._name, self._filters)
+
 
 
     def __call__(self):
-        return {'name': self._name}
+        b =  {'name': self._name}
+        if self._filters:
+            if len(self._filters) > 1:
+                b['filter'] = {'type': '&&', 'args': [x() for x in self._filters]}
+            elif len(self._filters) == 1:
+                b['filter'] = self._filters[0]()
+        return b
 
     def __getattr__(self, name):
         return StreamPath((name,), self)
@@ -673,8 +680,8 @@ def merge(s1, s2):
 
 #### Convenience Functions
 
-def stream(name, **kwargs):
-    return Stream(name, **kwargs)
+def stream(name, *args, **kwargs):
+    return Stream(name, *args, **kwargs)
 
 V = EventPath()
 
