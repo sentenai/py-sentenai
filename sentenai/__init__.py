@@ -1,14 +1,16 @@
 import inspect, json, re, sys, time
-import dateutil, requests, numpy, gevent, grequests
+import dateutil, requests, numpy
 import pandas as pd
+from shapely.geometry import Point, Polygon
 from pandas.io.json import json_normalize
 from datetime import datetime, timedelta, tzinfo
+from multiprocessing.pool import ThreadPool
 try:
     from urllib.parse import quote
 except:
     from urllib import quote
 
-__all__ = ['FlareSyntaxError', 'LEFT', 'CENTER', 'RIGHT', 'Sentenai', 'span', 'any_of', 'all_of', 'V', 'delta', 'event', 'stream', 'select', 'ast']
+__all__ = ['FlareSyntaxError', 'LEFT', 'CENTER', 'RIGHT', 'Sentenai', 'span', 'any_of', 'all_of', 'V', 'delta', 'event', 'stream', 'select', 'ast', 'within_distance', 'inside_region']
 
 #### Python 2 Compatibility Decorator
 
@@ -59,6 +61,38 @@ DEFAULT = None
 class Flare(object):
     def __repr__(self):
         return str(self)
+
+
+class InCircle(Flare):
+    def __init__(self, center, radius):
+        self.center = center
+        self.radius = radius
+
+    def __call__(self):
+        return {
+            'center': {
+                'lat': self.center.y,
+                'lon': self.center.x },
+            'radius': self.radius
+        }
+
+    def __str__(self):
+        return 'Circle{{lat:{}, lon:{}, radius:{}}}'.format(self.center.y, self.center.x, self.radius)
+
+@py2str
+class InPolygon(Flare):
+    def __init__(self, poly):
+        self.poly = poly
+
+    def __call__(self):
+        vs = [{'lat': y, 'lon': x} for x, y in numpy.asarray(self.poly.exterior.coords)]
+        return {"vertices": vs}
+
+    def __str__(self): 
+        return "Polygon[{}]".format(", ".join(['{{lat: {},  lon: {}}}'.format(x, y) for x, y in fnp.asarray(self.poly.exterior.coords)]))
+
+
+
 
 @py2str
 class Switch(Flare):
@@ -214,6 +248,9 @@ class Cond(Flare):
         self.path = path
         self.op = op
         self.val = val
+        if isinstance(self.val, InPolygon) or isinstance(self.val, InCircle):
+            if op not in ('==',):
+                raise FlareSyntaxError("Only `==` operator can be used with regions")
 
     def __str__(self):
         if isinstance(self.val, str):
@@ -225,16 +262,32 @@ class Cond(Flare):
         return "{path} {op} {val}".format(path=p, op=self.op, val=val)
 
     def __call__(self, stream=None):
+        val = self.val
+        op = self.op
         if isinstance(self.val, float):
             vt = 'double'
         elif isinstance(self.val, bool):
             vt = 'bool'
         elif isinstance(self.val, int):
             vt = 'double'
+        elif isinstance(self.val, InPolygon):
+            vt = "polygon"
+            op = "in"
+            val = self.val()
+        elif isinstance(self.val, InCircle):
+            vt = "circle"
+            op = "in"
+            val = self.val()
+        elif isinstance(self.val, date):
+            vt = "date"
+            val = "{}-{}-{}".format(self.val.year, self.val.month, self.val.day)
+        elif isinstance(self.val, datetime):
+            vt = "datetime"
+            val = iso8061(self.val)
         else:
             vt = 'string'
 
-        d = {'op': self.op, 'arg': {'type': vt, 'val': self.val}}
+        d = {'op': op, 'arg': {'type': vt, 'val': val}}
         if self.path.stream:
             d['type'] = 'span'
         if stream:
@@ -717,6 +770,11 @@ def any_of(*q): return Par("any", q)
 
 def all_of(*q): return Par("all", q)
 
+def within_distance(km, of):
+    return InCircle(of, km)
+
+def inside_region(poly):
+    return InPolygon(poly)
 
 #### Non-Flare Objects
 
@@ -948,16 +1006,12 @@ class FlareResult(object):
 
     def _events(self):
         spans = []
-        for span in self._spans:
-            s = cts(span['start'])
-            e = cts(span['end'])
-            c = span['cursor']
-            spans.append(gevent.spawn(self._slice, s, e, c))
-        a = time.time()
-        gevent.joinall(spans)
-        #print("finding events took:", time.time() - a)
-        self._data = [span.value for span in spans]
-        return self._data
+        pool = ThreadPool(8)
+        try:
+            self._data = pool.map(lambda span: self._slice(cts(span['start']), cts(span['end']), span['cursor']), self._spans)
+            return self._data
+        finally:
+            pool.close()
 
     def _slice(self, s, e, c):
         if self._window is not None:

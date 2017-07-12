@@ -6,7 +6,7 @@ from os import path
 
 setup(
     name='sentenai',
-    version='0.2.1.1',
+    version='0.3.0.1',
     description='Client library for Sentenai',
     long_description="",
     url='https://github.com/sentenai/py-sentenai',
@@ -31,7 +31,7 @@ setup(
     keywords='sentenai cloud sensor database',
     packages=['sentenai'],
 
-    install_requires=['dateutils', 'gevent', 'grequests', 'pandas', 'pytz', 'requests'],
+    install_requires=['dateutils', 'pandas', 'pytz', 'requests', 'shapely'],
     extras_require={},
     package_data={},
     data_files=[],
