@@ -870,15 +870,23 @@ class Sentenai(object):
                 raise SentenaiException("something went wrong")
 
 
-    def streams(self):
+    def streams(self, name=None, meta={}):
         """Get list of available streams."""
         url = "/".join([self.host, "streams"])
         headers = {'auth-key': self.auth_key}
         resp = requests.get(url, headers=headers)
         status_codes(resp.status_code)
-        print(resp.json())
+
+        def filtered(s):
+            f = True
+            if name:
+                f = bool(re.search(name, s['name']))
+            for k,v in meta.items():
+                f = f and s.get('meta', {}).get(k) == v
+            return f
+
         try:
-            return [stream(**v) for v in resp.json()]
+            return [stream(**v) for v in resp.json() if filtered(v)]
         except:
             raise SentenaiException("Something went wrong")
 
