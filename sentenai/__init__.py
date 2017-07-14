@@ -308,8 +308,9 @@ class Stream(object):
     Keywords arguments:
     name -- the name of a stream stored at https://api.senten.ai/streams/<name>.
     """
-    def __init__(self, name, *filters):
+    def __init__(self, name, meta, *filters):
         self._name = quote(name.encode('utf-8'))
+        self._meta = meta
         self._filters = filters
 
     def __eq__(self, other):
@@ -734,7 +735,8 @@ def merge(s1, s2):
 #### Convenience Functions
 
 def stream(name, *args, **kwargs):
-    return Stream(name, *args, **kwargs)
+    """Define a stream, possibly with a list of filter arguments."""
+    return Stream(name, kwargs.get('meta', {}), *args)
 
 V = EventPath()
 
@@ -874,6 +876,7 @@ class Sentenai(object):
         headers = {'auth-key': self.auth_key}
         resp = requests.get(url, headers=headers)
         status_codes(resp.status_code)
+        print(resp.json())
         try:
             return [stream(**v) for v in resp.json()]
         except:
@@ -1037,7 +1040,6 @@ class FlareResult(object):
 
             if not resp.ok and retries > 2:
                 print(resp)
-                raise
                 raise Exception("failed to get cursor")
             elif not resp.ok:
                 retries += 1
@@ -1058,10 +1060,7 @@ class FlareResult(object):
                         for key, pth in self._returning[ss].items():
                             evt[key] = event['event']
                             for sg in pth:
-                                try:
-                                    evt[key] = evt[key][sg]
-                                except:
-                                    raise
+                                evt[key] = evt[key][sg]
                         event['event'] = evt
                     del event['stream']
                     events.append(event)
