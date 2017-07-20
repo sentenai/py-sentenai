@@ -327,10 +327,18 @@ class Stream(object):
         self._name = name
 
     def __repr__(self):
-        return str(self)
+        if not self._filters:
+            return "Stream(name=\"{}\")".format(self._name, self._filters)
+        else:
+            return "Stream(name=\"{}\", filters={})".format(self._name, self._filters)
 
-    def __getitem__(self, sw):
-        return sw.bind(self)
+    def __getitem__(self, key):
+        if key == "name":
+            return self._name
+        elif key == "meta":
+            return self._meta
+        else:
+            raise KeyError
 
     def __str__(self):
         sub = False
@@ -353,15 +361,18 @@ class Stream(object):
                 return '(stream "{}" with {})'.format(self._name, self._filters)
 
 
+    def __call__(self, sw=None):
+        if not sw:
+            b =  {'name': self._name}
+            if self._filters:
+                if len(self._filters) > 1:
+                    b['filter'] = {'type': '&&', 'args': [x() for x in self._filters]}
+                elif len(self._filters) == 1:
+                    b['filter'] = self._filters[0]()
+            return b
+        else:
+            return sw.bind(self)
 
-    def __call__(self):
-        b =  {'name': self._name}
-        if self._filters:
-            if len(self._filters) > 1:
-                b['filter'] = {'type': '&&', 'args': [x() for x in self._filters]}
-            elif len(self._filters) == 1:
-                b['filter'] = self._filters[0]()
-        return b
 
     def __getattr__(self, name):
         return StreamPath((name,), self)
