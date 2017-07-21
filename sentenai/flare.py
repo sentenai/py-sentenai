@@ -5,15 +5,13 @@ import sys
 from datetime import date, datetime, timedelta
 
 from sentenai.exceptions import FlareSyntaxError
-from sentenai.utils import iso8601, py2str
+from sentenai.utils import iso8601, py2str, PY3
 
 try:
     from urllib.parse import quote
 except:
     from urllib import quote
 
-
-PY3 = sys.version_info[0] == 3
 
 
 def delta(seconds=0, minutes=0, hours=0, days=0, weeks=0, months=0, years=0):
