@@ -1,12 +1,20 @@
-import inspect, json, re, sys, time
-import dateutil, requests, numpy
-import pandas as pd
-from shapely.geometry import Point, Polygon
-from pandas.io.json import json_normalize
-from datetime import datetime, timedelta, tzinfo
-from multiprocessing.pool import ThreadPool
-from sentenai.exceptions import *
-from sentenai.utils import *
+import inspect
+import numpy as np
+import sys
+
+from datetime import date, datetime, timedelta
+
+from sentenai import delta  # possible circular import
+from sentenai.exceptions import FlareSyntaxError
+from sentenai.utils import iso8601, py2str
+
+try:
+    from urllib.parse import quote
+except:
+    from urllib import quote
+
+
+PY3 = sys.version_info[0] == 3
 
 
 class Flare(object):
@@ -36,11 +44,11 @@ class InPolygon(Flare):
         self.poly = poly
 
     def __call__(self):
-        vs = [{'lat': y, 'lon': x} for x, y in numpy.asarray(self.poly.exterior.coords)]
+        vs = [{'lat': y, 'lon': x} for x, y in np.asarray(self.poly.exterior.coords)]
         return {"vertices": vs}
 
-    def __str__(self): 
-        return "Polygon[{}]".format(", ".join(['{{lat: {},  lon: {}}}'.format(x, y) for x, y in fnp.asarray(self.poly.exterior.coords)]))
+    def __str__(self):
+        return "Polygon[{}]".format(", ".join(['{{lat: {},  lon: {}}}'.format(x, y) for x, y in np.asarray(self.poly.exterior.coords)]))
 
 
 
@@ -234,7 +242,7 @@ class Cond(Flare):
             val = "{}-{}-{}".format(self.val.year, self.val.month, self.val.day)
         elif isinstance(self.val, datetime):
             vt = "datetime"
-            val = iso8061(self.val)
+            val = iso8601(self.val)
         else:
             vt = 'string'
 
@@ -303,7 +311,7 @@ class Stream(object):
                 sub = True
             elif sf[4] and 'Serial' in sf[4][0]:
                 sub = True
-        if sub and val: 
+        if sub and val:
             return val
         else:
             if not self._filters:
@@ -674,4 +682,3 @@ def merge(s1, s2):
     else:
         s3._width = s2._width
     return s3
-
