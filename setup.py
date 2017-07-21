@@ -1,8 +1,4 @@
-
-from setuptools import setup, find_packages
-from codecs import open
-from os import path
-
+from setuptools import setup
 
 setup(
     name='sentenai',
@@ -37,4 +33,3 @@ setup(
     data_files=[],
     entry_points={},
 )
-
