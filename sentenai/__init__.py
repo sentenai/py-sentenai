@@ -31,10 +31,6 @@ DEFAULT = None
 
 #### Convenience Functions
 
-def stream(name, *args, **kwargs):
-    """Define a stream, possibly with a list of filter arguments."""
-    return Stream(name, kwargs.get('meta', {}), *args)
-
 V = EventPath()
 
 def event(*args, **kwargs):

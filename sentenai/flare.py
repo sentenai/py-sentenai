@@ -663,6 +663,10 @@ class Delta(Flare):
         return r or {'seconds': 0}
 
 
+def stream(name, *args, **kwargs):
+    """Define a stream, possibly with a list of filter arguments."""
+    return Stream(name, kwargs.get('meta', {}), *args)
+
 def merge(s1, s2):
     s3 = Span(*s2.query)
     if s1._within is None or s2._within is None:
