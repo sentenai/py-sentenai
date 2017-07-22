@@ -18,6 +18,10 @@ def delta(seconds=0, minutes=0, hours=0, days=0, weeks=0, months=0, years=0):
     return Delta(**locals())
 
 
+def delta(seconds=0, minutes=0, hours=0, days=0, weeks=0, months=0, years=0):
+    return Delta(**locals())
+
+
 class Flare(object):
     def __repr__(self):
         return str(self)
