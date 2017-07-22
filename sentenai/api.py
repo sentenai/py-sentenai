@@ -1,13 +1,22 @@
-import inspect, json, re, sys, time
-import dateutil, requests, numpy
+import json
+import re
+import requests
+
 import pandas as pd
-from shapely.geometry import Point, Polygon
+
 from pandas.io.json import json_normalize
-from datetime import datetime, timedelta, tzinfo
+from datetime import timedelta
 from multiprocessing.pool import ThreadPool
-from sentenai.exceptions import *
-from sentenai.utils import *
-from sentenai.flare import *
+
+from sentenai.exceptions import AuthenticationError, FlareSyntaxError, NotFound, SentenaiException, status_codes
+from sentenai.utils import cts, dts, iso8601
+from sentenai.flare import EventPath, Stream, stream
+
+
+# Constants
+LEFT, CENTER, RIGHT = range(-1, 2)
+DEFAULT = None
+
 
 class Sentenai(object):
     def __init__(self, auth_key=""):
@@ -243,7 +252,6 @@ class FlareResult(object):
         return self
 
     def _events(self):
-        spans = []
         pool = ThreadPool(8)
         try:
             self._data = pool.map(lambda span: self._slice(cts(span['start']), cts(span['end']), span['cursor']), self._spans)
@@ -284,8 +292,10 @@ class FlareResult(object):
                 c = resp.headers.get('cursor')
                 data = resp.json()
 
-                for sid, stream in data['streams'].items():
-                    streams[sid] = {'stream': stream, 'events': []}
+                # using stream_obj var name to avoid clashing with imported
+                # stream function from flare.py
+                for sid, stream_obj in data['streams'].items():
+                    streams[sid] = {'stream': stream_obj, 'events': []}
 
                 for event in data['events']:
                     events = streams[event['stream']]['events']
@@ -307,7 +317,6 @@ class FlareResult(object):
             self._events()
 
         data = self._data
-        keys = {'.id', '.ts'}
         output = {}
 
         if len(data) < 1:
@@ -337,7 +346,7 @@ class FlareResult(object):
                 if sp:
                     t0 = cts(sp[0]['ts'])
                 for evt in sp:
-                    if evt == None: continue
+                    if evt is None: continue
                     ts = cts(evt['ts'])
                     o = {'.stream': st,
                          '.span': i,
@@ -368,7 +377,9 @@ class FlareResult(object):
                         zip(df['.span'], df['.ts'], df['.span']),
                         names=['.span', '.ts', '.span'])
 
-        return df.set_index(midx).drop(idx_names, axis=1)
+        # FIXME: idx_names is undefined
+        # return df.set_index(midx).drop(idx_names, axis=1)
+        return
 
 
 
@@ -391,7 +402,6 @@ class FlareCursor(object):
         headers = {'content-type': 'application/json', 'auth-key': self._client.auth_key}
 
         # POST a query
-        a = time.time()
         if self._limit is None:
             url = '{host}/query'.format(host = self._client.host)
         else:
