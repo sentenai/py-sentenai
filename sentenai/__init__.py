@@ -1,10 +1,5 @@
-import inspect, json, re, sys, time
-import dateutil, requests, numpy
-import pandas as pd
-from shapely.geometry import Point, Polygon
-from pandas.io.json import json_normalize
-from datetime import datetime, timedelta, tzinfo
-from multiprocessing.pool import ThreadPool
+import json
+
 from sentenai.exceptions import *
 from sentenai.utils import *
 from sentenai.api import *
