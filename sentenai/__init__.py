@@ -40,9 +40,6 @@ V = EventPath()
 def event(*args, **kwargs):
     return Switch(*args, **kwargs)
 
-def delta(seconds=0, minutes=0, hours=0, days=0, weeks=0, months=0, years=0):
-    return Delta(**locals())
-
 def ast(q):
     return json.dumps(q(), indent=4)
 

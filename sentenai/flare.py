@@ -4,7 +4,6 @@ import sys
 
 from datetime import date, datetime, timedelta
 
-from sentenai import delta  # possible circular import
 from sentenai.exceptions import FlareSyntaxError
 from sentenai.utils import iso8601, py2str
 
@@ -15,6 +14,10 @@ except:
 
 
 PY3 = sys.version_info[0] == 3
+
+
+def delta(seconds=0, minutes=0, hours=0, days=0, weeks=0, months=0, years=0):
+    return Delta(**locals())
 
 
 class Flare(object):
