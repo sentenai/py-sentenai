@@ -328,8 +328,8 @@ class Stream(object):
 
 
     def __call__(self, sw=None):
-        if not sw:
-            b =  {'name': self._name}
+        if sw is None:
+            b = {'name': self._name}
             if self._filters:
                 if len(self._filters) > 1:
                     b['filter'] = {'type': '&&', 'args': [x() for x in self._filters]}
@@ -337,8 +337,10 @@ class Stream(object):
                     b['filter'] = self._filters[0]()
             return b
         else:
-            return sw.bind(self)
-
+            try:
+                return sw.bind(self)
+            except AttributeError as e:
+                raise TypeError("A stream should not be called with " + str(type(sw)), e)
 
     def __getattr__(self, name):
         return StreamPath((name,), self)
