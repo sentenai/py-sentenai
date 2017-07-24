@@ -54,16 +54,16 @@ def test_stream_to_string(name):
     to_str = str(stream(name))
     pass
 
-@given(text(min_size=1), text())
-#@example(path="name")
-#@example(path="meta")
-def test_stream_path_conversions(name, path):
-    s = stream(name)
+@given(text())
+@example(path="name")
+@example(path="meta")
+def test_stream_path_conversions(path):
+    s = stream("")
     assume(type(s._(path)) == StreamPath)
     assume(type(s.__getattr__(path)) == StreamPath)
 
-@given(text(min_size=1), text())
-def test_stream_calls(name, path):
-    s = stream(name)
+@given(text())
+def test_stream_calls(path):
+    s = stream("")
     with pytest.raises(TypeError):
        s(path)
