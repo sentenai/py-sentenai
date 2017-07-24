@@ -19,6 +19,10 @@ PY3 = sys.version_info[0] == 3
 def delta(seconds=0, minutes=0, hours=0, days=0, weeks=0, months=0, years=0):
     return Delta(**locals())
 
+try:
+    from urllib.parse import quote
+except:
+    from urllib import quote
 
 class Flare(object):
     def __repr__(self):

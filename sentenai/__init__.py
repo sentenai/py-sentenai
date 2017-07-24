@@ -3,10 +3,6 @@ import json
 from sentenai.flare import delta, stream, EventPath, FlareSyntaxError, InCircle, InPolygon, Par, Select, Span, Switch
 from sentenai.api import Sentenai
 
-try:
-    from urllib.parse import quote
-except:
-    from urllib import quote
 
 __all__ = ['FlareSyntaxError', 'LEFT', 'CENTER', 'RIGHT', 'Sentenai', 'span', 'any_of', 'all_of', 'V', 'delta', 'event', 'stream', 'select', 'ast', 'within_distance', 'inside_region']
 
