@@ -13,10 +13,7 @@ __all__ = ['FlareSyntaxError', 'LEFT', 'CENTER', 'RIGHT', 'Sentenai', 'span', 'a
 #### Python 2 Compatibility Decorator
 
 
-#### Constants
-
-LEFT, CENTER, RIGHT = range(-1, 2)
-DEFAULT = None
+#### Flare Objects
 
 
 #### Convenience Functions

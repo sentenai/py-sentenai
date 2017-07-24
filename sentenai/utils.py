@@ -1,7 +1,13 @@
 import dateutil, requests, numpy, sys
 from datetime import datetime, timedelta, tzinfo
 
+#### Constants
+
 PY3 = sys.version_info[0] == 3
+
+LEFT, CENTER, RIGHT = range(-1, 2)
+
+DEFAULT = None
 
 def py2str(cls):
     if not PY3:
