@@ -5,13 +5,13 @@ from hypothesis.strategies import text, dictionaries
 from sentenai              import stream
 from sentenai.flare        import StreamPath
 
-@given(text(min_size=1))
+@given(text())
 def test_named_streams(name):
     s = stream(name)
     assume(s._name == name)
 
 
-@given(text(min_size=1))
+@given(text())
 def test_stream_equality(name):
     class StreamStub:
         _name = name
