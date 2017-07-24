@@ -15,5 +15,6 @@ Geos C library:
   - ubuntu: `sudo apt install libgeos-c1v5`
   - freebsd: `sudo pkg install geos`
   - archlinux: `sudo pacman -S geos`
+  - MacOS: `brew install geos`
 
 [shapely]:https://github.com/Toblerity/Shapely
