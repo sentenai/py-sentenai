@@ -1,14 +1,6 @@
-import inspect, json, re, sys, time
-import dateutil, requests, numpy
-import pandas as pd
-from shapely.geometry import Point, Polygon
-from pandas.io.json import json_normalize
-from datetime import datetime, timedelta, tzinfo
-from multiprocessing.pool import ThreadPool
-from sentenai.exceptions import *
-from sentenai.utils import *
-from sentenai.api import *
-from sentenai.flare import *
+import json
+
+from sentenai.flare import EventPath, InCircle, InPolygon, Par, Select, Span, Switch
 
 try:
     from urllib.parse import quote
@@ -26,25 +18,17 @@ LEFT, CENTER, RIGHT = range(-1, 2)
 DEFAULT = None
 
 
-#### Flare Objects
-
-
 #### Convenience Functions
-
-def stream(name, *args, **kwargs):
-    """Define a stream, possibly with a list of filter arguments."""
-    return Stream(name, kwargs.get('meta', {}), *args)
-
 V = EventPath()
+
 
 def event(*args, **kwargs):
     return Switch(*args, **kwargs)
 
-def delta(seconds=0, minutes=0, hours=0, days=0, weeks=0, months=0, years=0):
-    return Delta(**locals())
 
 def ast(q):
     return json.dumps(q(), indent=4)
+
 
 def select(start=None, end=None):
     """Select events from a span of time.
@@ -54,8 +38,10 @@ def select(start=None, end=None):
     end -- select events occuring before `datetime()`.
     """
     kwargs = {}
-    if start: kwargs['start'] = start
-    if end: kwargs['end'] = end
+    if start:
+        kwargs['start'] = start
+    if end:
+        kwargs['end'] = end
     return Select(**kwargs)
 
 
@@ -65,14 +51,18 @@ def span(*q, **kwargs):
     else:
         return Span(*q, **kwargs)
 
-def any_of(*q): return Par("any", q)
 
-def all_of(*q): return Par("all", q)
+def any_of(*q):
+    return Par("any", q)
+
+
+def all_of(*q):
+    return Par("all", q)
+
 
 def within_distance(km, of):
     return InCircle(of, km)
 
+
 def inside_region(poly):
     return InPolygon(poly)
-
-#### Non-Flare Objects
