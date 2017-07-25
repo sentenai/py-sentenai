@@ -1,6 +1,7 @@
 import json
 
-from sentenai.flare import EventPath, InCircle, InPolygon, Par, Select, Span, Switch
+from sentenai.flare import delta, stream, EventPath, FlareSyntaxError, InCircle, InPolygon, Par, Select, Span, Switch
+from sentenai.api import Sentenai
 
 try:
     from urllib.parse import quote
