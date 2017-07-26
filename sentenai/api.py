@@ -128,6 +128,7 @@ class Sentenai(object):
             return f
 
         try:
+            print(type(resp.json()))
             return [stream(**v) for v in resp.json() if filtered(v)]
         except:
             raise SentenaiException("Something went wrong")
