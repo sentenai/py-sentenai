@@ -3,11 +3,12 @@ import re
 
 from hypothesis            import given, assume, example
 from hypothesis.strategies import text, dictionaries, booleans, integers, floats, lists, dates, datetimes, times
-from sentenai              import stream, ast, span, select
-from sentenai.flare        import StreamPath
+from sentenai              import stream, ast
+from sentenai.flare        import StreamPath, Cond
 
 
 def assume_parsable(query):
+    assume(type(query) == Cond)
     assume(type(ast(query)) == str)
 
 
