@@ -1,38 +1,56 @@
 from hypothesis import given, example, assume
-from hypothesis.strategies import text, tuples, uuids
+from hypothesis.strategies import text, tuples, uuids, one_of, none, integers, floats, datetimes
 
-from sentenai.api import (Sentenai)
-import string, unittest, requests_mock, requests
+from sentenai import Sentenai, stream
+import string, unittest, requests_mock, requests, pytest
+
+try:
+    from urllib.parse import quote
+except:
+    from urllib import quote
+
+
+
+URL = "https://api.senten.ai/"
+URL_STREAMS   = URL + "streams"
+URL_STREAM_ID = URL + "streams/{}"
+URL_EVENTS    = URL + "streams/{}/events"
+URL_EVENTS_ID = URL + "streams/{}/events/{}"
 
 test_client = Sentenai(auth_key = "")
 
-class HappyApiTests(unittest.TestCase):
-    @given(text(min_size=1), uuids())
-    def test_delete_with_eid(self, stream_name, eid):
-        with requests_mock.mock() as m:
-            m.delete("https://api.senten.ai/streams/" + stream_name + "/events/" + str(eid), text="foo")
-            #resp = test_client.delete(stream_name, str(eid))
-            pass
+def test_streams_call():
+    with requests_mock.mock() as m:
+        m.get(URL_STREAMS, json=[])
+        resp = test_client.streams()
+        assume(resp == [])
 
-    @given(text(min_size=1))
-    def test_delete_no_eid(self, stream_name):
-        with requests_mock.mock() as m:
-            m.delete("https://api.senten.ai/streams/" + stream_name + "/events", text="foo")
-            #resp = test_client.delete(stream_name)
-            pass
+def test_query_call():
+    with requests_mock.mock() as m:
+        m.get(URL_STREAMS, json=[])
+        resp = test_client.streams()
+        assume(resp == [])
 
 
-class SadApiTests(unittest.TestCase):
-    @given(text(min_size=1), uuids())
-    def test_delete_with_eid(self, stream_name, eid):
-        with requests_mock.mock() as m:
-            m.delete("https://api.senten.ai/streams/" + stream_name + "/events/" + str(eid), text="foo")
-            pass
+@given(text())
+@example(None)
+def test_delete_sid_typechecks(sid):
+    with pytest.raises(TypeError):
+        test_client.delete(sid, "")
 
-    @given(text(min_size=1))
-    def test_delete_no_eid(self, stream_name):
-        with requests_mock.mock() as m:
-            m.delete("https://api.senten.ai/streams/" + stream_name + "/events", text="foo")
-            pass
+@given(one_of(integers(), floats(), datetimes()))
+@example(None)
+@example("")
+def test_delete_eid_typechecks(eid):
+    with pytest.raises(TypeError):
+        test_client.delete(stream("foo"), eid)
+
+
+@given(text(min_size=1))
+def test_delete_with_eid(eid):
+    s = stream("foo")
+    with requests_mock.mock() as m:
+        m.delete(URL_EVENTS_ID.format(s['name'], quote(eid)))
+        assume(test_client.delete(s, eid) == None)
 
 

@@ -4,13 +4,19 @@ import requests
 
 import pandas as pd
 
-from pandas.io.json import json_normalize
-from datetime import timedelta
+from pandas.io.json       import json_normalize
+from datetime             import timedelta
 from multiprocessing.pool import ThreadPool
+from functools            import partial
 
 from sentenai.exceptions import AuthenticationError, FlareSyntaxError, NotFound, SentenaiException, status_codes
 from sentenai.utils import cts, dts, iso8601
 from sentenai.flare import EventPath, Stream, stream
+
+try:
+    from urllib.parse import quote
+except:
+    from urllib import quote
 
 
 # Constants
@@ -22,7 +28,7 @@ class Sentenai(object):
     def __init__(self, auth_key=""):
         self.auth_key = auth_key
         self.host = "https://api.senten.ai"
-
+        self.build_url = partial(build_url, self.host)
 
     def __str__(self):
         return repr(self)
@@ -39,7 +45,7 @@ class Sentenai(object):
            stream -- A stream object corresponding to a stream stored in Sentenai.
            eid    -- A unique ID corresponding to an event stored within the stream.
         """
-        url = "/".join([self.host, "streams", stream()['name'], "events", eid])
+        url = self.build_url(stream, eid)
         headers = {'auth-key': self.auth_key}
         resp = requests.delete(url, headers=headers)
         status_codes(resp.status_code)
@@ -462,5 +468,16 @@ class FlareCursor(object):
         else:
             return data
 
+
+def build_url(host, stream, eid=None):
+    if not isinstance(stream, Stream):
+        raise TypeError("stream argument must be of type sentenai.Stream")
+
+    if not isinstance(eid, str) or eid == "":
+        raise TypeError("eid argument must be a non-empty string")
+
+    url    = [host, "streams", quote(stream()['name'])]
+    events = [] if eid is None else ["events", quote(eid)]
+    return "/".join(url + events)
 
 
