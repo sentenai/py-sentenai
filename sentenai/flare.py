@@ -672,25 +672,26 @@ def stream(name, *args, **kwargs):
     """Define a stream, possibly with a list of filter arguments."""
     return Stream(name, kwargs.get('meta', {}), *args)
 
-def merge(s1, s2):
-    s3 = Span(*s2.query)
-    if s1._within is None or s2._within is None:
-        s3._within = s1._within or s2._within
-    else:
-        s3._within = min(s1._within, s2._within)
-    s3._after  = max(s1._after, s2._after)
-    s3._min_width = max(s1._min_width, s2._min_width)
-    if s1._max_width is None or s2._max_width is None:
-        s3._max_width = s1._max_width or s2._max_width
-    else:
-        s3._max_width = min(s1._max_width, s2._max_width)
-
-    if s1._width and not s2._width:
-        s3._width = s1._width
-    elif s2._width and not s1._width:
-        s3._width = s2._width
-    elif s1._width != s2._width:
-        s3._width = delta()
-    else:
-        s3._width = s2._width
-    return s3
+#def merge(s1, s2):
+#    s3 = Span(*s2.query)
+#    if s1._within is None or s2._within is None:
+#        s3._within = s1._within or s2._within
+#    else:
+#        s3._within = min(s1._within, s2._within)
+#
+#    s3._after  = max(s1._after, s2._after)
+#    s3._min_width = max(s1._min_width, s2._min_width)
+#    if s1._max_width is None or s2._max_width is None:
+#        s3._max_width = s1._max_width or s2._max_width
+#    else:
+#        s3._max_width = min(s1._max_width, s2._max_width)
+#
+#    if s1._width and not s2._width:
+#        s3._width = s1._width
+#    elif s2._width and not s1._width:
+#        s3._width = s2._width
+#    elif s1._width != s2._width:
+#        s3._width = delta()
+#    else:
+#        s3._width = s2._width
+#    return s3

@@ -223,4 +223,19 @@ def test_select_with_bounds():
     assume(type(sel()) == dict)
 
 
+#def test_par_construction():
+#    s1 = stream("1")
+#    s2 = stream("2")
+#    evt1 = event(V.foo == 1) >> event(V.bar == 2)
+#    evt2 = event(V.foo == 2) >> event(V.bar == 3)
+#
+#    # FIXME: this is a bug, I think?
+#    #assume( merge(span(evt1), span(evt2)) )
+#    sel1 = select(start=datetime.now(), end=datetime.now()) \
+#        .span(s1(evt1))
+#    sel2 = select(start=datetime.now(), end=datetime.now()) \
+#        .span(s2(evt2))
+#
+#    assume( merge(sel1, sel2) )
+
 
