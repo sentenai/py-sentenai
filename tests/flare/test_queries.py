@@ -44,12 +44,12 @@ def assert_parsable(query):
 def check_syntax_with_type(query, is_multitype=False):
     s = stream("")
 
-    assume_parsable(s.foo == query)
-    assume_parsable(s.foo >  query)
-    assume_parsable(s.foo >= query)
-    assume_parsable(s.foo <  query)
-    assume_parsable(s.foo <= query)
-    assume_parsable(s.foo != query)
+    assume_parsable(s.foo.bar.baz.qux == query)
+    assume_parsable(s.foo.bar.baz.qux >  query)
+    assume_parsable(s.foo.bar.baz.qux >= query)
+    assume_parsable(s.foo.bar.baz.qux <  query)
+    assume_parsable(s.foo.bar.baz.qux <= query)
+    assume_parsable(s.foo.bar.baz.qux != query)
 
     with pytest.raises(TypeError):
         s.foo >> query
