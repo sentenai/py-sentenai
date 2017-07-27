@@ -163,6 +163,9 @@ with settings(max_examples=1000, min_satisfying_examples=500):
         assume( isinstance(any_of(s1(evt1), s2(evt2)), Par) )
         assume( isinstance(all_of(s1(evt1), s2(evt2)), Par) )
 
+        # FIXME: this is not working as expected
+        #assume(type(all_of(s1(evt1), s2(evt2))()) == dict)
+
 
     @given(all_types(), all_types())
     def test_select_construction(query1, query2):
