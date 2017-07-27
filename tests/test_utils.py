@@ -2,16 +2,20 @@ from hypothesis import given, example, assume
 from hypothesis.strategies import text
 
 from sentenai.utils import py2str, PY3
-import string, unittest
+import string
 
 @given(text())
 @example(string.ascii_letters)
 def test_py2str(s):
+
     @py2str
     class Foo:
-        def __str__(self):
-            return 'im a string'
+        def __init__(self, s):
+            self.s = s
 
-    assume(isinstance(str(s), str if PY3 else unicode))
+        def __str__(self):
+            return self.s
+
+    assume(isinstance(str(Foo(s)), str))
 
 

@@ -469,11 +469,19 @@ def build_url(host, stream, eid=None):
     if not isinstance(stream, Stream):
         raise TypeError("stream argument must be of type sentenai.Stream")
 
-    if not isinstance(eid, str) or eid == "":
+    isNEstr = isinstance(eid, str) and not (eid == '')
+    isNEuni = isinstance(eid, unicode) and not (eid == u'')
+    if not (isNEstr or isNEuni):
         raise TypeError("eid argument must be a non-empty string")
 
-    url    = [host, "streams", quote(stream()['name'])]
-    events = [] if eid is None else ["events", quote(eid)]
+    def with_quoter(s):
+        try:
+            return quote(s)
+        except:
+            return quote(s.encode('utf-8', 'ignore'))
+
+    url    = [host, "streams", with_quoter(stream()['name'])]
+    events = [] if eid is None else ["events", with_quoter(eid)]
     return "/".join(url + events)
 
 

@@ -49,8 +49,18 @@ def test_delete_eid_typechecks(eid):
 @given(text(min_size=1))
 def test_delete_with_eid(eid):
     s = stream("foo")
+
+    def mock_encodings(m, quoter):
+        try:
+            m.delete(URL_EVENTS_ID.format(s['name'], quoter(eid)))
+        except:
+            pass
+
     with requests_mock.mock() as m:
-        m.delete(URL_EVENTS_ID.format(s['name'], quote(eid)))
+        mock_encodings(m, lambda x: x)
+        mock_encodings(m, quote)
+        mock_encodings(m, lambda x: quote(x.encode('utf-8', 'ignore')))
+
         assume(test_client.delete(s, eid) == None)
 
 
