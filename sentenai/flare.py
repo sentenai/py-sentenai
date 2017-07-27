@@ -695,3 +695,39 @@ def stream(name, *args, **kwargs):
 #    else:
 #        s3._width = s2._width
 #    return s3
+
+
+def validate_kwargs(valid_set, input_kwargs):
+    """
+    Throw an error explaining to a user if they failed to pass in the correct keyword arguments.
+
+    valid_set    :: (set|frozenset)[str]  -- a set of acceptable keyword arguments
+    input_kwargs :: dict[str, Any]        -- expected to be the **kwargs of a function
+    """
+    if len(set(input_kwargs.keys()) - valid_set) > 0:
+        raise TypeError("input kwargs should only be one of: " + str(valid_set))
+
+
+def typecheck_kwargs(valid_types_dict, input_kwargs):
+    """
+    Throw a human-readable error explaining to a user if any input kwargs are incorrect.
+
+    valid_types_dict :: dict[str, (type|list[type])]  -- a book of keywords and a type or types to check
+    input_kwargs     :: dict[str, Any]                -- expected to be the **kwargs of a function
+    """
+    if len(input_kwargs) == 0:
+        pass
+    else:
+        validate_kwargs(set(valid_types_dict.keys()), input_kwargs)
+        for k, v in input_kwargs.items():
+            vtype = valid_types_dict[k]
+            if isinstance(vtype, list) and not all(map(lambda typ: isinstance(v, typ), vtype)):
+                raise ValueError("argument {} must be one of the following types: {}".format(k, str(vtype)))
+            elif not isinstance(v, vtype):
+                raise ValueError("argument {} must be of type {}".format(k, str(vtype)))
+
+
+
+
+
+

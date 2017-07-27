@@ -5,6 +5,7 @@ from sentenai.api import Sentenai
 from sentenai.utils import LEFT, RIGHT, CENTER
 
 
+
 __all__ = ['FlareSyntaxError', 'LEFT', 'CENTER', 'RIGHT', 'Sentenai', 'span', 'any_of', 'all_of', 'V', 'delta', 'event', 'stream', 'select', 'ast', 'within_distance', 'inside_region']
 
 #### Python 2 Compatibility Decorator
