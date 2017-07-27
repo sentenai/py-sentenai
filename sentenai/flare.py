@@ -637,6 +637,7 @@ class Delta(Flare):
         self.weeks=weeks
         self.months=months
         self.years=years
+        self.timedelta = timedelta(days=days + 7*4*months + 365*years, seconds=seconds, microseconds=0, milliseconds=0, minutes=minutes, hours=hours, weeks=weeks)
 
     def __compare__(self, other):
         if not isinstance(other, Delta):
@@ -667,34 +668,54 @@ class Delta(Flare):
 
         return r or {'seconds': 0}
 
+    def __eq__(self, val):
+        typecheck(Delta, 'val', val)
+        return self.timedelta == val.timedelta
+
+    def __gt__(self, val):
+        typecheck(Delta, 'val', val)
+        return self.timedelta > val.timedelta
+
+    def __ge__(self, val):
+        typecheck(Delta, 'val', val)
+        return self.timedelta >= val.timedelta
+
+    def __le__(self, val):
+        typecheck(Delta, 'val', val)
+        return self.timedelta <= val.timedelta
+
+    def __lt__(self, val):
+        typecheck(Delta, 'val', val)
+        return self.timedelta < val.timedelta
+
 
 def stream(name, *args, **kwargs):
     """Define a stream, possibly with a list of filter arguments."""
     return Stream(name, kwargs.get('meta', {}), *args)
 
-#def merge(s1, s2):
-#    s3 = Span(*s2.query)
-#    if s1._within is None or s2._within is None:
-#        s3._within = s1._within or s2._within
-#    else:
-#        s3._within = min(s1._within, s2._within)
-#
-#    s3._after  = max(s1._after, s2._after)
-#    s3._min_width = max(s1._min_width, s2._min_width)
-#    if s1._max_width is None or s2._max_width is None:
-#        s3._max_width = s1._max_width or s2._max_width
-#    else:
-#        s3._max_width = min(s1._max_width, s2._max_width)
-#
-#    if s1._width and not s2._width:
-#        s3._width = s1._width
-#    elif s2._width and not s1._width:
-#        s3._width = s2._width
-#    elif s1._width != s2._width:
-#        s3._width = delta()
-#    else:
-#        s3._width = s2._width
-#    return s3
+def merge(s1, s2):
+    typecheck(Span, 'left side of merge', s1)
+    typecheck(Span, 'right side of merge', s2)
+    s3 = Span(*s2.query)
+
+    def go(op, attr):
+        a1 = s1.__getattribute__(attr)
+        a2 = s2.__getattribute__(attr)
+        if a1 is None or a2 is None:
+            return a1 or a2
+        else:
+            return op(a1, a2)
+
+    def delta_or_first(width1, width2):
+        return delta() if width1 != width2 else width1
+
+    s3._within    = go(min, '_within')
+    s3._after     = go(max, '_after')
+    s3._min_width = go(max, '_min_width')
+    s3._max_width = go(min, '_max_width')
+    s3._width     = go(delta_or_first, '_width')
+
+    return s3
 
 
 def validate_kwargs(valid_set, input_kwargs):
@@ -706,6 +727,20 @@ def validate_kwargs(valid_set, input_kwargs):
     """
     if len(set(input_kwargs.keys()) - valid_set) > 0:
         raise TypeError("input kwargs should only be one of: " + str(valid_set))
+
+
+def typecheck(types, k, v):
+    """
+    Throw an error explaining to a user if the value is incorrect
+
+    types :: type | list[type]  -- a type or types to check
+    k     :: str                -- keyword of the argument
+    v     :: Any                -- value of the argument
+    """
+    if isinstance(types, list) and not all(map(lambda typ: isinstance(v, typ), types)):
+        raise ValueError("argument {} must be one of the following types: {}".format(k, str(types)))
+    elif not isinstance(v, types):
+        raise ValueError("argument {} must be of type {}".format(k, str(types)))
 
 
 def typecheck_kwargs(valid_types_dict, input_kwargs):
@@ -720,14 +755,6 @@ def typecheck_kwargs(valid_types_dict, input_kwargs):
     else:
         validate_kwargs(set(valid_types_dict.keys()), input_kwargs)
         for k, v in input_kwargs.items():
-            vtype = valid_types_dict[k]
-            if isinstance(vtype, list) and not all(map(lambda typ: isinstance(v, typ), vtype)):
-                raise ValueError("argument {} must be one of the following types: {}".format(k, str(vtype)))
-            elif not isinstance(v, vtype):
-                raise ValueError("argument {} must be of type {}".format(k, str(vtype)))
-
-
-
-
+            typecheck(valid_types_dict[k], k, v)
 
 
