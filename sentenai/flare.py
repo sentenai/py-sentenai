@@ -28,6 +28,7 @@ class Flare(object):
 
 
 class InCircle(Flare):
+    """ used in conjunction with a Cond and shapely.geometry.Point """
     def __init__(self, center, radius):
         self.center = center
         self.radius = radius

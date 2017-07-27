@@ -1,4 +1,4 @@
-from sentenai import span, V, event
+from sentenai import span, V, event, select
 
 def test_span_unwrapping():
     sp1 = span(event(V.foo == 0, V.bar == 1))

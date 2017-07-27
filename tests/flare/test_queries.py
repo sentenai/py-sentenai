@@ -1,17 +1,22 @@
 import pytest
 import re
+import datetime
+from datetime import timedelta, datetime
 
 from hypothesis            import given, assume, example, settings
 from hypothesis.strategies import text, dictionaries, booleans, integers, floats, lists, dates, datetimes, times, one_of
-from sentenai              import stream, ast, span, select, delta, event, V, all_of, any_of
+from sentenai              import stream, ast, span, select, delta, event, V, all_of, any_of, within_distance, inside_region
 from sentenai.flare        import StreamPath, Cond, Span, Serial, Switch, Or, Select, Par
-
+from shapely.geometry      import Point, Polygon
 # Hypothesis Strategies
 # ========================
 
 def all_types():
     # FIXME: add times()
     return one_of(text(), booleans(), integers(), floats(), dates(), datetimes())
+
+def numeric():
+    return one_of(integers(), floats())
 
 def all_multitypes():
     # FIXME: add lists of datetime types
@@ -30,6 +35,11 @@ def all_multitypes():
 def assume_parsable(query):
     assume(type(query) == Cond)
     assume(type(ast(query)) == str)
+
+def assert_parsable(query):
+    assert (type(query) == Cond)
+    assert (type(ast(query)) == str)
+
 
 def check_syntax_with_type(query, is_multitype=False):
     s = stream("")
@@ -77,10 +87,16 @@ with settings(max_examples=1000, min_satisfying_examples=500):
         s = stream("")
         assume_parsable(s.foo == r'')
 
-    # FIXME: include tests for geo
-    # Geo                     -- Any geo
-    # GeoDist (Double, Double) Double
-    # InPoly (Double, Double) (Double, Double) (NonEmpty (Double, Double))
+    @given(numeric(), numeric(), numeric())
+    def test_incircle(kmx, kmy, rad):
+        s = stream("")
+        incircle = within_distance(rad, Point(kmx, kmy))
+        assume_parsable(s.foo == incircle)
+
+def test_inpoly():
+    s = stream("")
+    inpoly = inside_region(Polygon([(0, 0), (1, 1), (1, 0)]))
+    assert_parsable(s.foo == inpoly)
 
 
 # Conditional Tests
@@ -116,6 +132,7 @@ with settings(max_examples=1000, min_satisfying_examples=500):
 
         span1 = span(s2.foo == query)
         span2 = span(s1.foo == query)
+
         assume(type(span1) == Span and type(span2) == Span)
 
         assume(type(span1 & span2) == Span)
@@ -143,8 +160,67 @@ with settings(max_examples=1000, min_satisfying_examples=500):
         evt1 = event(V.foo == query1)
         evt2 = event(V.foo == query2)
 
-        assume( isinstance(all_of(s1(evt1), s2(evt2)), Par) )
         assume( isinstance(any_of(s1(evt1), s2(evt2)), Par) )
+        assume( isinstance(all_of(s1(evt1), s2(evt2)), Par) )
+
+
+    @given(all_types(), all_types())
+    def test_select_construction(query1, query2):
+        s1 = stream("1")
+        s2 = stream("2")
+        evt1 = event(V.foo == query1)
+        evt2 = event(V.foo == query2)
+
+        sel0 = select() \
+            .span(s1(evt1))
+        assume(isinstance(sel0, Select))
+
+        sel1 = select() \
+            .span(s1(evt1) >> s2(evt2))
+        assume(isinstance(sel1, Select))
+
+        sel3 = select() \
+            .span(all_of(s1(evt1), s2(evt2)))
+        assume(isinstance(sel3, Select))
+
+        sel4 = select() \
+            .span((s1(evt1), s2(evt2))) \
+            .then(s2(evt1))
+
+        assume(isinstance(sel4, Select))
+
+
+def test_select_with_bounds():
+    s = stream("1")
+    # FIXME: using this as a span returns a TypeError
+    evt = event(V.foo == 1)
+
+    sel = select(start=datetime.now(), end=datetime.now()) \
+            .span(s.evt == 1) \
+            .then(s.evt == 2)
+            #.span(s(evt) >> s(evt)) \
+            #.then(s(evt))
+
+    assume(isinstance(sel, Select))
+    assume(type(sel()) == dict)
+
+    sel = select(end=datetime.now()) \
+            .span(s.evt == 1) \
+            .then(s.evt == 2)
+            #.span(s(evt) >> s(evt)) \
+            #.then(s(evt))
+
+    assume(isinstance(sel, Select))
+    assume(type(sel()) == dict)
+
+    sel = select(start=datetime.now()) \
+            .span(s.evt == 1) \
+            .then(s.evt == 2)
+            #.span(s(evt) >> s(evt)) \
+            #.then(s(evt))
+
+    assume(isinstance(sel, Select))
+    assume(type(sel()) == dict)
 
 
 
