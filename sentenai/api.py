@@ -10,18 +10,13 @@ from multiprocessing.pool import ThreadPool
 from functools            import partial
 
 from sentenai.exceptions import AuthenticationError, FlareSyntaxError, NotFound, SentenaiException, status_codes
-from sentenai.utils import cts, dts, iso8601
+from sentenai.utils import cts, dts, iso8601, LEFT, CENTER, RIGHT, DEFAULT, PY3
 from sentenai.flare import EventPath, Stream, stream
 
 try:
     from urllib.parse import quote
 except:
     from urllib import quote
-
-
-# Constants
-LEFT, CENTER, RIGHT = range(-1, 2)
-DEFAULT = None
 
 
 class Sentenai(object):
