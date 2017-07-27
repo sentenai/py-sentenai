@@ -465,13 +465,20 @@ class FlareCursor(object):
             return data
 
 
+def is_nonempty_str(s):
+    isNEstr = isinstance(s, str) and not (s == '')
+    try:
+        isNEuni = isinstance(s, unicode) and not (s == u'')
+        return isNEstr or isNEuni
+    except:
+        return isNEstr
+
+
 def build_url(host, stream, eid=None):
     if not isinstance(stream, Stream):
         raise TypeError("stream argument must be of type sentenai.Stream")
 
-    isNEstr = isinstance(eid, str) and not (eid == '')
-    isNEuni = isinstance(eid, unicode) and not (eid == u'')
-    if not (isNEstr or isNEuni):
+    if not is_nonempty_str(eid):
         raise TypeError("eid argument must be a non-empty string")
 
     def with_quoter(s):
