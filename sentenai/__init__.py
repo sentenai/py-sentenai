@@ -1,22 +1,17 @@
 import json
 
-from sentenai.flare import delta, stream, EventPath, FlareSyntaxError, InCircle, InPolygon, Par, Select, Span, Switch
+from sentenai.flare import delta, stream, EventPath, FlareSyntaxError, InCircle, InPolygon, Par, Select, Span, Switch, merge
 from sentenai.api import Sentenai
+from sentenai.utils import LEFT, RIGHT, CENTER
 
-try:
-    from urllib.parse import quote
-except:
-    from urllib import quote
 
-__all__ = ['FlareSyntaxError', 'LEFT', 'CENTER', 'RIGHT', 'Sentenai', 'span', 'any_of', 'all_of', 'V', 'delta', 'event', 'stream', 'select', 'ast', 'within_distance', 'inside_region']
+
+__all__ = ['FlareSyntaxError', 'LEFT', 'CENTER', 'RIGHT', 'Sentenai', 'span', 'any_of', 'all_of', 'V', 'delta', 'event', 'stream', 'select', 'ast', 'within_distance', 'inside_region', 'merge']
 
 #### Python 2 Compatibility Decorator
 
 
-#### Constants
-
-LEFT, CENTER, RIGHT = range(-1, 2)
-DEFAULT = None
+#### Flare Objects
 
 
 #### Convenience Functions

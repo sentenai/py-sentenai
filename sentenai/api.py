@@ -4,25 +4,26 @@ import requests
 
 import pandas as pd
 
-from pandas.io.json import json_normalize
-from datetime import timedelta
+from pandas.io.json       import json_normalize
+from datetime             import timedelta
 from multiprocessing.pool import ThreadPool
+from functools            import partial
 
 from sentenai.exceptions import AuthenticationError, FlareSyntaxError, NotFound, SentenaiException, status_codes
-from sentenai.utils import cts, dts, iso8601
+from sentenai.utils import cts, dts, iso8601, LEFT, CENTER, RIGHT, DEFAULT, PY3
 from sentenai.flare import EventPath, Stream, stream
 
-
-# Constants
-LEFT, CENTER, RIGHT = range(-1, 2)
-DEFAULT = None
+try:
+    from urllib.parse import quote
+except:
+    from urllib import quote
 
 
 class Sentenai(object):
     def __init__(self, auth_key=""):
         self.auth_key = auth_key
         self.host = "https://api.senten.ai"
-
+        self.build_url = partial(build_url, self.host)
 
     def __str__(self):
         return repr(self)
@@ -39,7 +40,7 @@ class Sentenai(object):
            stream -- A stream object corresponding to a stream stored in Sentenai.
            eid    -- A unique ID corresponding to an event stored within the stream.
         """
-        url = "/".join([self.host, "streams", stream()['name'], "events", eid])
+        url = self.build_url(stream, eid)
         headers = {'auth-key': self.auth_key}
         resp = requests.delete(url, headers=headers)
         status_codes(resp.status_code)
@@ -122,6 +123,7 @@ class Sentenai(object):
             return f
 
         try:
+            print(type(resp.json()))
             return [stream(**v) for v in resp.json() if filtered(v)]
         except:
             raise SentenaiException("Something went wrong")
@@ -462,5 +464,31 @@ class FlareCursor(object):
         else:
             return data
 
+
+def is_nonempty_str(s):
+    isNEstr = isinstance(s, str) and not (s == '')
+    try:
+        isNEuni = isinstance(s, unicode) and not (s == u'')
+        return isNEstr or isNEuni
+    except:
+        return isNEstr
+
+
+def build_url(host, stream, eid=None):
+    if not isinstance(stream, Stream):
+        raise TypeError("stream argument must be of type sentenai.Stream")
+
+    if not is_nonempty_str(eid):
+        raise TypeError("eid argument must be a non-empty string")
+
+    def with_quoter(s):
+        try:
+            return quote(s)
+        except:
+            return quote(s.encode('utf-8', 'ignore'))
+
+    url    = [host, "streams", with_quoter(stream()['name'])]
+    events = [] if eid is None else ["events", with_quoter(eid)]
+    return "/".join(url + events)
 
 

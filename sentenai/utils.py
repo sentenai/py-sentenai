@@ -1,9 +1,17 @@
 import dateutil, requests, numpy, sys
+
 from datetime import datetime, timedelta, tzinfo
+
+#### Constants
 
 PY3 = sys.version_info[0] == 3
 
+LEFT, CENTER, RIGHT = range(-1, 2)
+
+DEFAULT = None
+
 def py2str(cls):
+    """ encodes strings to utf-8 if the major version is not 3 """
     if not PY3:
         cls.__unicode__ = cls.__str__
         cls.__str__ = lambda self: self.__unicode__().encode('utf-8')
