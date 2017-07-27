@@ -1,8 +1,9 @@
 # py-sentenai
+[![Build Status](https://travis-ci.org/Sentenai/py-sentenai.svg?branch=master)](https://travis-ci.org/Sentenai/py-sentenai)
+
 Python client library for sentenai.
 
-
-# Development
+### Development
 
 It's recommended you use pyenv and pyenv-virtualenv to manage your
 python versions and locally installed pip dependencies. pyenv-virtualenv
