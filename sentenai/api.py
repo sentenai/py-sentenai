@@ -72,7 +72,7 @@ class Sentenai(object):
             return {'id': resp.headers['location'], 'ts': resp.headers['timestamp'], 'event': resp.json()}
         else:
             return resp.json()
-
+    
 
     def put(self, stream, event, id=None, timestamp=None):
         """Put a new event into a stream.
@@ -108,7 +108,13 @@ class Sentenai(object):
 
 
     def streams(self, name=None, meta={}):
-        """Get list of available streams."""
+        """Get list of available streams. Optionally, parameters may be
+           supplied to enable searching for stream subsets.
+
+           Optional Arguments:
+           name -- A regular expression pattern to search names for
+           meta -- A dictionary of key/value pairs to match from stream metadata
+        """
         url = "/".join([self.host, "streams"])
         headers = {'auth-key': self.auth_key}
         resp = requests.get(url, headers=headers)

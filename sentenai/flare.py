@@ -18,10 +18,6 @@ def delta(seconds=0, minutes=0, hours=0, days=0, weeks=0, months=0, years=0):
     return Delta(**locals())
 
 
-def delta(seconds=0, minutes=0, hours=0, days=0, weeks=0, months=0, years=0):
-    return Delta(**locals())
-
-
 class Flare(object):
     def __repr__(self):
         return str(self)
@@ -77,7 +73,7 @@ class Switch(Flare):
         s._query = (self._query + nxt._query)
         return s
 
-    def bind(self, stream):
+    def _bind(self, stream):
         sw = Switch()
         sw._query = self._query
         if not isinstance(stream, Stream):
@@ -85,12 +81,12 @@ class Switch(Flare):
         sw._stream = stream
         def bind2(self, *args, **kwargs):
             raise Exception("Cannot rebind switches.")
-        sw.bind = bind2
+        sw._bind = bind2
         return sw
 
     def __call__(self):
         if len(self._query) <= 1:
-            raise FlareSyntaxError("Switches must have two conditions")
+            raise FlareSyntaxError("Switches must contain at least two `event()`'s")
         else:
             cds = []
 
@@ -337,7 +333,7 @@ class Stream(object):
             return b
         else:
             try:
-                return sw.bind(self)
+                return sw._bind(self)
             except AttributeError as e:
                 raise TypeError("A stream should not be called with " + str(type(sw)), e)
 
