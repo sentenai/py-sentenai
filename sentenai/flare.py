@@ -356,7 +356,7 @@ class EventPath(object):
         return EventPath(self.__attrlist + (name,))
 
     def _(self, name):
-        return EventPath(self.__attrlist + (name,), self.__stream)
+        return EventPath(self.__attrlist + (name,))
 
     def __eq__(self, val):
         """If used with an array, treat this as `in`.
