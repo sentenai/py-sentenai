@@ -296,8 +296,10 @@ class FlareResult(object):
 
                 # using stream_obj var name to avoid clashing with imported
                 # stream function from flare.py
+                    # initialize stream if it doesn't exist already
                 for sid, stream_obj in data['streams'].items():
-                    streams[sid] = {'stream': stream_obj, 'events': []}
+                    if sid not in streams:
+                        streams[sid] = {'stream': stream_obj, 'events': []}
 
                 for event in data['events']:
                     events = streams[event['stream']]['events']
