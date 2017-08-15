@@ -1,4 +1,4 @@
-import inspect
+import inspect, json
 import numpy as np
 import sys
 
@@ -752,5 +752,53 @@ def typecheck_kwargs(valid_types_dict, input_kwargs):
         validate_kwargs(set(valid_types_dict.keys()), input_kwargs)
         for k, v in input_kwargs.items():
             typecheck(valid_types_dict[k], k, v)
+
+
+def project(stream, proj):
+    if not isinstance(stream, Stream):
+        raise FlareSyntaxError("returning dict top-level keys must be streams.")
+    if proj is True:
+        return {'stream': stream(), 'projection': "default"}
+    elif proj is False:
+        return {'stream': stream(), 'projection': {}}
+    else:
+        nd = {}
+        l = [(proj, nd)]
+        while l:
+            old, new = l.pop(0)
+            for key, val in old.items():
+                if isinstance(val, EventPath):
+                    z = val()
+                    new[key] = [{'var': z['path'][1:]}]
+                elif isinstance(v, float):
+                    new[key] = [{'lit': {'val': val, 'type': 'double'}}]
+                elif isinstance(v, int):
+                    new[key] = [{'lit': {'val': val, 'type': 'int'}}]
+                elif isinstance(v, str):
+                    new[key] = [{'lit': {'val': val, 'type': 'string'}}]
+                elif isinstance(v, bool):
+                    new[key] = [{'lit': {'val': val, 'type': 'bool'}}]
+                elif isinstance(v, dict):
+                    new[key] = {}
+                    l.append((val,new[key]))
+                else:
+                    raise FlareSyntaxError("%s: %s is unsupported." % (key, val.__class__))
+        return {'stream': stream(), 'projection': nd}
+
+
+
+
+def ast(query, returning=None):
+    q = query()
+    if returning:
+        q['projections'] = {'explicit': [project(s, p) for s, p in returning.items()]}
+    return q
+
+
+
+
+
+
+
 
 

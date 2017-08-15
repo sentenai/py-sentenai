@@ -2,6 +2,7 @@ import json
 import re
 import requests
 
+import numpy as np
 import pandas as pd
 
 from pandas.io.json       import json_normalize
@@ -9,9 +10,9 @@ from datetime             import timedelta
 from multiprocessing.pool import ThreadPool
 from functools            import partial
 
-from sentenai.exceptions import AuthenticationError, FlareSyntaxError, NotFound, SentenaiException, status_codes
-from sentenai.utils import cts, dts, iso8601, LEFT, CENTER, RIGHT, DEFAULT, PY3
-from sentenai.flare import EventPath, Stream, stream
+from sentenai.exceptions import AuthenticationError, FlareSyntaxError, NotFound, SentenaiException, status_codes, handle
+from sentenai.utils import *
+from sentenai.flare import EventPath, Stream, stream, project, ast, delta, Delta
 
 try:
     from urllib.parse import quote
@@ -72,7 +73,7 @@ class Sentenai(object):
             return {'id': resp.headers['location'], 'ts': resp.headers['timestamp'], 'event': resp.json()}
         else:
             return resp.json()
-    
+
 
     def put(self, stream, event, id=None, timestamp=None):
         """Put a new event into a stream.
@@ -129,7 +130,6 @@ class Sentenai(object):
             return f
 
         try:
-            print(type(resp.json()))
             return [stream(**v) for v in resp.json() if filtered(v)]
         except:
             raise SentenaiException("Something went wrong")
@@ -191,7 +191,7 @@ class Sentenai(object):
                                 }
                             }
         """
-        return FlareCursor(self, query, returning, limit)()
+        return Cursor(self, query, returning, limit)
 
 
 #   def newest(self, o):
@@ -259,6 +259,7 @@ class FlareResult(object):
 
         return self
 
+
     def _events(self):
         pool = ThreadPool(8)
         try:
@@ -323,18 +324,22 @@ class FlareResult(object):
         return {'start': s, 'end': e, 'streams': streams.values()}
 
     def dataframe(self, only=None):
+
+        # call data if not populated
         if not self._data:
             self._events()
 
         data = self._data
         output = {}
 
+        # return empty frame is no results
         if len(data) < 1:
             if only is not None:
                 return pd.DataFrame()
             else:
                 return {}
 
+        # loop through streams
         for st in [s['stream'] for s in data[0]['streams']]:
 
             if only and isinstance(only, Stream):
@@ -393,110 +398,266 @@ class FlareResult(object):
 
 
 
+class Cursor(object):
+    def __init__(self, client, query, returning=None, limit=None):
+        self.client = client
+        self.query = query
+        self.returning = returning
+        self.headers = {'content-type': 'application/json', 'auth-key': client.auth_key}
 
-class FlareCursor(object):
-
-    def __init__(self, c, q, r, limit=None):
-        self._client = c
-        self._query = q
-        self._returning = r
-        self._limit = limit
-
-    def __str__(self):
-        return str(self._query)
-
-    def __call__(self):
-        return FlareResult(self._client, self._query, self._execute(self._query), self._returning)
-
-    def _execute(self, query):
-        headers = {'content-type': 'application/json', 'auth-key': self._client.auth_key}
-
-        # POST a query
-        if self._limit is None:
-            url = '{host}/query'.format(host = self._client.host)
+        if limit is None:
+            url = '{0}/query'.format(client.host)
         else:
-            url = '{host}/query?limit={limit}'.format(
-                host = self._client.host,
-                limit = self._limit)
+            url = '{0}/query?limit={1}'.format(client.host, limit)
 
-        q = query()
-        if self._returning:
-            q['projections'] = {'explicit': []}
-            for s,v in self._returning.items():
-                if not isinstance(s, Stream):
-                    raise FlareSyntaxError("returning dict top-level keys must be streams.")
-                nd = {}
-                if v is True:
-                    q['projections']['explicit'].append({'stream': s(), 'projection': "default"})
+        # get spans by submitting query to server
+        # TODO: Determine if this should be asynchronous
+        self._spans = handle(requests.post(url, json=ast(query, returning), headers=self.headers)).json()
+
+
+    def __len__(self):
+        return len(self._spans)
+
+
+    def _pool(self):
+        sl = len(self._spans)
+        return ThreadPool(16 if sl > 16 else sl) if sl else None
+
+
+    def _slice(self, cursor, start, end, max_retries=3):
+        streams = {}
+        retries = 0
+        c = "{}+{:%Y-%m-%dT%H:%M:%S}Z+{:%Y-%m-%dT%H:%M:%S}Z".format(cursor.split("+")[0], start, end)
+
+        while c is not None:
+            url = '{host}/query/{cursor}'.format(host=self.client.host, cursor=c)
+            resp = requests.get(url, headers=self.headers)
+
+            if not resp.ok and retries >= max_retries:
+                print(resp)
+                raise Exception("failed to get cursor")
+            elif not resp.ok:
+                retries += 1
+                continue
+            else:
+                retries = 0
+                c = resp.headers.get('cursor')
+                data = resp.json()
+
+                # set up stream dict
+                for sid, stream_obj in data['streams'].items():
+                    if sid not in streams:
+                        streams[sid] = {'stream': stream_obj, 'events': []}
+
+                # process each event
+                for event in data['events']:
+                    events = streams[event['stream']]['events']
+                    ss = streams[event['stream']]['stream']
+                    del event['stream']
+                    events.append(event)
+        return {'start': start, 'end': end, 'streams': streams.values()}
+
+
+    def json(self):
+        """Get json representation of exact query results."""
+        pool = self._pool()
+        if not pool:
+            return json.dumps([])
+        try:
+            data = pool.map(lambda s: self._slice(s['cursor'], cts(s['start']), cts(s['end'])), self._spans)
+            return json.dumps(data, default=dts, indent=4)
+        finally:
+            pool.close()
+
+
+    def spans(self):
+        """Get list of spans of time when query conditions are true."""
+        r = []
+        for x in self._spans:
+            r.append({'start': cts(x['start']), 'end': cts(x['end'])})
+        return r
+
+
+    def stats(self):
+        """Get time-based statistics about query results."""
+        deltas = []
+        for sp in self._spans:
+            s = cts(sp['start'])
+            e = cts(sp['end'])
+            deltas.append(e - s)
+
+        if not len(deltas):
+            return {}
+
+        mean = sum([3600*24*d.days + d.seconds for d in deltas])/float(len(deltas))
+        return {
+                'min': min(deltas),
+                'max': max(deltas),
+                'mean': timedelta(seconds=mean),
+                'median': sorted(deltas)[len(deltas)//2],
+                'count': len(deltas),
+            }
+
+
+    def dataset(self, window=None, align=CENTER, freq=None):
+
+        def win(cursor, start, end):
+            start, end = cts(start), cts(end)
+            if window == None:
+                return (cursor, start, end)
+            if align == LEFT:
+                return (cursor, start, start + window)
+            elif align == RIGHT:
+                return (cursor, end - window, end)
+            else:
+                mp = start + (end - start) / 2
+                w = window / 2
+                return (cursor, mp - w, mp + w)
+
+        def iterator(inverted):
+            if not inverted:
+                spans = self._spans
+            elif self._spans:
+                spans = [(datetime.min, self.spans[0][0])]
+                for (t0,t1), (u0, u1) in zip(self._spans, self._spans[1:]):
+                    spans.append((t1, u0))
+            else:
+                spans = []
+            for sp in spans:
+                data = self._slice(*win(**sp))
+                fr = df(sp, data)
+                if freq:
+                    fr = {k: fr[k].set_index(keys=['.ts'])
+                                  .resample(freq).ffill()
+                                  .reset_index()
+                                  for k in fr}
+                fts = min(fr[k]['.ts'][0] for k in fr)
+                lts = max(fr[k]['.ts'][-1] for k in fr) + timedelta(seconds=1)
+                for s in fr.keys():
+                    fr[s] = fr[s].set_index(keys=['.ts'])
+                    fr[s].rename(columns={k: s + ":" + k for k in fr[s].columns}, inplace=True)
+                if len(fr.keys()) > 1:
+                    to_join = fr.values()
+                    dff = pd.DataFrame.join(to_join[0], to_join[1:], how="outer").reset_index()
                 else:
-                    q['projections']['explicit'].append({'stream': s(), 'projection': nd})
+                    dff = fr.values()[0].reset_index()
 
-                    l = [(v, nd)]
-                    while l:
-                        old, new = l.pop(0)
-                        for k,v in old.items():
-                            if isinstance(v, EventPath):
-                                z = v()
-                                new[k] = [{'var': z['path'][1:]}]
-                            elif isinstance(v, float):
-                                new[k] = [{'lit': {'val': v, 'type': 'double'}}]
-                            elif isinstance(v, int):
-                                new[k] = [{'lit': {'val': v, 'type': 'int'}}]
-                            elif isinstance(v, str):
-                                new[k] = [{'lit': {'val': v, 'type': 'string'}}]
-                            elif isinstance(v, bool):
-                                new[k] = [{'lit': {'val': v, 'type': 'bool'}}]
-                            elif isinstance(v, dict):
-                                new[k] = {}
-                                l.append((v,new[k]))
-                            else:
-                                raise FlareSyntaxError("%s: %s is unsupported." % (k, v.__class__))
+                yield dff
 
-        resp = requests.post(url, json = q, headers = headers )
-        #print("finding spans took:", time.time() - a)
-
-        # handle bad status codes
-        if resp.status_code == 401:
-            raise AuthenticationError("Invalid API Key")
-        elif resp.status_code == 400:
-            raise FlareSyntaxError
-        elif resp.status_code >= 500:
-            raise SentenaiException("Something went wrong.")
-        elif resp.status_code != 200:
-            raise Exception(resp.status_code)
-
-        try:
-            data = resp.json()
-        except:
-            raise
-        else:
-            return data
+        return FrameGroup(iterator)
 
 
-def is_nonempty_str(s):
-    isNEstr = isinstance(s, str) and not (s == '')
-    try:
-        isNEuni = isinstance(s, unicode) and not (s == u'')
-        return isNEstr or isNEuni
-    except:
-        return isNEstr
+    def sliding(self, lookback, horizon, slide, freq):
+        if isinstance(lookback, Delta):
+            lookback = lookback.timedelta
+        if isinstance(horizon, Delta):
+            horizon = horizon.timedelta
+        if isinstance(slide, Delta):
+            slide = slide.timedelta
+
+        if freq == 'D':
+            resolution = timedelta(1)
+
+        def slides(start, end):
+            cslide = timedelta(0)
+            while start + lookback + cslide <= end:
+                yield (start + cslide, start + cslide + lookback + horizon)
+                cslide += slide
+
+        def iterator(inverted):
+            if not inverted:
+                spans = self._spans
+            elif self._spans:
+                spans = [{'cursor': self._spans[0]['cursor'], 'start': "1900-01-01T00:00:00Z", 'end': self._spans[0]['start']}]
+                for t0, t1 in zip(self._spans, self._spans[1:]):
+                    spans.append({'cursor': t0['cursor'], 'start': t0['end'], 'end': t1['start']})
+            else:
+                spans = []
+            for sp in spans:
+                start, end, cur = cts(sp['start']), cts(sp['end']), sp['cursor']
+                data = self._slice(cur, start, end + horizon)
+                fr = df(sp, data)
+                fr = {k: fr[k].set_index(keys=['.ts'])
+                              .resample(freq).ffill()
+                              .reset_index()
+                              for k in fr}
+                fts = max(fr[k]['.ts'][0] for k in fr)
+                lts = min(fr[k]['.ts'][-1] for k in fr) + timedelta(seconds=1)
+
+                for s in fr.keys():
+                    fr[s] = fr[s].set_index(keys=['.ts'])
+                    fr[s].rename(columns={k: s + ":" + k for k in fr[s].columns}, inplace=True)
+
+                if len(fr.keys()) > 1:
+                    to_join = fr.values()
+                    dff = pd.DataFrame.join(to_join[0], to_join[1:], how="outer").reset_index()
+                else:
+                    dff = fr.values()[0].reset_index()
+
+                for t0, t1 in slides(fts, lts):
+                    p = dff[(dff['.ts'] >= t0) & (dff['.ts'] < t1)]
+                    if len(p) == divtime(lookback + horizon, resolution):
+                        yield p
+
+        return FrameGroup(iterator)
 
 
-def build_url(host, stream, eid=None):
-    if not isinstance(stream, Stream):
-        raise TypeError("stream argument must be of type sentenai.Stream")
 
-    if not is_nonempty_str(eid):
-        raise TypeError("eid argument must be a non-empty string")
+class FrameGroup(object):
+    def __init__(self, iterator, inverted=False):
+        self.iterator = iterator
+        self.inverted = inverted
 
-    def with_quoter(s):
-        try:
-            return quote(s)
-        except:
-            return quote(s.encode('utf-8', 'ignore'))
+    def inverse(self):
+        return FrameGroup(self.iterator, inverted=True)
 
-    url    = [host, "streams", with_quoter(stream()['name'])]
-    events = [] if eid is None else ["events", with_quoter(eid)]
-    return "/".join(url + events)
+    def dataframes(self, *columns, **kwargs):
+        """
+        Training set shaped for LSTMs.
+        """
+        drop_prefixes = kwargs.get('drop_stream_names', False)
+        def cname(stream, path):
+            return "{}:{}".format(stream['name'], ".".join(path[1:]))
 
+        for df in self.iterator(self.inverted):
+            if drop_prefixes:
+                # TODO: Figure out what needs to happen if names overlap
+                z = df[[cname(**p()) if p != ".ts" else p for p in columns]].copy() if columns else df.copy()
+                z.rename(columns={k: k.split(":", 1)[1] for k in z.columns if ":" in k}, inplace=True)
+                yield z
+            else:
+                yield df[[cname(**p()) for p in columns]] if columns else df
+
+    def tensor(self, *columns, **kwargs):
+        return np.stack(self.dataframes(*columns, **kwargs))
+
+    def dataframe(self, *columns, **kwargs):
+        if columns:
+            columns = [".ts"] + list(columns)
+        dfs = []
+        for i, df in enumerate(self.dataframes(*columns, **kwargs)):
+            df = df.copy()
+            df['.span'] = i
+            df['.delta'] = df['.ts'].apply(lambda ts: ts - df['.ts'][0])
+            dfs.append(df)
+        rdf = pd.concat(dfs)
+        rdf.set_index(['.ts', '.span', '.delta'], inplace=True)
+        return rdf
+
+
+
+
+def df(span, data):
+    t0 = cts(span['start'])
+    dfs = {}
+    for s in data['streams']:
+        events = []
+        for event in s['events']:
+            evt = event['event']
+            #evt['.id'] = event['id']
+            evt['.ts'] = cts(event['ts'])
+            #evt['.delta'] = t0 - cts(event['ts'])
+            events.append(evt)
+        dfs[s['stream']] = json_normalize(events)
+    return dfs
 

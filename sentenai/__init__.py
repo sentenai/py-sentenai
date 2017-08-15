@@ -1,6 +1,6 @@
 import json
 
-from sentenai.flare import delta, stream, EventPath, FlareSyntaxError, InCircle, InPolygon, Par, Select, Span, Switch, merge
+from sentenai.flare import delta, stream, EventPath, FlareSyntaxError, InCircle, InPolygon, Par, Select, Span, Switch, merge, project, ast
 from sentenai.api import Sentenai
 from sentenai.utils import LEFT, RIGHT, CENTER
 
@@ -22,8 +22,6 @@ def event(*args, **kwargs):
     return Switch(*args, **kwargs)
 
 
-def ast(q):
-    return json.dumps(q(), indent=4)
 
 
 def select(start=None, end=None):
