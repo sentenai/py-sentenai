@@ -564,6 +564,18 @@ class Cursor(object):
                 yield (start + cslide, start + cslide + lookback + horizon)
                 cslide += slide
 
+        def shape(inverted):
+            if not inverted:
+                spans = self._spans
+            elif self._spans:
+                spans = [{'cursor': self._spans[0]['cursor'], 'start': "1900-01-01T00:00:00Z", 'end': self._spans[0]['start']}]
+                for t0, t1 in zip(self._spans, self._spans[1:]):
+                    spans.append({'cursor': t0['cursor'], 'start': t0['end'], 'end': t1['start']})
+            rows = 0
+            for sp in spans:
+                rows += len([x for x in slides(sp['start'], sp['end'])])
+            return (rows, divtime(lookback + horizon, freq))
+
         def iterator(inverted):
             if not inverted:
                 spans = self._spans
@@ -645,6 +657,14 @@ class FrameGroup(object):
         return rdf
 
 
+    def CArray(self, hd5file, group, name, *columns):
+        import tables
+        t = self.tensor(*columns)
+        t.shape
+        ds = hd5file.createCArray(group, name, tables.Atom.from_dtype(t.dtype), t.shape)
+        ds[:] = t
+        hd5file.flush()
+        return ds
 
 
 def df(span, data):
