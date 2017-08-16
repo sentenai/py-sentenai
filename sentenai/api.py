@@ -321,7 +321,7 @@ class FlareResult(object):
                     del event['stream']
                     events.append(event)
 
-        return {'start': s, 'end': e, 'streams': streams.values()}
+        return {'start': s, 'end': e, 'streams': list(streams.values())}
 
     def dataframe(self, only=None):
 
@@ -455,7 +455,7 @@ class Cursor(object):
                     ss = streams[event['stream']]['stream']
                     del event['stream']
                     events.append(event)
-        return {'start': start, 'end': end, 'streams': streams.values()}
+        return {'start': start, 'end': end, 'streams': list(streams.values())}
 
 
     def json(self):
@@ -537,10 +537,10 @@ class Cursor(object):
                     fr[s] = fr[s].set_index(keys=['.ts'])
                     fr[s].rename(columns={k: s + ":" + k for k in fr[s].columns}, inplace=True)
                 if len(fr.keys()) > 1:
-                    to_join = fr.values()
+                    to_join = list(fr.values())
                     dff = pd.DataFrame.join(to_join[0], to_join[1:], how="outer").reset_index()
                 else:
-                    dff = fr.values()[0].reset_index()
+                    dff = list(fr.values())[0].reset_index()
 
                 yield dff
 
@@ -601,10 +601,10 @@ class Cursor(object):
                     fr[s].rename(columns={k: s + ":" + k for k in fr[s].columns}, inplace=True)
 
                 if len(fr.keys()) > 1:
-                    to_join = fr.values()
+                    to_join = list(fr.values())
                     dff = pd.DataFrame.join(to_join[0], to_join[1:], how="outer").reset_index()
                 else:
-                    dff = fr.values()[0].reset_index()
+                    dff = list(fr.values())[0].reset_index()
 
                 for t0, t1 in slides(fts, lts):
                     p = dff[(dff['.ts'] >= t0) & (dff['.ts'] < t1)]
