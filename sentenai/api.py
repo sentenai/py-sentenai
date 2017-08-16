@@ -36,6 +36,7 @@ class Sentenai(object):
 
     def debug(self, protocol="http", host="localhost", port=3000):
         self.host = protocol + "://" + host + ":" + str(port)
+        return self
 
     def delete(self, stream, eid):
         """Delete event from a stream by its unique id.
