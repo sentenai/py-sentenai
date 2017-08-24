@@ -23,13 +23,14 @@ def event(*args, **kwargs):
 
 
 def ast(q):
+    """Print the query as an Abstract Synatx Tree."""
     return json.dumps(q(), indent=4)
 
 
 def select(start=None, end=None):
     """Select events from a span of time.
 
-    Keyword arguments:
+    Arguments:
     start -- select events occuring at or after `datetime()`.
     end -- select events occuring before `datetime()`.
     """
@@ -42,6 +43,7 @@ def select(start=None, end=None):
 
 
 def span(*q, **kwargs):
+    """Define a span of time."""
     if len(q) == 1 and isinstance(q[0], Span):
         return q[0]
     else:
@@ -49,16 +51,20 @@ def span(*q, **kwargs):
 
 
 def any_of(*q):
+    """Return events that match any specified conditions."""
     return Par("any", q)
 
 
 def all_of(*q):
+    """Return events that match all specified conditions."""
     return Par("all", q)
 
 
 def within_distance(km, of):
+    """Return all events within a given distance (in km) from a point."""
     return InCircle(of, km)
 
 
 def inside_region(poly):
+    """Return all events within a polygon."""
     return InPolygon(poly)
