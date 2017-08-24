@@ -1,8 +1,8 @@
-import dateutil, requests, numpy, sys
-
+import dateutil
+import sys
 from datetime import datetime, timedelta, tzinfo
 
-#### Constants
+# Constants
 
 PY3 = sys.version_info[0] == 3
 
@@ -10,32 +10,43 @@ LEFT, CENTER, RIGHT = range(-1, 2)
 
 DEFAULT = None
 
+
 def py2str(cls):
-    """ encodes strings to utf-8 if the major version is not 3 """
+    """Encode strings to utf-8 if the major version is not 3."""
     if not PY3:
         cls.__unicode__ = cls.__str__
         cls.__str__ = lambda self: self.__unicode__().encode('utf-8')
     return cls
 
+
 class UTC(tzinfo):
-    def utcoffset(self, dt): return timedelta()
+    """A timezone class for UTC."""
+
+    def utcoffset(self, dt):
+        """Generate a timedelta object with no offset."""
+        return timedelta()
+
 
 def iso8601(dt):
+    """Convert a datetime object to an ISO8601 unix timestamp."""
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=UTC())
     return dt.isoformat()
 
+
 def cts(ts):
+    """Convert a time string to a datetime object."""
     try:
         return dateutil.parser.parse(ts)
     except:
-        print("invalid time: "+ts)
+        print("invalid time: " + ts)
         return ts
 
+
 def dts(obj):
+    """Convert a timestring to an ISO6801 unix timestamp."""
     if isinstance(obj, datetime):
         serial = iso8601(obj)
         return serial
     else:
         return obj
-
