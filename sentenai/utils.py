@@ -6,9 +6,12 @@ from datetime import datetime, timedelta, tzinfo
 
 PY3 = sys.version_info[0] == 3
 
+
 LEFT, CENTER, RIGHT = range(-1, 2)
 
 DEFAULT = None
+
+if not PY3: import virtualtime
 
 def py2str(cls):
     """ encodes strings to utf-8 if the major version is not 3 """
@@ -19,6 +22,7 @@ def py2str(cls):
 
 class UTC(tzinfo):
     def utcoffset(self, dt): return timedelta()
+    def dst(self, dt): return None
 
 def iso8601(dt):
     if dt.tzinfo is None:

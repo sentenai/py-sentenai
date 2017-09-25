@@ -1,7 +1,6 @@
 import json
 import re
 import requests
-import virtualtime
 
 import numpy as np
 import pandas as pd
@@ -14,6 +13,8 @@ from functools            import partial
 from sentenai.exceptions import AuthenticationError, FlareSyntaxError, NotFound, SentenaiException, status_codes, handle
 from sentenai.utils import *
 from sentenai.flare import EventPath, Stream, stream, project, ast, delta, Delta
+
+if not PY3: import virtualtime
 
 try:
     from urllib.parse import quote

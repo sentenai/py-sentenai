@@ -7,6 +7,8 @@ from datetime import date, datetime, timedelta
 from sentenai.exceptions import FlareSyntaxError
 from sentenai.utils import iso8601, py2str, PY3
 
+if not PY3: import virtualtime
+
 try:
     from urllib.parse import quote
 except:

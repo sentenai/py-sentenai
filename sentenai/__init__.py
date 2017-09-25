@@ -2,14 +2,14 @@ import json
 
 from sentenai.flare import delta, stream, EventPath, FlareSyntaxError, InCircle, InPolygon, Par, Select, Span, Switch, merge, project, ast
 from sentenai.api import Sentenai
-from sentenai.utils import LEFT, RIGHT, CENTER
+from sentenai.utils import LEFT, RIGHT, CENTER, PY3
 
 
 
 __all__ = ['FlareSyntaxError', 'LEFT', 'CENTER', 'RIGHT', 'Sentenai', 'span', 'any_of', 'all_of', 'V', 'delta', 'event', 'stream', 'select', 'ast', 'within_distance', 'inside_region', 'merge']
 
 #### Python 2 Compatibility Decorator
-
+if not PY3: import virtualtime
 
 #### Flare Objects
 
