@@ -1,6 +1,7 @@
 import json
 import re
 import requests
+import virtualtime
 
 import numpy as np
 import pandas as pd
@@ -656,9 +657,12 @@ class FrameGroup(object):
             df['.span'] = i
             df['.delta'] = df['.ts'].apply(lambda ts: ts - df['.ts'][0])
             dfs.append(df)
-        rdf = pd.concat(dfs)
-        rdf.set_index(['.ts', '.span', '.delta'], inplace=True)
-        return rdf
+        if dfs:
+            rdf = pd.concat(dfs)
+            rdf.set_index(['.ts', '.span', '.delta'], inplace=True)
+            return rdf
+        else:
+            return pd.DataFrame()
 
 
     def CArray(self, hd5file, group, name, *columns):
