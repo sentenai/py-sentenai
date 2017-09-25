@@ -305,6 +305,7 @@ class FlareResult(object):
                 retries = 0
                 c = resp.headers.get('cursor')
                 data = resp.json()
+                print(data)
 
                 # using stream_obj var name to avoid clashing with imported
                 # stream function from flare.py
@@ -432,7 +433,7 @@ class Cursor(object):
     def _slice(self, cursor, start, end, max_retries=3):
         streams = {}
         retries = 0
-        c = "{}+{:%Y-%m-%dT%H:%M:%S}Z+{:%Y-%m-%dT%H:%M:%S}Z".format(cursor.split("+")[0], start, end)
+        c = "{}+{:%Y-%m-%dT%H:%M:%S.%f}Z+{:%Y-%m-%dT%H:%M:%S.%f}Z".format(cursor.split("+")[0], start, end)
 
         while c is not None:
             url = '{host}/query/{cursor}'.format(host=self.client.host, cursor=c)
