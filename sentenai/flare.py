@@ -596,7 +596,11 @@ class EventPath(object):
         Arguments:
             name -- the name of the variable to get.
         """
+<<<<<<< HEAD
         return EventPath(self.__attrlist + (name,))
+=======
+        return EventPath(self.__attrlist + (name,), self.__stream)
+>>>>>>> f2c7287f1a3e82d57d1b3d195cda242e082f0ac6
 
     def __eq__(self, val):
         """Create equality conditions for event variables.
