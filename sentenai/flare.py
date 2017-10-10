@@ -772,15 +772,15 @@ def project(stream, proj):
                 if isinstance(val, EventPath):
                     z = val()
                     new[key] = [{'var': z['path'][1:]}]
-                elif isinstance(v, float):
+                elif isinstance(val, float):
                     new[key] = [{'lit': {'val': val, 'type': 'double'}}]
-                elif isinstance(v, int):
+                elif isinstance(val, int):
                     new[key] = [{'lit': {'val': val, 'type': 'int'}}]
-                elif isinstance(v, str):
+                elif isinstance(val, str):
                     new[key] = [{'lit': {'val': val, 'type': 'string'}}]
-                elif isinstance(v, bool):
+                elif isinstance(val, bool):
                     new[key] = [{'lit': {'val': val, 'type': 'bool'}}]
-                elif isinstance(v, dict):
+                elif isinstance(val, dict):
                     new[key] = {}
                     l.append((val,new[key]))
                 else:
