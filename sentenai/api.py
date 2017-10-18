@@ -412,14 +412,10 @@ class Cursor(object):
         self.returning = returning
         self.headers = {'content-type': 'application/json', 'auth-key': client.auth_key}
 
-        if limit is None:
-            url = '{0}/query'.format(client.host)
-        else:
-            url = '{0}/query?limit={1}'.format(client.host, limit)
+        url = '{0}/query'.format(client.host)
 
-        # get spans by submitting query to server
-        # TODO: Determine if this should be asynchronous
-        self._spans = handle(requests.post(url, json=ast(query, returning), headers=self.headers)).json()
+        r = handle(requests.post(url, json=ast(query, returning), headers=self.headers))
+        self.query_id = r.headers['location']
 
 
     def __len__(self):
@@ -437,7 +433,7 @@ class Cursor(object):
         c = "{}+{:%Y-%m-%dT%H:%M:%S.%f}Z+{:%Y-%m-%dT%H:%M:%S.%f}Z".format(cursor.split("+")[0], start, end)
 
         while c is not None:
-            url = '{host}/query/{cursor}'.format(host=self.client.host, cursor=c)
+            url = '{host}/query/{cursor}/events'.format(host=self.client.host, cursor=c)
             resp = requests.get(url, headers=self.headers)
 
             if not resp.ok and retries >= max_retries:
@@ -477,21 +473,27 @@ class Cursor(object):
             pool.close()
 
 
-    def spans(self):
+    def spans(self, refresh=False):
         """Get list of spans of time when query conditions are true."""
-        r = []
-        for x in self._spans:
-            r.append({'start': cts(x['start']), 'end': cts(x['end'])})
-        return r
+        if refresh or not self._spans:
+            spans = []
+            cid = self.query_id
+            while cid:
+                if limit is None:
+                    url = '{0}/query/{1}/spans'.format(client.host, cid)
+                else:
+                    url = '{0}/query/{1}/spans?limit={2}'.format(client.host, cid, limit)
+
+                r = handle(requests.post(url, json=ast(query, returning), headers=self.headers)).json()
+                spans.extend(r['spans'])
+                cid = r.get('cursor')
+            self._spans = spans
+        return [{'start': cts(x['start']), 'end': cts(x['end'])} for x in self._spans]
 
 
     def stats(self):
         """Get time-based statistics about query results."""
-        deltas = []
-        for sp in self._spans:
-            s = cts(sp['start'])
-            e = cts(sp['end'])
-            deltas.append(e - s)
+        deltas = [sp['end'] - sp['start'] for sp in self.spans()]
 
         if not len(deltas):
             return {}
@@ -523,10 +525,10 @@ class Cursor(object):
 
         def iterator(inverted):
             if not inverted:
-                spans = self._spans
+                spans = self.spans()
             elif self._spans:
-                spans = [(datetime.min, self.spans[0][0])]
-                for (t0,t1), (u0, u1) in zip(self._spans, self._spans[1:]):
+                spans = [(datetime.min, self.spans()[0][0])]
+                for (t0,t1), (u0, u1) in zip(self.spans(), self.spans()[1:]):
                     spans.append((t1, u0))
             else:
                 spans = []
@@ -572,6 +574,7 @@ class Cursor(object):
                 cslide += slide
 
         def shape(inverted):
+            self.spans()
             if not inverted:
                 spans = self._spans
             elif self._spans:
@@ -584,6 +587,7 @@ class Cursor(object):
             return (rows, divtime(lookback + horizon, freq))
 
         def iterator(inverted):
+            self.spans()
             if not inverted:
                 spans = self._spans
             elif self._spans:
