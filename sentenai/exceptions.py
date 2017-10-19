@@ -33,6 +33,6 @@ def handle(resp):
         raise FlareSyntaxError
     elif resp.status_code >= 500:
         raise SentenaiException("Something went wrong.")
-    elif resp.status_code != 200:
-        raise Exception(resp.status_code)
+    elif resp.status_code < 200 or resp.status_code >= 400:
+        raise SentenaiException("Something went wrong. Code: %i" % resp.status_code)
     return resp

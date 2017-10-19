@@ -214,202 +214,13 @@ class Sentenai(object):
 #           raise SentenaiException("Must be called on stream")
 
 
-class FlareResult(object):
-    def __init__(self, c, q, spans, ret=None):
-        self._client = c
-        self._query = q
-        self._spans = spans
-        self._data = None
-        self._window = None
-        self._returning = ret
-
-    def spans(self):
-        r = []
-        for x in self._spans:
-            r.append({'start': cts(x['start']), 'end': cts(x['end'])})
-        return r
-
-    def stats(self):
-
-        deltas = []
-        for sp in self._spans:
-            s = cts(sp['start'])
-            e = cts(sp['end'])
-            deltas.append(e - s)
-
-        if not len(deltas):
-            return {}
-
-        mean = sum([3600*24*d.days + d.seconds for d in deltas])/float(len(deltas))
-        return {
-                'min': min(deltas),
-                'max': max(deltas),
-                'mean': timedelta(seconds=mean),
-                'median': sorted(deltas)[len(deltas)//2],
-                'count': len(deltas),
-            }
-
-    def json(self):
-        if not self._data:
-            self._events()
-        return json.dumps(self._data, default=dts, indent=4)
-
-    def window(self, width=None, align=CENTER):
-        if width is None:
-            self._window = None
-        else:
-            self._window = (width, align)
-
-        if self._data:
-            self._data = None
-
-        return self
-
-
-    def _events(self):
-        pool = ThreadPool(8)
-        try:
-            self._data = pool.map(lambda span: self._slice(cts(span['start']), cts(span['end']), span['cursor']), self._spans)
-            return self._data
-        finally:
-            pool.close()
-
-    def _slice(self, s, e, c):
-        if self._window is not None:
-            if self._window[1] == LEFT:
-                s_ = s
-                e_ = s + self._window[0]
-            elif self._window[1] == RIGHT:
-                s_ = e - self._window[0]
-                e_ = e
-            else:
-                midpoint = cts(s) + (cts(e) - cts(s)) / 2
-                s_ = midpoint - self._window[0] / 2
-                e_ = midpoint + self._window[0] / 2
-
-            c = "{}+{:%Y-%m-%dT%H:%M:%S}Z+{:%Y-%m-%dT%H:%M:%S}Z".format(c.split("+", 1)[0], s_, e_)
-
-        headers = {'content-type': 'application/json', 'auth-key': self._client.auth_key}
-        streams = {}
-        retries = 0
-        while c is not None:
-            url = '{host}/query/{cursor}'.format(host=self._client.host, cursor=c)
-            resp = requests.get(url, headers=headers)
-
-            if not resp.ok and retries > 2:
-                print(resp)
-                raise Exception("failed to get cursor")
-            elif not resp.ok:
-                retries += 1
-                continue
-            else:
-                retries = 0
-                c = resp.headers.get('cursor')
-                data = resp.json()
-                print(data)
-
-                # using stream_obj var name to avoid clashing with imported
-                # stream function from flare.py
-                    # initialize stream if it doesn't exist already
-                for sid, stream_obj in data['streams'].items():
-                    if sid not in streams:
-                        streams[sid] = {'stream': stream_obj, 'events': []}
-
-                for event in data['events']:
-                    events = streams[event['stream']]['events']
-                    ss = streams[event['stream']]['stream']
-                    if self._returning is not None and ss in self._returning.keys():
-                        evt = {}
-                        for key, pth in self._returning[ss].items():
-                            evt[key] = event['event']
-                            for sg in pth:
-                                evt[key] = evt[key][sg]
-                        event['event'] = evt
-                    del event['stream']
-                    events.append(event)
-
-        return {'start': s, 'end': e, 'streams': list(streams.values())}
-
-    def dataframe(self, only=None):
-
-        # call data if not populated
-        if not self._data:
-            self._events()
-
-        data = self._data
-        output = {}
-
-        # return empty frame is no results
-        if len(data) < 1:
-            if only is not None:
-                return pd.DataFrame()
-            else:
-                return {}
-
-        # loop through streams
-        for st in [s['stream'] for s in data[0]['streams']]:
-
-            if only and isinstance(only, Stream):
-                if str(only._name) != str(st):
-                    continue
-            elif only and str(only) != str(st):
-                continue
-
-            dd = []
-            for x in data:
-                for s in x['streams']:
-                    if s['stream'] == st:
-                        dd.append(s['events'])
-                        break
-
-            out = []
-            for i, sp in enumerate(dd):
-                out_sp = []
-                if sp:
-                    t0 = cts(sp[0]['ts'])
-                for evt in sp:
-                    if evt is None: continue
-                    ts = cts(evt['ts'])
-                    o = {'.stream': st,
-                         '.span': i,
-                         '.ts': ts,
-                         '.delta': ts - t0
-                        }
-
-                    for k, v in evt['event'].items():
-                        o[k] = v
-                    out_sp.append(o)
-
-                if len(out_sp) > 0:
-                    df = json_normalize(out_sp)
-                    df.set_index(['.ts', '.stream', '.span', '.delta'], inplace=True)
-                    out.append(df)
-            output[str(st)] = pd.concat(out)
-        if only and isinstance(only, Stream):
-            return output[str(only._name)]
-        elif only:
-            return output[only]
-        else:
-            return output
-
-
-    def _mIdx(self, df):
-        """unused, but we should give the option of multiindexing"""
-        midx = pd.MultiIndex.from_tuples(
-                        zip(df['.span'], df['.ts'], df['.span']),
-                        names=['.span', '.ts', '.span'])
-
-        # FIXME: idx_names is undefined
-        # return df.set_index(midx).drop(idx_names, axis=1)
-        return
-
-
 
 class Cursor(object):
     def __init__(self, client, query, returning=None, limit=None):
         self.client = client
         self.query = query
         self.returning = returning
+        self.limit = limit
         self.headers = {'content-type': 'application/json', 'auth-key': client.auth_key}
 
         url = '{0}/query'.format(client.host)
@@ -419,11 +230,11 @@ class Cursor(object):
 
 
     def __len__(self):
-        return len(self._spans)
+        return len(self.spans())
 
 
     def _pool(self):
-        sl = len(self._spans)
+        sl = len(self.spans())
         return ThreadPool(16 if sl > 16 else sl) if sl else None
 
 
@@ -437,7 +248,6 @@ class Cursor(object):
             resp = requests.get(url, headers=self.headers)
 
             if not resp.ok and retries >= max_retries:
-                print(resp)
                 raise Exception("failed to get cursor")
             elif not resp.ok:
                 retries += 1
@@ -463,11 +273,12 @@ class Cursor(object):
 
     def json(self):
         """Get json representation of exact query results."""
+        self.spans()
         pool = self._pool()
         if not pool:
             return json.dumps([])
         try:
-            data = pool.map(lambda s: self._slice(s['cursor'], cts(s['start']), cts(s['end'])), self._spans)
+            data = pool.map(lambda s: self._slice(s['cursor'], s['start'], s['end']), self._spans)
             return json.dumps(data, default=dts, indent=4)
         finally:
             pool.close()
@@ -475,20 +286,24 @@ class Cursor(object):
 
     def spans(self, refresh=False):
         """Get list of spans of time when query conditions are true."""
-        if refresh or not self._spans:
+        if refresh or not hasattr(self, "_spans"):
             spans = []
             cid = self.query_id
             while cid:
-                if limit is None:
-                    url = '{0}/query/{1}/spans'.format(client.host, cid)
+                if self.limit is None:
+                    url = '{0}/query/{1}/spans'.format(self.client.host, cid)
                 else:
-                    url = '{0}/query/{1}/spans?limit={2}'.format(client.host, cid, limit)
+                    url = '{0}/query/{1}/spans?limit={2}'.format(self.client.host, cid, limit)
+                r = handle(requests.get(url, self.returning, headers=self.headers)).json()
 
-                r = handle(requests.post(url, json=ast(query, returning), headers=self.headers)).json()
+                for s in r['spans']:
+                    s['start'] = cts(s['start'])
+                    s['end'] = cts(s['end'])
                 spans.extend(r['spans'])
+
                 cid = r.get('cursor')
             self._spans = spans
-        return [{'start': cts(x['start']), 'end': cts(x['end'])} for x in self._spans]
+        return [{'start': x['start'], 'end': x['end']} for x in self._spans]
 
 
     def stats(self):
@@ -511,7 +326,6 @@ class Cursor(object):
     def dataset(self, window=None, align=CENTER, freq=None):
 
         def win(cursor, start, end):
-            start, end = cts(start), cts(end)
             if window == None:
                 return (cursor, start, end)
             if align == LEFT:
@@ -524,11 +338,12 @@ class Cursor(object):
                 return (cursor, mp - w, mp + w)
 
         def iterator(inverted):
+            self.spans()
             if not inverted:
-                spans = self.spans()
+                spans = self._spans
             elif self._spans:
-                spans = [(datetime.min, self.spans()[0][0])]
-                for (t0,t1), (u0, u1) in zip(self.spans(), self.spans()[1:]):
+                spans = [(datetime.min, self._spans[0][0])]
+                for (t0,t1), (u0, u1) in zip(self._spans, self._spans[1:]):
                     spans.append((t1, u0))
             else:
                 spans = []
@@ -540,16 +355,18 @@ class Cursor(object):
                                   .resample(freq).ffill()
                                   .reset_index()
                                   for k in fr}
-                fts = min(fr[k]['.ts'][0] for k in fr)
-                lts = max(fr[k]['.ts'][-1] for k in fr) + timedelta(seconds=1)
+
                 for s in fr.keys():
                     fr[s] = fr[s].set_index(keys=['.ts'])
                     fr[s].rename(columns={k: s + ":" + k for k in fr[s].columns}, inplace=True)
+
                 if len(fr.keys()) > 1:
                     to_join = list(fr.values())
                     dff = pd.DataFrame.join(to_join[0], to_join[1:], how="outer").reset_index()
-                else:
+                elif fr:
                     dff = list(fr.values())[0].reset_index()
+                else:
+                    dff = fr
 
                 yield dff
 
@@ -563,9 +380,6 @@ class Cursor(object):
             horizon = horizon.timedelta
         if isinstance(slide, Delta):
             slide = slide.timedelta
-
-        if freq == 'D':
-            resolution = timedelta(1)
 
         def slides(start, end):
             cslide = timedelta(0)
@@ -584,7 +398,7 @@ class Cursor(object):
             rows = 0
             for sp in spans:
                 rows += len([x for x in slides(sp['start'], sp['end'])])
-            return (rows, divtime(lookback + horizon, freq))
+            return (rows, len(pd.date_range(t0, t1, freq=freq, closed='right')))
 
         def iterator(inverted):
             self.spans()
@@ -597,7 +411,7 @@ class Cursor(object):
             else:
                 spans = []
             for sp in spans:
-                start, end, cur = cts(sp['start']), cts(sp['end']), sp['cursor']
+                start, end, cur = sp['start'], sp['end'], sp['cursor']
                 data = self._slice(cur, start, end + horizon)
                 fr = df(sp, data)
                 fr = {k: fr[k].set_index(keys=['.ts'])
@@ -619,7 +433,7 @@ class Cursor(object):
 
                 for t0, t1 in slides(fts, lts):
                     p = dff[(dff['.ts'] >= t0) & (dff['.ts'] < t1)]
-                    if len(p) == divtime(lookback + horizon, resolution):
+                    if len(p) == len(pd.date_range(t0, t1, freq=freq, closed='right')):
                         yield p
 
         return FrameGroup(iterator)
@@ -659,10 +473,11 @@ class FrameGroup(object):
             columns = [".ts"] + list(columns)
         dfs = []
         for i, df in enumerate(self.dataframes(*columns, **kwargs)):
-            df = df.copy()
-            df['.span'] = i
-            df['.delta'] = df['.ts'].apply(lambda ts: ts - df['.ts'][0])
-            dfs.append(df)
+            if not df.empty:
+                df = df.copy()
+                df['.span'] = i
+                df['.delta'] = df['.ts'].apply(lambda ts: ts - df['.ts'][0])
+                dfs.append(df)
         if dfs:
             rdf = pd.concat(dfs)
             rdf.set_index(['.ts', '.span', '.delta'], inplace=True)
@@ -682,7 +497,7 @@ class FrameGroup(object):
 
 
 def df(span, data):
-    t0 = cts(span['start'])
+    t0 = span['start']
     dfs = {}
     for s in data['streams']:
         events = []
