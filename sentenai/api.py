@@ -25,7 +25,7 @@ except:
 class Sentenai(object):
     def __init__(self, auth_key=""):
         self.auth_key = auth_key
-        self.host = "https://api.senten.ai"
+        self.host = "https://api.sentenai.com"
         self.build_url = partial(build_url, self.host)
 
     def __str__(self):
@@ -308,7 +308,8 @@ class Cursor(object):
 
     def stats(self):
         """Get time-based statistics about query results."""
-        deltas = [sp['end'] - sp['start'] for sp in self.spans()]
+        self.spans()
+        deltas = [sp['end'] - sp['start'] for sp in self._spans]
 
         if not len(deltas):
             return {}
@@ -324,6 +325,20 @@ class Cursor(object):
 
 
     def dataset(self, window=None, align=CENTER, freq=None):
+        """
+        The `dataset` method returns the event data from a query.
+        It's return type is a "FrameGroup" which can wrap multiple
+        dataframes with different shapes. The optional `window` variable
+        allows us to specify a window size for each returned slice of
+        stream data. The query result can optionally be aligned to the
+        LEFT or RIGHT side of the window using the `align` variable. It
+        defaults to `CENTER`. When multiple streams have different sample
+        rates, it can be handy to specify a `freq` to use. This will engage
+        the forward filling capabilities of Pandas to normalize the dataframes.
+        """
+
+        if isinstance(window, Delta):
+            window = window.timedelta
 
         def win(cursor, start, end):
             if window == None:
@@ -349,12 +364,18 @@ class Cursor(object):
                 spans = []
             for sp in spans:
                 data = self._slice(*win(**sp))
+
                 fr = df(sp, data)
+                for s in fr.keys():
+                    if fr[s].empty:
+                        del fr[s]
+
                 if freq:
                     fr = {k: fr[k].set_index(keys=['.ts'])
                                   .resample(freq).ffill()
                                   .reset_index()
                                   for k in fr}
+
 
                 for s in fr.keys():
                     fr[s] = fr[s].set_index(keys=['.ts'])
@@ -366,7 +387,7 @@ class Cursor(object):
                 elif fr:
                     dff = list(fr.values())[0].reset_index()
                 else:
-                    dff = fr
+                    dff = pd.DataFrame()
 
                 yield dff
 
@@ -446,23 +467,32 @@ class FrameGroup(object):
         self.inverted = inverted
 
     def inverse(self):
+        """
+        Return an inverted FrameGroup, by selecting
+        the times between the start and end of found
+        patterns.
+        """
         return FrameGroup(self.iterator, inverted=True)
 
     def dataframes(self, *columns, **kwargs):
         """
-        Training set shaped for LSTMs.
+        Return a generator of dataframes with one dataframe per
+        found result.
         """
         drop_prefixes = kwargs.get('drop_stream_names', False)
         def cname(stream, path):
             return "{}:{}".format(stream['name'], ".".join(path[1:]))
 
         for df in self.iterator(self.inverted):
+            print(type(df))
             if drop_prefixes:
                 # TODO: Figure out what needs to happen if names overlap
                 z = df[[cname(**p()) if p != ".ts" else p for p in columns]].copy() if columns else df.copy()
                 z.rename(columns={k: k.split(":", 1)[1] for k in z.columns if ":" in k}, inplace=True)
+                print(type(z))
                 yield z
             else:
+                print(type(df))
                 yield df[[cname(**p()) for p in columns]] if columns else df
 
     def tensor(self, *columns, **kwargs):
