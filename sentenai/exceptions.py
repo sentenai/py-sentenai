@@ -3,6 +3,10 @@ __all__ = ['FlareSyntaxError', 'status_codes', 'NotFound', 'AuthenticationError'
 class SentenaiException(Exception):
     pass
 
+class APIError(SentenaiException):
+    def __init__(self, resp):
+        self.response = resp
+
 class FlareSyntaxError(SentenaiException):
     pass
 
@@ -12,7 +16,8 @@ class AuthenticationError(SentenaiException):
 class NotFound(SentenaiException):
     pass
 
-def status_codes(code):
+def status_codes(resp):
+    code = resp.status_code
     if code == 401:
         raise AuthenticationError("Invalid API key")
     elif code >= 500:
@@ -23,7 +28,7 @@ def status_codes(code):
         raise NotFound()
 
     elif code >= 400:
-        raise SentenaiException("something went wrong")
+        raise APIError(resp)
 
 def handle(resp):
     # handle bad status codes

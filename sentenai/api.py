@@ -7,26 +7,98 @@ import pandas as pd
 
 from pandas.io.json       import json_normalize
 from datetime             import timedelta
+from threading            import Lock
 from multiprocessing.pool import ThreadPool
 from functools            import partial
 
-from sentenai.exceptions import AuthenticationError, FlareSyntaxError, NotFound, SentenaiException, status_codes, handle
+from sentenai.exceptions import *
 from sentenai.utils import *
 from sentenai.flare import EventPath, Stream, stream, project, ast, delta, Delta
 
-if not PY3: import virtualtime
+if not PY3:
+    import virtualtime
+    from Queue import Queue
+else:
+    from queue import Queue
 
 try:
     from urllib.parse import quote
 except:
     from urllib import quote
 
+class Uploader(object):
+    def __init__(self, client, iterator, threads=32):
+        self.client = client
+        self.iterator = iterator
+        self.lock = Lock()
+        self.pool = ThreadPool(threads)
+        self.errors = Queue()
+
+    def process(self):
+        def waits():
+            yield 0
+            wl = (0,1)
+            while True:
+                wl = (wl[-1], sum(wl))
+                yield wl[-1]
+        try:
+            self.lock.acquire()
+            data = next(self.iterator)
+        except StopIteration:
+            return
+        finally:
+            self.lock.release()
+
+        event = self.validate(data)
+
+        wait = waits()
+        while event:
+            try:
+                self.client.put(**event)
+            except AuthenticationError:
+                raise
+            except APIError as e:
+                if e.response.status_code == 400:
+                    # probably bad JSON
+                    self.errors.put(data, e)
+                else:
+                    time.sleep(next(wait))
+            else:
+                return
+
+
+
+
+    def validate(data):
+        ts = data.get('ts')
+        try:
+            if not ts.tzinfo:
+                ts = pytz.localize(ts)
+        except:
+            self.errors.put((data, "invalid timestamp"))
+            return None
+
+        sid = data.get('id')
+        if sid: sid = str(sid)
+
+        try:
+            evt = data['event']
+        except KeyError:
+            self.errors.put((data, "missing event data"))
+        except:
+            self.errors.put((data, "invalid event data"))
+        else:
+            return {"stream": stream(sid), "timestamp": ts, "id": sid}
+
+   
 
 class Sentenai(object):
     def __init__(self, auth_key=""):
         self.auth_key = auth_key
         self.host = "https://api.sentenai.com"
         self.build_url = partial(build_url, self.host)
+        self.session = requests.Session()
+        self.session.headers.update({ 'auth_key': client.auth_key })
 
     def __str__(self):
         return repr(self)
@@ -48,9 +120,8 @@ class Sentenai(object):
            eid    -- A unique ID corresponding to an event stored within the stream.
         """
         url = self.build_url(stream, eid)
-        headers = {'auth-key': self.auth_key}
-        resp = requests.delete(url, headers=headers)
-        status_codes(resp.status_code)
+        resp = self.session.delete(url)
+        status_codes(resp)
 
 
     def get(self, stream, eid=None):
@@ -65,15 +136,14 @@ class Sentenai(object):
         else:
             url = "/".join([self.host, "streams", stream()['name']])
 
-        headers = {'auth-key': self.auth_key}
-        resp = requests.get(url, headers=headers)
+        resp = self.session.get(url)
 
         if resp.status_code == 404 and eid is not None:
             raise NotFound('The event at "/streams/{}/events/{}" does not exist'.format(stream()['name'], eid))
         elif resp.status_code == 404:
             raise NotFound('The stream at "/streams/{}" does not exist'.format(stream()['name'], eid))
         else:
-            status_codes(resp.status_code)
+            status_codes(resp)
 
         if eid is not None:
             return {'id': resp.headers['location'], 'ts': resp.headers['timestamp'], 'event': resp.json()}
@@ -90,7 +160,7 @@ class Sentenai(object):
            id        -- A user-specified id for the event that is unique to this stream (optional)
            timestamp -- A user-specified datetime object representing the time of the event. (optional)
         """
-        headers = {'content-type': 'application/json', 'auth-key': self.auth_key}
+        headers = {'content-type': 'application/json'}
         jd = event
 
         if timestamp:
@@ -98,20 +168,19 @@ class Sentenai(object):
 
         if id:
             url = '{host}/streams/{sid}/events/{eid}'.format(sid=stream()['name'], host=self.host, eid=id)
-            resp = requests.put(url, json=jd, headers=headers)
+            resp = self.session.put(url, json=jd, headers=headers)
             if resp.status_code not in [200, 201]:
-                status_codes(resp.status_code)
-                raise SentenaiException("something went wrong")
+                status_codes(resp)
             else:
                 return id
         else:
             url = '{host}/streams/{sid}/events'.format(sid=stream._name, host=self.host)
-            resp = requests.post(url, json=jd, headers=headers)
+            resp = self.session.post(url, json=jd, headers=headers)
             if resp.status_code in [200, 201]:
                 return resp.headers['location']
             else:
-                status_codes(resp.status_code)
-                raise SentenaiException("something went wrong")
+                status_codes(resp)
+                raise APIError(resp)
 
 
     def streams(self, name=None, meta={}):
@@ -123,9 +192,8 @@ class Sentenai(object):
            meta -- A dictionary of key/value pairs to match from stream metadata
         """
         url = "/".join([self.host, "streams"])
-        headers = {'auth-key': self.auth_key}
-        resp = requests.get(url, headers=headers)
-        status_codes(resp.status_code)
+        resp = self.session.get(url, headers=headers)
+        status_codes(resp)
 
         def filtered(s):
             f = True
@@ -150,7 +218,7 @@ class Sentenai(object):
         url = "/".join([self.host, "streams", stream()['name']])
         headers = {'auth-key': self.auth_key}
         resp = requests.delete(url, headers=headers)
-        status_codes(resp.status_code)
+        status_codes(resp)
 
 
     def range(self, stream, start, end):
@@ -167,7 +235,7 @@ class Sentenai(object):
         url = "/".join([self.host, "streams", stream()['name'], "events", iso8601(start), iso8601(end)])
         headers = {'auth-key': self.auth_key}
         resp = requests.get(url, headers=headers)
-        status_codes(resp.status_code)
+        status_codes(resp)
         return [json.loads(line) for line in resp.text.splitlines()]
 
 
