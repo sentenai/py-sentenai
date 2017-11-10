@@ -31,11 +31,10 @@ class Uploader(object):
     def __init__(self, client, iterator, threads=32):
         self.client = client
         self.iterator = iterator
-        self.lock = Lock()
         self.pool = ThreadPool(threads)
         self.errors = Queue()
 
-    def process(self):
+    def process(self, data):
         def waits():
             yield 0
             wl = (0,1)
@@ -67,7 +66,8 @@ class Uploader(object):
             else:
                 return
 
-
+    def start(self):
+        self.pool.map(process)
 
 
     def validate(self, data):
@@ -91,7 +91,6 @@ class Uploader(object):
         else:
             return {"stream": stream(sid), "timestamp": ts, "id": sid}
 
-   
 
 class Sentenai(object):
     def __init__(self, auth_key="", host="https://api.sentenai.com"):
@@ -339,7 +338,7 @@ class Cursor(object):
     def _slice(self, cursor, start, end, max_retries=3):
         streams = {}
         retries = 0
-        c = "{}+{:%Y-%m-%dT%H:%M:%S.%f}Z+{:%Y-%m-%dT%H:%M:%S.%f}Z".format(cursor.split("+")[0], start, end)
+        c = "{}+{}Z+{}Z".format(cursor.split("+")[0], start.isoformat(), end.isoformat())
 
         while c is not None:
             url = '{host}/query/{cursor}/events'.format(host=self.client.host, cursor=c)
