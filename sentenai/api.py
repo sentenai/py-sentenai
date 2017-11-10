@@ -12,6 +12,7 @@ from multiprocessing.pool import ThreadPool
 from functools            import partial
 
 from sentenai.exceptions import *
+from sentenai.exceptions import handle
 from sentenai.utils import *
 from sentenai.flare import EventPath, Stream, stream, project, ast, delta, Delta
 
@@ -69,7 +70,7 @@ class Uploader(object):
 
 
 
-    def validate(data):
+    def validate(self, data):
         ts = data.get('ts')
         try:
             if not ts.tzinfo:
@@ -85,7 +86,7 @@ class Uploader(object):
             evt = data['event']
         except KeyError:
             self.errors.put((data, "missing event data"))
-        except:
+        except Exception:
             self.errors.put((data, "invalid event data"))
         else:
             return {"stream": stream(sid), "timestamp": ts, "id": sid}
@@ -93,12 +94,12 @@ class Uploader(object):
    
 
 class Sentenai(object):
-    def __init__(self, auth_key=""):
+    def __init__(self, auth_key="", host="https://api.sentenai.com"):
         self.auth_key = auth_key
-        self.host = "https://api.sentenai.com"
+        self.host = host
         self.build_url = partial(build_url, self.host)
         self.session = requests.Session()
-        self.session.headers.update({ 'auth_key': client.auth_key })
+        self.session.headers.update({ 'auth-key': auth_key })
 
     def __str__(self):
         return repr(self)
@@ -169,6 +170,7 @@ class Sentenai(object):
         if id:
             url = '{host}/streams/{sid}/events/{eid}'.format(sid=stream()['name'], host=self.host, eid=id)
             resp = self.session.put(url, json=jd, headers=headers)
+
             if resp.status_code not in [200, 201]:
                 status_codes(resp)
             else:
@@ -192,7 +194,7 @@ class Sentenai(object):
            meta -- A dictionary of key/value pairs to match from stream metadata
         """
         url = "/".join([self.host, "streams"])
-        resp = self.session.get(url, headers=headers)
+        resp = self.session.get(url)
         status_codes(resp)
 
         def filtered(s):
@@ -268,18 +270,46 @@ class Sentenai(object):
         return Cursor(self, query, returning, limit)
 
 
-#   def newest(self, o):
-#       if isinstance(o, Stream):
-#           raise NotImplementedError
-#       else:
-#           raise SentenaiException("Must be called on stream")
+    def fields(self, s):
+        if isinstance(s, Stream):
+            url = "/".join([self.host, "streams", s['name'], "fields"])
+            resp = self.session.get(url)
+            return resp.json()
+        else:
+            raise SentenaiException("Must be called on stream")
+
+    def values(self, s):
+        if isinstance(s, Stream):
+            url = "/".join([self.host, "streams", s['name'], "values"])
+            resp = self.session.get(url)
+            return resp.json()
+        else:
+            raise SentenaiException("Must be called on stream")
+
+    def newest(self, s):
+        if isinstance(s, Stream):
+            url = "/".join([self.host, "streams", s['name'], "newest"])
+            resp = self.session.get(url)
+            return {
+                    "event": resp.json(),
+                    "ts": cts(resp.headers['Timestamp']),
+                    "id": resp.headers['Location']
+            }
+        else:
+            raise SentenaiException("Must be called on stream")
 
 
-#   def oldest(self, o):
-#       if isinstance(o, Stream):
-#           raise NotImplementedError
-#       else:
-#           raise SentenaiException("Must be called on stream")
+    def oldest(self, s):
+        if isinstance(s, Stream):
+            url = "/".join([self.host, "streams", s['name'], "oldest"])
+            resp = self.session.get(url)
+            return {
+                    "event": resp.json(),
+                    "ts": cts(resp.headers['Timestamp']),
+                    "id": resp.headers['Location']
+            }
+        else:
+            raise SentenaiException("Must be called on stream")
 
 
 
@@ -346,7 +376,7 @@ class Cursor(object):
         if not pool:
             return json.dumps([])
         try:
-            data = pool.map(lambda s: self._slice(s['cursor'], s['start'], s['end']), self._spans)
+            data = pool.map(lambda s: self._slice(s['cursor'], s.get('start', datetime.min), s.get('end', datetime.max), self._spans))
             return json.dumps(data, default=dts, indent=4)
         finally:
             pool.close()
@@ -365,31 +395,44 @@ class Cursor(object):
                 r = handle(requests.get(url, self.returning, headers=self.headers)).json()
 
                 for s in r['spans']:
-                    s['start'] = cts(s['start'])
-                    s['end'] = cts(s['end'])
+                    if 'start' in s and s['start']:
+                        s['start'] = cts(s['start'])
+                    else:
+                        s['start'] = datetime.min
+                    if 'end' in s and s['end']:
+                        s['end'] = cts(s['end'])
+                    else:
+                        s['end'] = datetime.max
                 spans.extend(r['spans'])
 
                 cid = r.get('cursor')
             self._spans = spans
-        return [{'start': x['start'], 'end': x['end']} for x in self._spans]
+        sps = []
+        for x in self._spans:
+            z = {}
+            if 'start' in x:
+                z['start'] = x['start']
+            if 'end' in x:
+                z['end'] = x['end']
+        return sps
 
 
     def stats(self):
         """Get time-based statistics about query results."""
         self.spans()
-        deltas = [sp['end'] - sp['start'] for sp in self._spans]
+        deltas = [sp['end'] - sp['start'] for sp in self._spans if 'start' in sp and 'end' in sp]
 
         if not len(deltas):
             return {}
 
         mean = sum([3600*24*d.days + d.seconds for d in deltas])/float(len(deltas))
         return {
-                'min': min(deltas),
-                'max': max(deltas),
-                'mean': timedelta(seconds=mean),
-                'median': sorted(deltas)[len(deltas)//2],
-                'count': len(deltas),
-            }
+            'min': min(deltas),
+            'max': max(deltas),
+            'mean': timedelta(seconds=mean),
+            'median': sorted(deltas)[len(deltas)//2],
+            'count': len(deltas),
+        }
 
 
     def dataset(self, window=None, align=CENTER, freq=None):
@@ -408,7 +451,7 @@ class Cursor(object):
         if isinstance(window, Delta):
             window = window.timedelta
 
-        def win(cursor, start, end):
+        def win(cursor, start=datetime.min, end=datetime.max):
             if window == None:
                 return (cursor, start, end)
             if align == LEFT:
@@ -494,13 +537,16 @@ class Cursor(object):
             if not inverted:
                 spans = self._spans
             elif self._spans:
-                spans = [{'cursor': self._spans[0]['cursor'], 'start': "1900-01-01T00:00:00Z", 'end': self._spans[0]['start']}]
+                if 'start' in self._spans[0]:
+                    spans = [{'cursor': self._spans[0]['cursor'], 'start': "1900-01-01T00:00:00Z", 'end': self._spans[0]['start']}]
+                else:
+                    spans = []
                 for t0, t1 in zip(self._spans, self._spans[1:]):
-                    spans.append({'cursor': t0['cursor'], 'start': t0['end'], 'end': t1['start']})
+                    spans.append({'cursor': t0['cursor'], 'start': t0.get('end', datetime.max), 'end': t1.get('start', datetime.min)})
             else:
                 spans = []
             for sp in spans:
-                start, end, cur = sp['start'], sp['end'], sp['cursor']
+                start, end, cur = sp.get('start', datetime.min), sp.get('end', datetime.max), sp['cursor']
                 data = self._slice(cur, start, end + horizon)
                 fr = df(sp, data)
                 fr = {k: fr[k].set_index(keys=['.ts'])
@@ -552,15 +598,12 @@ class FrameGroup(object):
             return "{}:{}".format(stream['name'], ".".join(path[1:]))
 
         for df in self.iterator(self.inverted):
-            print(type(df))
             if drop_prefixes:
                 # TODO: Figure out what needs to happen if names overlap
                 z = df[[cname(**p()) if p != ".ts" else p for p in columns]].copy() if columns else df.copy()
                 z.rename(columns={k: k.split(":", 1)[1] for k in z.columns if ":" in k}, inplace=True)
-                print(type(z))
                 yield z
             else:
-                print(type(df))
                 yield df[[cname(**p()) for p in columns]] if columns else df
 
     def tensor(self, *columns, **kwargs):
@@ -595,7 +638,7 @@ class FrameGroup(object):
 
 
 def df(span, data):
-    t0 = span['start']
+    t0 = span.get('start', datetime.min)
     dfs = {}
     for s in data['streams']:
         events = []
