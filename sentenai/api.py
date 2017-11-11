@@ -7,7 +7,6 @@ import pandas as pd
 
 from pandas.io.json       import json_normalize
 from datetime             import timedelta
-from threading            import Lock
 from multiprocessing.pool import ThreadPool
 from functools            import partial
 
@@ -28,11 +27,10 @@ except:
     from urllib import quote
 
 class Uploader(object):
-    def __init__(self, client, iterator, threads=32):
+    def __init__(self, client, iterator, processes=32):
         self.client = client
         self.iterator = iterator
-        self.pool = ThreadPool(threads)
-        self.errors = Queue()
+        self.pool = ThreadPool(processes)
 
     def process(self, data):
         def waits():
@@ -41,15 +39,10 @@ class Uploader(object):
             while True:
                 wl = (wl[-1], sum(wl))
                 yield wl[-1]
-        try:
-            self.lock.acquire()
-            data = next(self.iterator)
-        except StopIteration:
-            return
-        finally:
-            self.lock.release()
 
         event = self.validate(data)
+        if isinstance(tuple, event):
+            return event
 
         wait = waits()
         while event:
@@ -60,14 +53,15 @@ class Uploader(object):
             except APIError as e:
                 if e.response.status_code == 400:
                     # probably bad JSON
-                    self.errors.put(data, e)
+                    return data
                 else:
                     time.sleep(next(wait))
             else:
                 return
 
     def start(self):
-        self.pool.map(process)
+        data = self.pool.map(process, self.iterator)
+        return { 'saved': len(data), 'failed': filter(data) }
 
 
     def validate(self, data):
@@ -76,8 +70,7 @@ class Uploader(object):
             if not ts.tzinfo:
                 ts = pytz.localize(ts)
         except:
-            self.errors.put((data, "invalid timestamp"))
-            return None
+            return (data, "invalid timestamp")
 
         sid = data.get('id')
         if sid: sid = str(sid)
@@ -85,9 +78,9 @@ class Uploader(object):
         try:
             evt = data['event']
         except KeyError:
-            self.errors.put((data, "missing event data"))
+            return (data, "missing event data")
         except Exception:
-            self.errors.put((data, "invalid event data"))
+            return (data, "invalid event data")
         else:
             return {"stream": stream(sid), "timestamp": ts, "id": sid}
 
@@ -375,7 +368,7 @@ class Cursor(object):
         if not pool:
             return json.dumps([])
         try:
-            data = pool.map(lambda s: self._slice(s['cursor'], s.get('start', datetime.min), s.get('end', datetime.max), self._spans))
+            data = pool.map(lambda s: self._slice(s['cursor'], s.get('start') or datetime.min, s.get('end') or datetime.max, self._spans))
             return json.dumps(data, default=dts, indent=4)
         finally:
             pool.close()
@@ -396,12 +389,12 @@ class Cursor(object):
                 for s in r['spans']:
                     if 'start' in s and s['start']:
                         s['start'] = cts(s['start'])
-                    else:
-                        s['start'] = datetime.min
+                    #else:
+                    #    s['start'] = datetime.min
                     if 'end' in s and s['end']:
                         s['end'] = cts(s['end'])
-                    else:
-                        s['end'] = datetime.max
+                    #else:
+                    #    s['end'] = datetime.max
                 spans.extend(r['spans'])
 
                 cid = r.get('cursor')
@@ -413,13 +406,14 @@ class Cursor(object):
                 z['start'] = x['start']
             if 'end' in x:
                 z['end'] = x['end']
+            sps.append(z)
         return sps
 
 
     def stats(self):
         """Get time-based statistics about query results."""
         self.spans()
-        deltas = [sp['end'] - sp['start'] for sp in self._spans if 'start' in sp and 'end' in sp]
+        deltas = [sp['end'] - sp['start'] for sp in self._spans if sp.get('start') and sp.get('end')]
 
         if not len(deltas):
             return {}
@@ -451,6 +445,8 @@ class Cursor(object):
             window = window.timedelta
 
         def win(cursor, start=datetime.min, end=datetime.max):
+            start = start or datetime.min
+            end = end or datetime.max
             if window == None:
                 return (cursor, start, end)
             if align == LEFT:
