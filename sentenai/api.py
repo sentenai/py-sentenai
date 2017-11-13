@@ -331,11 +331,11 @@ class Cursor(object):
     def _slice(self, cursor, start, end, max_retries=3):
         streams = {}
         retries = 0
-        c = "{}+{}Z+{}Z".format(cursor.split("+")[0], start.isoformat(), end.isoformat())
+        c = "{}+{}Z+{}Z".format(cursor.split("+")[0], start.replace(tzinfo=None).isoformat(), end.replace(tzinfo=None).isoformat())
 
         while c is not None:
             url = '{host}/query/{cursor}/events'.format(host=self.client.host, cursor=c)
-            resp = requests.get(url, headers=self.headers)
+            resp = self.client.session.get(url)
 
             if not resp.ok and retries >= max_retries:
                 raise Exception("failed to get cursor")
@@ -368,7 +368,7 @@ class Cursor(object):
         if not pool:
             return json.dumps([])
         try:
-            data = pool.map(lambda s: self._slice(s['cursor'], s.get('start') or datetime.min, s.get('end') or datetime.max, self._spans))
+            data = pool.map(lambda s: self._slice(s['cursor'], s.get('start') or datetime.min, s.get('end') or datetime.max), self._spans)
             return json.dumps(data, default=dts, indent=4)
         finally:
             pool.close()
@@ -645,4 +645,3 @@ def df(span, data):
             events.append(evt)
         dfs[s['stream']] = json_normalize(events)
     return dfs
-
