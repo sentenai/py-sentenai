@@ -26,6 +26,8 @@ try:
 except:
     from urllib import quote
 
+
+
 class Uploader(object):
     def __init__(self, client, iterator, processes=32):
         self.client = client
@@ -331,11 +333,11 @@ class Cursor(object):
     def _slice(self, cursor, start, end, max_retries=3):
         streams = {}
         retries = 0
-        c = "{}+{}Z+{}Z".format(cursor.split("+")[0], start.replace(tzinfo=None).isoformat(), end.replace(tzinfo=None).isoformat())
+        c = "{}+{}Z+{}Z".format(cursor.split("+")[0], start.isoformat(), end.isoformat())
 
         while c is not None:
             url = '{host}/query/{cursor}/events'.format(host=self.client.host, cursor=c)
-            resp = self.client.session.get(url)
+            resp = requests.get(url, headers=self.headers)
 
             if not resp.ok and retries >= max_retries:
                 raise Exception("failed to get cursor")
@@ -383,8 +385,8 @@ class Cursor(object):
                 if self.limit is None:
                     url = '{0}/query/{1}/spans'.format(self.client.host, cid)
                 else:
-                    url = '{0}/query/{1}/spans?limit={2}'.format(self.client.host, cid, limit)
-                r = handle(requests.get(url, self.returning, headers=self.headers)).json()
+                    url = '{0}/query/{1}/spans?limit={2}'.format(self.client.host, cid, self.limit)
+                r = handle(self.client.session.get(url, headers=self.headers)).json()
 
                 for s in r['spans']:
                     if 'start' in s and s['start']:
@@ -398,6 +400,8 @@ class Cursor(object):
                 spans.extend(r['spans'])
 
                 cid = r.get('cursor')
+                if self.limit and spans >= self.limit:
+                    break
             self._spans = spans
         sps = []
         for x in self._spans:
@@ -645,3 +649,4 @@ def df(span, data):
             events.append(evt)
         dfs[s['stream']] = json_normalize(events)
     return dfs
+
