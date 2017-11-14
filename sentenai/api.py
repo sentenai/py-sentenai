@@ -472,9 +472,9 @@ class Cursor(object):
                     spans.append((t1, u0))
             else:
                 spans = []
-            for sp in spans:
-                data = self._slice(*win(**sp))
 
+            pool = self._pool()
+            for data in pool.map(lambda s: self._slice(*s), [win(**sp) for sp in spans]):
                 fr = df(sp, data)
                 for s in fr.keys():
                     if fr[s].empty:
