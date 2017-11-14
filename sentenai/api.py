@@ -215,6 +215,7 @@ class Sentenai(object):
         headers = {'auth-key': self.auth_key}
         resp = requests.delete(url, headers=headers)
         status_codes(resp)
+        return None
 
 
     def range(self, stream, start, end):
@@ -228,9 +229,8 @@ class Sentenai(object):
            Result:
            A time ordered list of all events in a stream from `start` to `end`
         """
-        url = "/".join([self.host, "streams", stream()['name'], "events", iso8601(start), iso8601(end)])
-        headers = {'auth-key': self.auth_key}
-        resp = requests.get(url, headers=headers)
+        url = "/".join([self.host, "streams", stream()['name'], "start", iso8601(start), "end", iso8601(end)])
+        resp = self.session.get(url)
         status_codes(resp)
         return [json.loads(line) for line in resp.text.splitlines()]
 
@@ -319,6 +319,7 @@ class Cursor(object):
 
         r = handle(requests.post(url, json=ast(query, returning), headers=self.headers))
         self.query_id = r.headers['location']
+        self.pool = self._pool()
 
 
     def __len__(self):
@@ -366,7 +367,7 @@ class Cursor(object):
     def json(self):
         """Get json representation of exact query results."""
         self.spans()
-        pool = self._pool()
+        pool = self.pool
         if not pool:
             return json.dumps([])
         try:
