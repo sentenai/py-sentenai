@@ -341,6 +341,7 @@ class Cursor(object):
             resp = self.client.session.get(url)
 
             if not resp.ok and retries >= max_retries:
+                print(resp)
                 raise Exception("failed to get cursor")
             elif not resp.ok:
                 retries += 1

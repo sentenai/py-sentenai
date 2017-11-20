@@ -271,9 +271,10 @@ class Stream(object):
     Keywords arguments:
     name -- the name of a stream stored at https://api.senten.ai/streams/<name>.
     """
-    def __init__(self, name, meta, *filters):
+    def __init__(self, name, meta, info, *filters):
         self._name = quote(name.encode('utf-8'))
         self._meta = meta
+        self._info = info
         self._filters = filters
 
     def __eq__(self, other):
@@ -291,7 +292,7 @@ class Stream(object):
 
     def __repr__(self):
         if not self._filters:
-            return "Stream(name=\"{}\")".format(self._name, self._filters)
+            return "Stream(name=\"{}\")".format(self._name)
         else:
             return "Stream(name=\"{}\", filters={})".format(self._name, self._filters)
 
@@ -300,6 +301,8 @@ class Stream(object):
             return self._name
         elif key == "meta":
             return self._meta
+        elif key == "info":
+            return self._info
         else:
             raise KeyError
 
@@ -689,7 +692,7 @@ class Delta(Flare):
 
 def stream(name, *args, **kwargs):
     """Define a stream, possibly with a list of filter arguments."""
-    return Stream(name, kwargs.get('meta', {}), *args)
+    return Stream(name, kwargs.get('meta', {}), kwargs.get('info', {}), *args)
 
 def merge(s1, s2):
     typecheck(Span, 'left side of merge', s1)
