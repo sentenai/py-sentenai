@@ -146,6 +146,31 @@ class Sentenai(object):
             return resp.json()
 
 
+    def stats(self, stream, field, start=None, end=None):
+        """Get stats for a given field in a stream.
+
+           Arguments:
+           stream -- A stream object corresponding to a stream stored in Sentenai.
+           field  -- A dotted field name for a numeric field in the stream.
+           start  -- Optional argument indicating start time in stream for calculations.
+           end    -- Optional argument indicating end time in stream for calculations.
+        """
+        args = {}
+        if start: args['start'] = start.isoformat() + ("Z" if not start.tzinfo else "")
+        if end: args['end'] = end.isoformat() + ("Z" if not end.tzinfo else "")
+
+        url = "/".join([self.host, "streams", stream()['name'], "fields", field, "stats"])
+
+        resp = self.session.get(url, params=args)
+
+        if resp.status_code == 404:
+            raise NotFound('The field at "/streams/{}/fields/{}" does not exist'.format(stream()['name'], field))
+        else:
+            status_codes(resp)
+
+        return resp.json()
+
+
     def put(self, stream, event, id=None, timestamp=None):
         """Put a new event into a stream.
 
