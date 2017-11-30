@@ -11,7 +11,7 @@ except:
 
 
 
-URL = "https://api.senten.ai/"
+URL = "https://api.sentenai.com/"
 URL_STREAMS   = URL + "streams"
 URL_STREAM_ID = URL + "streams/{}"
 URL_EVENTS    = URL + "streams/{}/events"

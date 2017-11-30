@@ -797,7 +797,7 @@ def ast(query, returning=None):
     q = query()
     if returning:
         q['projections'] = {'explicit': [project(s, p) for s, p in returning.items()]}
-    return q
+    return json.dumps(q, indent=4)
 
 
 
