@@ -5,10 +5,10 @@ import requests
 import numpy as np
 import pandas as pd
 
-from pandas.io.json       import json_normalize
-from datetime             import timedelta
+from pandas.io.json import json_normalize
+from datetime import timedelta
 from multiprocessing.pool import ThreadPool
-from functools            import partial
+from functools import partial
 
 from sentenai.exceptions import *
 from sentenai.exceptions import handle
@@ -89,6 +89,13 @@ class Uploader(object):
 
 class Sentenai(object):
     def __init__(self, auth_key="", host="https://api.sentenai.com"):
+        """Initialize a Sentenai client.
+
+        The client object handles all requests to the Sentenai API.
+
+        Arguments:
+            auth_key -- a Sentenai API auth key
+        """
         self.auth_key = auth_key
         self.host = host
         self.build_url = partial(build_url, self.host)
@@ -96,12 +103,13 @@ class Sentenai(object):
         self.session.headers.update({ 'auth-key': auth_key })
 
     def __str__(self):
+        """Return a string representation of the object."""
         return repr(self)
 
-
     def __repr__(self):
-        return "Sentenai(auth_key='{}', server='{}')".format(self.auth_key, self.host)
-
+        """Return an unambiguous representation of the object."""
+        return "Sentenai(auth_key='{}', server='{}')".format(
+            self.auth_key, self.host)
 
     def debug(self, protocol="http", host="localhost", port=3000):
         self.host = protocol + "://" + host + ":" + str(port)
@@ -110,41 +118,51 @@ class Sentenai(object):
     def delete(self, stream, eid):
         """Delete event from a stream by its unique id.
 
-           Arguments:
-           stream -- A stream object corresponding to a stream stored in Sentenai.
-           eid    -- A unique ID corresponding to an event stored within the stream.
+        Arguments:
+           stream -- A stream object corresponding to a stream stored
+                     in Sentenai.
+           eid    -- A unique ID corresponding to an event stored within
+                     the stream.
         """
         url = self.build_url(stream, eid)
         resp = self.session.delete(url)
         status_codes(resp)
 
-
     def get(self, stream, eid=None):
         """Get event or stream as JSON.
 
-           Arguments:
-           stream -- A stream object corresponding to a stream stored in Sentenai.
-           eid    -- A unique ID corresponding to an event stored within the stream.
+        Arguments:
+           stream -- A stream object corresponding to a stream stored
+                     in Sentenai.
+           eid    -- A unique ID corresponding to an event stored within
+                     the stream.
         """
         if eid:
-            url = "/".join([self.host, "streams", stream()['name'], "events", eid])
+            url = "/".join(
+                [self.host, "streams", stream()['name'], "events", eid])
         else:
             url = "/".join([self.host, "streams", stream()['name']])
 
         resp = self.session.get(url)
 
         if resp.status_code == 404 and eid is not None:
-            raise NotFound('The event at "/streams/{}/events/{}" does not exist'.format(stream()['name'], eid))
+            raise NotFound(
+                'The event at "/streams/{}/events/{}" '
+                'does not exist'.format(stream()['name'], eid))
         elif resp.status_code == 404:
-            raise NotFound('The stream at "/streams/{}" does not exist'.format(stream()['name'], eid))
+            raise NotFound(
+                'The stream at "/streams/{}" '
+                'does not exist'.format(stream()['name'], eid))
         else:
             status_codes(resp)
 
         if eid is not None:
-            return {'id': resp.headers['location'], 'ts': resp.headers['timestamp'], 'event': resp.json()}
+            return {
+                'id': resp.headers['location'],
+                'ts': resp.headers['timestamp'],
+                'event': resp.json()}
         else:
             return resp.json()
-
 
     def stats(self, stream, field, start=None, end=None):
         """Get stats for a given field in a stream.
@@ -170,32 +188,40 @@ class Sentenai(object):
 
         return resp.json()
 
-
     def put(self, stream, event, id=None, timestamp=None):
         """Put a new event into a stream.
 
-           Arguments:
-           stream    -- A stream object corresponding to a stream stored in Sentenai.
-           event     -- A JSON-serializable dictionary containing an event's data
-           id        -- A user-specified id for the event that is unique to this stream (optional)
-           timestamp -- A user-specified datetime object representing the time of the event. (optional)
+        Arguments:
+           stream    -- A stream object corresponding to a stream stored
+                        in Sentenai.
+           event     -- A JSON-serializable dictionary containing an
+                        event's data
+           id        -- A user-specified id for the event that is unique to
+                        this stream (optional)
+           timestamp -- A user-specified datetime object representing the
+                        time of the event. (optional)
         """
-        headers = {'content-type': 'application/json'}
+        headers = {
+            'content-type': 'application/json'
+        }
         jd = event
 
         if timestamp:
             headers['timestamp'] = iso8601(timestamp)
 
         if id:
-            url = '{host}/streams/{sid}/events/{eid}'.format(sid=stream()['name'], host=self.host, eid=id)
+            url = '{host}/streams/{sid}/events/{eid}'.format(
+                sid=stream()['name'], host=self.host, eid=id
+            )
             resp = self.session.put(url, json=jd, headers=headers)
-
             if resp.status_code not in [200, 201]:
                 status_codes(resp)
             else:
                 return id
         else:
-            url = '{host}/streams/{sid}/events'.format(sid=stream._name, host=self.host)
+            url = '{host}/streams/{sid}/events'.format(
+                sid=stream._name, host=self.host
+            )
             resp = self.session.post(url, json=jd, headers=headers)
             if resp.status_code in [200, 201]:
                 return resp.headers['location']
@@ -203,14 +229,16 @@ class Sentenai(object):
                 status_codes(resp)
                 raise APIError(resp)
 
-
     def streams(self, name=None, meta={}):
-        """Get list of available streams. Optionally, parameters may be
-           supplied to enable searching for stream subsets.
+        """Get list of available streams.
 
-           Optional Arguments:
+        Optionally, parameters may be supplied to enable searching
+        for stream subsets.
+
+        Arguments:
            name -- A regular expression pattern to search names for
-           meta -- A dictionary of key/value pairs to match from stream metadata
+           meta -- A dictionary of key/value pairs to match from stream
+                   metadata
         """
         url = "/".join([self.host, "streams"])
         resp = self.session.get(url)
@@ -220,7 +248,7 @@ class Sentenai(object):
             f = True
             if name:
                 f = bool(re.search(name, s['name']))
-            for k,v in meta.items():
+            for k, v in meta.items():
                 f = f and s.get('meta', {}).get(k) == v
             return f
 
@@ -229,12 +257,12 @@ class Sentenai(object):
         except:
             raise SentenaiException("Something went wrong")
 
-
     def destroy(self, stream):
-        """Delete stream
+        """Delete stream.
 
-           Argument:
-           stream -- A stream object corresponding to a stream stored in Sentenai.
+        Argument:
+           stream -- A stream object corresponding to a stream stored
+                     in Sentenai.
         """
         url = "/".join([self.host, "streams", stream()['name']])
         headers = {'auth-key': self.auth_key}
@@ -242,29 +270,35 @@ class Sentenai(object):
         status_codes(resp)
         return None
 
-
     def range(self, stream, start, end):
-        """Get all events in stream between start (inclusive) and end (exclusive).
+        """Get all stream events between start (inclusive) and end (exclusive).
 
-           Arguments:
-           stream -- A stream object corresponding to a stream stored in Sentenai.
-           start -- A datetime object representing the start of the requested time range.
-           end -- A datetime object representing the end of the requested time range.
+        Arguments:
+           stream -- A stream object corresponding to a stream stored
+                     in Sentenai.
+           start  -- A datetime object representing the start of the requested
+                     time range.
+           end    -- A datetime object representing the end of the requested
+                     time range.
 
            Result:
            A time ordered list of all events in a stream from `start` to `end`
         """
-        url = "/".join([self.host, "streams", stream()['name'], "start", iso8601(start), "end", iso8601(end)])
+        url = "/".join(
+            [self.host, "streams",
+             stream()['name'],
+             "events",
+             iso8601(start),
+             iso8601(end)]
+        )
         resp = self.session.get(url)
         status_codes(resp)
         return [json.loads(line) for line in resp.text.splitlines()]
 
-
-
     def query(self, query, returning=None, limit=None):
-        """Execute a flare query
+        """Execute a flare query.
 
-           Arguments:
+        Arguments:
            query     -- A query object created via the `select` function.
            limit     -- A limit to the number of result spans returned.
            returning -- An optional dictionary object mapping streams to
@@ -331,7 +365,6 @@ class Sentenai(object):
             raise SentenaiException("Must be called on stream")
 
 
-
 class Cursor(object):
     def __init__(self, client, query, returning=None, limit=None):
         self.client = client
@@ -350,16 +383,28 @@ class Cursor(object):
     def __len__(self):
         return len(self.spans())
 
-
     def _pool(self):
         sl = len(self.spans())
         return ThreadPool(16 if sl > 16 else sl) if sl else None
 
-
     def _slice(self, cursor, start, end, max_retries=3):
+        """Slice a set of spans and events.
+
+        TODO: Add descriptions
+
+        Arguments:
+            cursor      --
+            start       --
+            end         --
+            max_retries --
+        """
         streams = {}
         retries = 0
-        c = "{}+{}Z+{}Z".format(cursor.split("+")[0], start.replace(tzinfo=None).isoformat(), end.replace(tzinfo=None).isoformat())
+        c = "{}+{}Z+{}Z".format(
+            cursor.split("+")[0],
+            start.replace(tzinfo=None).isoformat(),
+            end.replace(tzinfo=None).isoformat()
+        )
 
         while c is not None:
             url = '{host}/query/{cursor}/events'.format(host=self.client.host, cursor=c)
@@ -376,7 +421,9 @@ class Cursor(object):
                 c = resp.headers.get('cursor')
                 data = resp.json()
 
-                # set up stream dict
+                # using stream_obj var name to avoid clashing with imported
+                # stream function from flare.py
+                # initialize stream if it doesn't exist already
                 for sid, stream_obj in data['streams'].items():
                     if sid not in streams:
                         streams[sid] = {'stream': stream_obj, 'events': []}
@@ -389,9 +436,23 @@ class Cursor(object):
                     events.append(event)
         return {'start': start, 'end': end, 'streams': list(streams.values())}
 
-
     def json(self):
-        """Get json representation of exact query results."""
+        """Return query results as a JSON string.
+
+        Returns:
+            json_data -- A JSON string of query results.
+                         [{
+                            'start': The start timestamp of the span,
+                            'end': The end timestamp of the span,
+                            'streams': [
+                                {
+                                    'stream': stream name,
+                                    'events': [list of matching events]
+                                }
+                            ]
+                         },
+                          ...]
+        """
         self.spans()
         pool = self.pool
         if not pool:
@@ -440,7 +501,6 @@ class Cursor(object):
             sps.append(z)
         return sps
 
-
     def stats(self):
         """Get time-based statistics about query results."""
         self.spans()
@@ -449,7 +509,7 @@ class Cursor(object):
         if not len(deltas):
             return {}
 
-        mean = sum([3600*24*d.days + d.seconds for d in deltas])/float(len(deltas))
+        mean = sum([3600*24*d.days + d.seconds for d in deltas]) / float(len(deltas))
         return {
             'min': min(deltas),
             'max': max(deltas),
@@ -636,6 +696,30 @@ class FrameGroup(object):
         return np.stack(self.dataframes(*columns, **kwargs))
 
     def dataframe(self, *columns, **kwargs):
+        """Return query results as a Pandas dataframe.
+
+        Query results are returned as a dataframe with four index columns
+        whose names are denoted with a `.`.
+
+        .ts -- the datetime of the event
+        .stream -- the stream the event came from
+        .span -- the index of the span the event was found in
+        .delta -- the timedelta from start of the span to this event
+
+        The remaining columns of the dataframe are those specified by the
+        user in the original query.
+
+        Note: if multiple streams were queried, this function returns a
+        a dictionary of dataframes where keys are the name of the stream and
+        the frames are the values.
+
+        Arguments:
+            only -- Optional only return results from a provided stream name.
+
+        Returns:
+            data -- a Pandas dataframe with query results or a dictionary of
+                    dataframes, one for each stream queried.
+        """
         if columns:
             columns = [".ts"] + list(columns)
         dfs = []
@@ -678,6 +762,15 @@ def df(span, data):
     return dfs
 
 def build_url(host, stream, eid=None):
+    """Build a url for the Sentenai API.
+
+    Arguments:
+        stream -- a stream object.
+        eid -- an optional event id.
+
+    Returns:
+        url -- a URL for the Sentenai API endpoint to query a stream or event
+    """
     if not isinstance(stream, Stream):
         raise TypeError("stream argument must be of type sentenai.Stream")
 
@@ -690,6 +783,6 @@ def build_url(host, stream, eid=None):
         except:
             return quote(s.encode('utf-8', 'ignore'))
 
-    url    = [host, "streams", with_quoter(stream()['name'])]
+    url = [host, "streams", with_quoter(stream()['name'])]
     events = [] if eid is None else ["events", with_quoter(eid)]
     return "/".join(url + events)

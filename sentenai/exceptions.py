@@ -1,6 +1,15 @@
-__all__ = ['FlareSyntaxError', 'status_codes', 'NotFound', 'AuthenticationError', 'SentenaiException']
+__all__ = [
+    'FlareSyntaxError',
+    'status_codes',
+    'NotFound',
+    'AuthenticationError',
+    'SentenaiException'
+]
+
 
 class SentenaiException(Exception):
+    """Base class for Sentenai expections."""
+
     pass
 
 class APIError(SentenaiException):
@@ -8,15 +17,25 @@ class APIError(SentenaiException):
         self.response = resp
 
 class FlareSyntaxError(SentenaiException):
+    """A Flare Syntax Error exception."""
+
     pass
+
 
 class AuthenticationError(SentenaiException):
+    """An Authentication Error exception."""
+
     pass
 
+
 class NotFound(SentenaiException):
+    """A NotFount Exeption."""
+
     pass
 
 def status_codes(resp):
+    """Throw the proper exception depending on the status code."""
+
     code = resp.status_code
     if code == 401:
         raise AuthenticationError("Invalid API key")
@@ -26,12 +45,12 @@ def status_codes(resp):
         raise FlareSyntaxError()
     elif code == 404:
         raise NotFound()
-
     elif code >= 400:
         raise APIError(resp)
 
 def handle(resp):
-    # handle bad status codes
+    """Handle bad status codes"""
+
     if resp.status_code == 401:
         raise AuthenticationError("Invalid API Key")
     elif resp.status_code == 400:
