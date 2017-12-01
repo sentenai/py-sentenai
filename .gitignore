@@ -91,3 +91,6 @@ ENV/
 
 # OS X finder
 .DS_Store
+
+# Editors
+*.sublime-workspace
