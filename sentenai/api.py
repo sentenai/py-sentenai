@@ -13,7 +13,7 @@ from functools import partial
 from sentenai.exceptions import *
 from sentenai.exceptions import handle
 from sentenai.utils import *
-from sentenai.flare import EventPath, Stream, stream, project, ast, delta, Delta
+from sentenai.flare import EventPath, Stream, stream, project, ast_dict, delta, Delta
 
 if not PY3:
     import virtualtime
@@ -375,7 +375,7 @@ class Cursor(object):
 
         url = '{0}/query'.format(client.host)
 
-        r = handle(requests.post(url, json=ast(query, returning), headers=self.headers))
+        r = handle(requests.post(url, json=ast_dict(query, returning), headers=self.headers))
         self.query_id = r.headers['location']
         self.pool = self._pool()
 

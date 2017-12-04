@@ -1331,10 +1331,13 @@ def project(stream, proj):
                     raise FlareSyntaxError("%s: %s is unsupported." % (key, val.__class__))
         return {'stream': stream(), 'projection': nd}
 
-
-def ast(query, returning=None):
-    """Print the query as an Abstract Syntax Tree."""
+def ast_dict(query, returning=None):
+    """Generate an Abstract Syntax Tree for a given query"""
     q = query()
     if returning:
         q['projections'] = {'explicit': [project(s, p) for s, p in returning.items()]}
-    return json.dumps(q, indent=4)
+    return q
+
+def ast(query):
+    """Print the query as an Abstract Syntax Tree JSON string"""
+    return json.dumps(ast_dict(query), indent=4)
