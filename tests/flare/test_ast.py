@@ -176,3 +176,100 @@ def test_all_any_serial():
         }
     }
     assert real == expected
+
+def test_or():
+    s = stream('s')
+    t = stream('t')
+    real = ast_dict(select().span((s.x == True) | (t.x == True)))
+    expected = {
+        "select": {
+            "expr": "||",
+            "args": [
+               { "type": "span", "op": "==", "stream": {"name": "s"}, "path":("event","x"), "arg": {"type":"bool", "val":True} },
+               { "type": "span", "op": "==", "stream": {"name": "t"}, "path":("event","x"), "arg": {"type":"bool", "val":True} }
+            ]
+        }
+    }
+    assert real == expected
+
+def test_relative_span():
+    s = stream('s')
+    t = stream('t')
+    real = ast_dict(
+        select()
+            .span(span(s.x == True, min=delta(years=1, months=1)) | span(t.x == True, after=delta(minutes=11), within=delta(seconds=13))
+            , max=delta(weeks=1))
+    )
+    expected = {
+        "select": {
+            "expr": "||",
+            "args": [
+                {
+                    "type": "span",
+                    "op": "==",
+                    "stream": {"name": "s"},
+                    "path": ("event","x"),
+                    "arg": {"type":"bool", "val":True},
+                    "for": { "at-least": { "years": 1, "months": 1 } }
+                },
+                {
+                    "type": "span",
+                    "op": "==",
+                    "stream": {"name": "t"},
+                    "path": ("event","x"),
+                    "arg": {"type":"bool", "val":True},
+                    "after": {"minutes": 11},
+                    "within": {"seconds": 13}
+                }
+            ],
+            "for": { "at-most": { "weeks": 1 } }
+        }
+    }
+    assert real == expected
+
+def test_nested_relative_spans():
+    s = stream('S')
+    real = ast_dict(
+        select()
+            .span(s.x < 0)
+            .then(
+                span(s.x == 0).then(s.x > 0, within=delta(seconds=1)),
+                within=delta(seconds=2)
+            )
+    )
+    expected = {
+        "select": {
+            "type": "serial",
+            "conds": [
+                {
+                    "type":"span",
+                    "op":"<",
+                    "stream":{"name":"S"},
+                    "path":("event","x"),
+                    "arg":{"type":"double", "val":0}
+                },
+                {
+                    "type": "serial",
+                    "conds": [
+                        {
+                            "type":"span",
+                            "op":"==",
+                            "stream":{"name":"S"},
+                            "path":("event","x"),
+                            "arg":{"type":"double", "val":0}
+                        },
+                        {
+                            "type":"span",
+                            "op":">",
+                            "stream":{"name":"S"},
+                            "path":("event","x"),
+                            "arg":{"type":"double", "val":0},
+                            "within": {"seconds":1}
+                        }
+                    ],
+                    "within": {"seconds":2}
+                }
+            ]
+        }
+    }
+    assert real == expected

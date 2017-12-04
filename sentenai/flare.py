@@ -1071,6 +1071,8 @@ class Span(Flare):
         if len(self.query) == 1:
             if isinstance(self.query[0], Span):
                 return merge(self, self.query[0])()
+            elif isinstance(self.query[0], Or):
+                d.update(self.query[0]())
             else:
                 d['type'] = 'span'
                 d.update(self.query[0]())
