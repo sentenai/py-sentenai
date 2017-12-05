@@ -273,3 +273,25 @@ def test_nested_relative_spans():
         }
     }
     assert real == expected
+
+def test_stream_filters():
+    s = stream('S', V.season == "summer")
+    real = ast_dict(
+        select().span(span(s.temperature >= 77) & span(s.sunny == True))
+    )
+    expected = {
+        "select": {
+            "expr": "&&",
+            "args": [
+              {"type": "span", "op": ">=",
+               "stream": {"name": "S", "filter": {"op":"==", "path":("event","season"), "arg":{"type":"string","val":"summer"}}},
+               "path":("event","temperature"), "arg": {"type":"double", "val":77}
+              },
+              {"type": "span", "op": "==",
+               "stream": {"name": "S", "filter": {"op":"==", "path":("event","season"), "arg":{"type":"string","val":"summer"}}},
+               "path":("event","sunny"), "arg": {"type":"bool", "val":True}
+              }
+            ]
+        }
+    }
+    assert real == expected

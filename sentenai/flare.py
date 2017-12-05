@@ -522,6 +522,7 @@ class Stream(object):
                     }
                 elif len(self._filters) == 1:
                     b['filter'] = self._filters[0]()
+                    del b['filter']['type']
             return b
         else:
             try:
