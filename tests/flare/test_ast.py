@@ -295,3 +295,30 @@ def test_stream_filters():
         }
     }
     assert real == expected
+
+def test_switches():
+    s = stream('S')
+    real = ast_dict(
+        select().span(s(event(V.x < 0) >> event(V.x > 0)))
+    )
+    expected = {
+        "select": {
+            "type": "switch",
+            "stream": { "name": "S" },
+            "conds": [
+                {
+                    "op": "<",
+                    "arg": { "type": "double", "val": 0 },
+                    "type": "span",
+                    "path": ( "event", "x" )
+                },
+                {
+                    "op": ">",
+                    "arg": { "type": "double", "val": 0 },
+                    "type": "span",
+                    "path": ( "event", "x" )
+                }
+            ]
+        }
+    }
+    assert real == expected
