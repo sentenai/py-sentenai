@@ -5,11 +5,10 @@ from datetime import datetime, timedelta, tzinfo
 # Constants
 
 PY3 = sys.version_info[0] == 3
-
 LEFT, CENTER, RIGHT = range(-1, 2)
-
 DEFAULT = None
 
+if not PY3: import virtualtime
 
 def py2str(cls):
     """Encode strings to utf-8 if the major version is not 3."""
@@ -21,6 +20,8 @@ def py2str(cls):
 
 class UTC(tzinfo):
     """A timezone class for UTC."""
+
+    def dst(self, dt): return None
 
     def utcoffset(self, dt):
         """Generate a timedelta object with no offset."""
@@ -50,3 +51,22 @@ def dts(obj):
         return serial
     else:
         return obj
+
+
+def is_nonempty_str(s):
+    """Check if a string is non-empty.
+
+    Returns:
+        True if the string is non-empty, False otherwise.
+    """
+    isNEstr = isinstance(s, str) and not (s == '')
+    try:
+        isNEuni = isinstance(s, unicode) and not (s == u'')
+        return isNEstr or isNEuni
+    except:
+        return isNEstr
+
+def divtime(l, r):
+    numerator = l.days * 3600 * 24 + l.seconds
+    divisor   = r.days * 3600 * 24 + r.seconds
+    return int( numerator / divisor )

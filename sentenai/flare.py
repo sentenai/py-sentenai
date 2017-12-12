@@ -1,10 +1,12 @@
-import inspect
+import inspect, json
 import numpy as np
 
 from datetime import date, datetime, timedelta
 
 from sentenai.exceptions import FlareSyntaxError
 from sentenai.utils import iso8601, py2str, PY3
+
+if not PY3: import virtualtime
 
 try:
     from urllib.parse import quote
@@ -408,21 +410,22 @@ class Stream(object):
     used when writing queries, access specific API end points, and manipulating
     result sets.
     """
-
-    def __init__(self, name, meta, *filters):
+    def __init__(self, name, meta, info, *filters):
         """Initialize a stream object.
 
         Arguments:
-            name -- The name of a stream stored at
-                    https://api.senten.ai/streams/<name>.
-            meta -- Meta data about the stream. TODO: This can be an arbitrary
-                    object and does
-                    not persist across Stream objects.
+            name    -- The name of a stream stored at
+                       https://api.senten.ai/streams/<name>.
+            meta    -- Meta data about the stream. TODO: This can be an arbitrary
+                       object and does
+                       not persist across Stream objects.
+            info    -- TODO
             filters -- Conditions to be applied to the stream when filtering
                        events.
         """
         self._name = quote(name.encode('utf-8'))
         self._meta = meta
+        self._info = info
         self._filters = filters
 
     def __eq__(self, other):
@@ -455,7 +458,7 @@ class Stream(object):
     def __repr__(self):
         """An unambiguous representation of a stream."""
         if not self._filters:
-            return "Stream(name=\"{}\")".format(self._name, self._filters)
+            return "Stream(name=\"{}\")".format(self._name)
         else:
             return "Stream(name=\"{}\", filters={})".format(
                 self._name, self._filters)
@@ -476,6 +479,8 @@ class Stream(object):
             return self._name
         elif key == "meta":
             return self._meta
+        elif key == "info":
+            return self._info
         else:
             raise KeyError
 
@@ -517,6 +522,7 @@ class Stream(object):
                     }
                 elif len(self._filters) == 1:
                     b['filter'] = self._filters[0]()
+                    del b['filter']['type']
             return b
         else:
             try:
@@ -1066,6 +1072,8 @@ class Span(Flare):
         if len(self.query) == 1:
             if isinstance(self.query[0], Span):
                 return merge(self, self.query[0])()
+            elif isinstance(self.query[0], Or):
+                d.update(self.query[0]())
             else:
                 d['type'] = 'span'
                 d.update(self.query[0]())
@@ -1203,7 +1211,7 @@ class Delta(Flare):
 
 def stream(name, *args, **kwargs):
     """Define a stream, possibly with a list of filter arguments."""
-    return Stream(name, kwargs.get('meta', {}), *args)
+    return Stream(name, kwargs.get('meta', {}), kwargs.get('info', {}), *args)
 
 
 def merge(s1, s2):
@@ -1293,3 +1301,46 @@ def typecheck_kwargs(valid_types_dict, input_kwargs):
         validate_kwargs(set(valid_types_dict.keys()), input_kwargs)
         for k, v in input_kwargs.items():
             typecheck(valid_types_dict[k], k, v)
+
+
+def project(stream, proj):
+    if not isinstance(stream, Stream):
+        raise FlareSyntaxError("returning dict top-level keys must be streams.")
+    if proj is True:
+        return {'stream': stream(), 'projection': "default"}
+    elif proj is False:
+        return {'stream': stream(), 'projection': {}}
+    else:
+        nd = {}
+        l = [(proj, nd)]
+        while l:
+            old, new = l.pop(0)
+            for key, val in old.items():
+                if isinstance(val, EventPath):
+                    z = val()
+                    new[key] = [{'var': z['path'][1:]}]
+                elif isinstance(val, float):
+                    new[key] = [{'lit': {'val': val, 'type': 'double'}}]
+                elif isinstance(val, int):
+                    new[key] = [{'lit': {'val': val, 'type': 'int'}}]
+                elif isinstance(val, str):
+                    new[key] = [{'lit': {'val': val, 'type': 'string'}}]
+                elif isinstance(val, bool):
+                    new[key] = [{'lit': {'val': val, 'type': 'bool'}}]
+                elif isinstance(val, dict):
+                    new[key] = {}
+                    l.append((val,new[key]))
+                else:
+                    raise FlareSyntaxError("%s: %s is unsupported." % (key, val.__class__))
+        return {'stream': stream(), 'projection': nd}
+
+def ast_dict(query, returning=None):
+    """Generate an Abstract Syntax Tree for a given query"""
+    q = query()
+    if returning:
+        q['projections'] = {'explicit': [project(s, p) for s, p in returning.items()]}
+    return q
+
+def ast(query):
+    """Print the query as an Abstract Syntax Tree JSON string"""
+    return json.dumps(ast_dict(query), indent=4)

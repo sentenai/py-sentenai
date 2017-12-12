@@ -2,10 +2,10 @@ import json
 
 from sentenai.flare import (
     delta, stream, EventPath, FlareSyntaxError, InCircle, InPolygon, Par,
-    Select, Span, Switch, merge
+    Select, Span, Switch, merge, project, ast
 )
 from sentenai.api import Sentenai
-from sentenai.utils import LEFT, RIGHT, CENTER
+from sentenai.utils import LEFT, RIGHT, CENTER, PY3
 
 
 __all__ = [
@@ -15,7 +15,7 @@ __all__ = [
 ]
 
 # Python 2 Compatibility Decorator
-
+if not PY3: import virtualtime
 
 # Flare Objects
 
@@ -26,11 +26,6 @@ V = EventPath()
 
 def event(*args, **kwargs):
     return Switch(*args, **kwargs)
-
-
-def ast(q):
-    """Print the query as an Abstract Syntax Tree."""
-    return json.dumps(q(), indent=4)
 
 
 def select(start=None, end=None):
