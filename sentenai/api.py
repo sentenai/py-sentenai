@@ -295,7 +295,7 @@ class Sentenai(object):
         status_codes(resp)
         return [json.loads(line) for line in resp.text.splitlines()]
 
-    def query(self, query, returning=None, limit=None):
+    def query(self, query=None, returning=None):
         """Execute a flare query.
 
         Arguments:
@@ -320,7 +320,9 @@ class Sentenai(object):
                                 }
                             }
         """
-        return Cursor(self, query, returning, limit)
+        if isinstance(returning, Stream):
+            returning = {returning: True}
+        return Cursor(self, query or Select(), returning)
 
 
     def fields(self, s):
@@ -370,7 +372,7 @@ class Cursor(object):
         self.client = client
         self.query = query
         self.returning = returning
-        self.limit = limit
+        self._limit = limit
         self.headers = {'content-type': 'application/json', 'auth-key': client.auth_key}
 
         url = '{0}/query'.format(client.host)
@@ -470,25 +472,21 @@ class Cursor(object):
             spans = []
             cid = self.query_id
             while cid:
-                if self.limit is None:
+                if self._limit is None:
                     url = '{0}/query/{1}/spans'.format(self.client.host, cid)
                 else:
-                    url = '{0}/query/{1}/spans?limit={2}'.format(self.client.host, cid, self.limit)
+                    url = '{0}/query/{1}/spans?limit={2}'.format(self.client.host, cid, self._limit)
                 r = handle(self.client.session.get(url, headers=self.headers)).json()
 
                 for s in r['spans']:
                     if 'start' in s and s['start']:
                         s['start'] = cts(s['start'])
-                    #else:
-                    #    s['start'] = datetime.min
                     if 'end' in s and s['end']:
                         s['end'] = cts(s['end'])
-                    #else:
-                    #    s['end'] = datetime.max
                 spans.extend(r['spans'])
 
                 cid = r.get('cursor')
-                if self.limit and spans >= self.limit:
+                if self._limit and spans >= self._limit:
                     break
             self._spans = spans
         sps = []
@@ -561,8 +559,8 @@ class Cursor(object):
                 spans = []
 
             pool = self._pool()
-            for data in pool.map(lambda s: self._slice(*s), [win(**sp) for sp in spans]):
-                fr = df(sp, data)
+            for start, data in pool.map(lambda s: (s[1], self._slice(*s)), [win(**sp) for sp in spans]):
+                fr = df(start, data)
                 for s in fr.keys():
                     if fr[s].empty:
                         del fr[s]
@@ -634,7 +632,7 @@ class Cursor(object):
             for sp in spans:
                 start, end, cur = sp.get('start', datetime.min), sp.get('end', datetime.max), sp['cursor']
                 data = self._slice(cur, start, end + horizon)
-                fr = df(sp, data)
+                fr = df(start, data)
                 fr = {k: fr[k].set_index(keys=['.ts'])
                               .resample(freq).ffill()
                               .reset_index()
@@ -747,16 +745,15 @@ class FrameGroup(object):
         return ds
 
 
-def df(span, data):
-    t0 = span.get('start', datetime.min)
+def df(t0, data):
     dfs = {}
     for s in data['streams']:
         events = []
         for event in s['events']:
             evt = event['event']
-            #evt['.id'] = event['id']
+            evt['.id'] = event['id']
             evt['.ts'] = cts(event['ts'])
-            #evt['.delta'] = t0 - cts(event['ts'])
+            evt['.delta'] = t0 - cts(event['ts'])
             events.append(evt)
         dfs[s['stream']] = json_normalize(events)
     return dfs
