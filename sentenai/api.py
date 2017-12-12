@@ -287,8 +287,9 @@ class Sentenai(object):
         url = "/".join(
             [self.host, "streams",
              stream()['name'],
-             "events",
+             "start",
              iso8601(start),
+             "end",
              iso8601(end)]
         )
         resp = self.session.get(url)
@@ -413,7 +414,6 @@ class Cursor(object):
             resp = self.client.session.get(url)
 
             if not resp.ok and retries >= max_retries:
-                print(resp)
                 raise Exception("failed to get cursor")
             elif not resp.ok:
                 retries += 1
