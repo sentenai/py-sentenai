@@ -53,19 +53,6 @@ def dts(obj):
         return obj
 
 
-def is_nonempty_str(s):
-    """Check if a string is non-empty.
-
-    Returns:
-        True if the string is non-empty, False otherwise.
-    """
-    isNEstr = isinstance(s, str) and not (s == '')
-    try:
-        isNEuni = isinstance(s, unicode) and not (s == u'')
-        return isNEstr or isNEuni
-    except:
-        return isNEstr
-
 def divtime(l, r):
     numerator = l.days * 3600 * 24 + l.seconds
     divisor   = r.days * 3600 * 24 + r.seconds
