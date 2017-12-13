@@ -128,7 +128,7 @@ def test_stream_access():
                     "type": "span",
                     "op": "==",
                     "arg": { "type": "bool", "val": True },
-                    "path": ( "event", "true", "\u771f\u5b9e" ),
+                    "path": ( "event", "true", "真实" ),
                     "stream": { "name": "S"  }
                 }
             ]
