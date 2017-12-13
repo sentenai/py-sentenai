@@ -380,15 +380,20 @@ class Cursor(object):
 
         r = handle(requests.post(url, json=ast_dict(query, returning), headers=self.headers))
         self.query_id = r.headers['location']
-        self.pool = self._pool()
+        self._pool = None
 
 
     def __len__(self):
         return len(self.spans())
 
-    def _pool(self):
-        sl = len(self.spans())
-        return ThreadPool(16 if sl > 16 else sl) if sl else None
+    @property
+    def pool(self):
+        if self._pool:
+            return self._pool
+        else:
+            sl = len(self.spans())
+            self._pool = ThreadPool(16 if sl > 16 else sl) if sl else None
+            return self._pool
 
     def _slice(self, cursor, start, end, max_retries=3):
         """Slice a set of spans and events.
