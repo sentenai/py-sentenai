@@ -1,3 +1,4 @@
+# coding=utf-8
 import pytest
 from sentenai import *
 from sentenai.flare import ast_dict
