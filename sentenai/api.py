@@ -776,9 +776,6 @@ def build_url(host, stream, eid=None):
     if not isinstance(stream, Stream):
         raise TypeError("stream argument must be of type sentenai.Stream")
 
-    if not is_nonempty_str(eid):
-        raise TypeError("eid argument must be a non-empty string")
-
     def with_quoter(s):
         try:
             return quote(s)
