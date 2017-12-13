@@ -13,7 +13,7 @@ from functools import partial
 from sentenai.exceptions import *
 from sentenai.exceptions import handle
 from sentenai.utils import *
-from sentenai.flare import EventPath, Stream, stream, project, ast_dict, delta, Delta
+from sentenai.flare import EventPath, Stream, stream, project, ast_dict, delta, Delta, Select
 
 if not PY3:
     import virtualtime
