@@ -38,14 +38,6 @@ def test_delete_sid_typechecks(sid):
     with pytest.raises(TypeError):
         test_client.delete(sid, "")
 
-@given(one_of(integers(), floats(), datetimes()))
-@example(None)
-@example("")
-def test_delete_eid_typechecks(eid):
-    with pytest.raises(TypeError):
-        test_client.delete(stream("foo"), eid)
-
-
 @given(text(min_size=1))
 def test_delete_with_eid(eid):
     s = stream("foo")

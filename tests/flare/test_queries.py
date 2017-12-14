@@ -12,8 +12,8 @@ from shapely.geometry      import Point, Polygon
 # ========================
 
 def all_types():
-    # FIXME: add times()
-    return one_of(text(), booleans(), integers(), floats(), dates(), datetimes())
+    # FIXME: add times(), having trouble with datetimes in py2 via virtualtime
+    return one_of(text(), booleans(), integers(), floats(), dates())
 
 def numeric():
     return one_of(integers(), floats())

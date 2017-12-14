@@ -13,7 +13,7 @@ from functools import partial
 from sentenai.exceptions import *
 from sentenai.exceptions import handle
 from sentenai.utils import *
-from sentenai.flare import EventPath, Stream, stream, project, ast_dict, delta, Delta
+from sentenai.flare import EventPath, Stream, stream, project, ast_dict, delta, Delta, Select
 
 if not PY3:
     import virtualtime
@@ -380,15 +380,20 @@ class Cursor(object):
 
         r = handle(requests.post(url, json=ast_dict(query, returning), headers=self.headers))
         self.query_id = r.headers['location']
-        self.pool = self._pool()
+        self._pool = None
 
 
     def __len__(self):
         return len(self.spans())
 
-    def _pool(self):
-        sl = len(self.spans())
-        return ThreadPool(16 if sl > 16 else sl) if sl else None
+    @property
+    def pool(self):
+        if self._pool:
+            return self._pool
+        else:
+            sl = len(self.spans())
+            self._pool = ThreadPool(16 if sl > 16 else sl) if sl else None
+            return self._pool
 
     def _slice(self, cursor, start, end, max_retries=3):
         """Slice a set of spans and events.
@@ -558,7 +563,7 @@ class Cursor(object):
             else:
                 spans = []
 
-            pool = self._pool()
+            pool = self.pool
             for start, data in pool.map(lambda s: (s[1], self._slice(*s)), [win(**sp) for sp in spans]):
                 fr = df(start, data)
                 for s in fr.keys():
@@ -770,9 +775,6 @@ def build_url(host, stream, eid=None):
     """
     if not isinstance(stream, Stream):
         raise TypeError("stream argument must be of type sentenai.Stream")
-
-    if not is_nonempty_str(eid):
-        raise TypeError("eid argument must be a non-empty string")
 
     def with_quoter(s):
         try:
