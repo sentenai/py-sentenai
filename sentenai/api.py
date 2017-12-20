@@ -326,25 +326,47 @@ class Sentenai(object):
         return Cursor(self, query or Select(), returning)
 
 
-    def fields(self, s):
-        if isinstance(s, Stream):
-            url = "/".join([self.host, "streams", s['name'], "fields"])
+    def fields(self, stream):
+        """Get a list of field names for a given stream
+
+        Argument:
+           stream -- A stream object corresponding to a stream stored
+                     in Sentenai.
+        """
+        if isinstance(stream, Stream):
+            url = "/".join([self.host, "streams", stream['name'], "fields"])
             resp = self.session.get(url)
             return resp.json()
         else:
             raise SentenaiException("Must be called on stream")
 
-    def values(self, s):
-        if isinstance(s, Stream):
-            url = "/".join([self.host, "streams", s['name'], "values"])
+    def values(self, stream):
+        """Get all the latest values for a given stream.
+
+        If the events in the stream don't share all their fields, this will
+        forward fill values, returning the latest value for every field seen
+        in the stream.
+
+        Argument:
+           stream -- A stream object corresponding to a stream stored
+                     in Sentenai.
+        """
+        if isinstance(stream, Stream):
+            url = "/".join([self.host, "streams", stream['name'], "values"])
             resp = self.session.get(url)
             return resp.json()
         else:
             raise SentenaiException("Must be called on stream")
 
-    def newest(self, s):
-        if isinstance(s, Stream):
-            url = "/".join([self.host, "streams", s['name'], "newest"])
+    def newest(self, stream):
+        """Get the most recent event in a given stream.
+
+        Argument:
+           stream -- A stream object corresponding to a stream stored
+                     in Sentenai.
+        """
+        if isinstance(stream, Stream):
+            url = "/".join([self.host, "streams", stream['name'], "newest"])
             resp = self.session.get(url)
             return {
                     "event": resp.json(),
@@ -355,9 +377,15 @@ class Sentenai(object):
             raise SentenaiException("Must be called on stream")
 
 
-    def oldest(self, s):
-        if isinstance(s, Stream):
-            url = "/".join([self.host, "streams", s['name'], "oldest"])
+    def oldest(self, stream):
+        """Get the oldest event in a given stream.
+
+        Argument:
+           stream -- A stream object corresponding to a stream stored
+                     in Sentenai.
+        """
+        if isinstance(stream, Stream):
+            url = "/".join([self.host, "streams", stream['name'], "oldest"])
             resp = self.session.get(url)
             return {
                     "event": resp.json(),
