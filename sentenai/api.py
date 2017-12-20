@@ -493,7 +493,7 @@ class Cursor(object):
         if not pool:
             return json.dumps([])
         try:
-            data = pool.map(lambda s: self._slice(s['cursor'], s.get('start') or datetime.min, s.get('end') or datetime.max), self._spans)
+            data = pool.map(lambda s: self._slice(s['cursor'], s.get('start') or DTMIN, s.get('end') or DTMAX), self._spans)
             return json.dumps(data, default=dts, indent=4)
         finally:
             pool.close()
@@ -566,9 +566,9 @@ class Cursor(object):
         if isinstance(window, Delta):
             window = window.timedelta
 
-        def win(cursor, start=datetime.min, end=datetime.max):
-            start = start or datetime.min
-            end = end or datetime.max
+        def win(cursor, start=DTMIN, end=DTMAX):
+            start = start or DTMIN
+            end = end or DTMAX
             if window == None:
                 return (cursor, start, end)
             if align == LEFT:
@@ -585,7 +585,7 @@ class Cursor(object):
             if not inverted:
                 spans = self._spans
             elif self._spans:
-                spans = [(datetime.min, self._spans[0][0])]
+                spans = [(DTMIN, self._spans[0][0])]
                 for (t0,t1), (u0, u1) in zip(self._spans, self._spans[1:]):
                     spans.append((t1, u0))
             else:
@@ -659,11 +659,11 @@ class Cursor(object):
                 else:
                     spans = []
                 for t0, t1 in zip(self._spans, self._spans[1:]):
-                    spans.append({'cursor': t0['cursor'], 'start': t0.get('end', datetime.max), 'end': t1.get('start', datetime.min)})
+                    spans.append({'cursor': t0['cursor'], 'start': t0.get('end', DTMAX), 'end': t1.get('start', DTMIN)})
             else:
                 spans = []
             for sp in spans:
-                start, end, cur = sp.get('start', datetime.min), sp.get('end', datetime.max), sp['cursor']
+                start, end, cur = sp.get('start', DTMIN), sp.get('end', DTMAX), sp['cursor']
                 data = self._slice(cur, start, end + horizon)
                 fr = df(start, data)
                 fr = {k: fr[k].set_index(keys=['.ts'])
@@ -786,7 +786,6 @@ def df(t0, data):
             evt = event['event']
             evt['.id'] = event['id']
             evt['.ts'] = cts(event['ts'])
-            evt['.delta'] = t0 - cts(event['ts'])
             events.append(evt)
         dfs[s['stream']] = json_normalize(events)
     return dfs

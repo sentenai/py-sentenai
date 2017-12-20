@@ -38,7 +38,11 @@ def iso8601(dt):
 def cts(ts):
     """Convert a time string to a datetime object."""
     try:
-        return dateutil.parser.parse(ts)
+        dt = dateutil.parser.parse(ts)
+        if dt.tzinfo:
+            return dt
+        else:
+            return dt.replace(tzinfo=dateutil.tz.tzutc())
     except:
         print("invalid time: " + ts)
         return ts
@@ -57,3 +61,7 @@ def divtime(l, r):
     numerator = l.days * 3600 * 24 + l.seconds
     divisor   = r.days * 3600 * 24 + r.seconds
     return int( numerator / divisor )
+
+
+DTMIN = datetime.min.replace(tzinfo=dateutil.tz.tzutc())
+DTMAX = datetime.max.replace(tzinfo=dateutil.tz.tzutc())
