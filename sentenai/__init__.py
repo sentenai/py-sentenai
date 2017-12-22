@@ -2,7 +2,7 @@ import json
 
 from sentenai.flare import (
     delta, stream, EventPath, FlareSyntaxError, InCircle, InPolygon, Par,
-    Select, Span, Switch, merge, project, ast
+    Select, Span, Switch, merge, ast, Returning
 )
 from sentenai.api import Sentenai
 from sentenai.utils import LEFT, RIGHT, CENTER, PY3
@@ -10,7 +10,7 @@ from sentenai.utils import LEFT, RIGHT, CENTER, PY3
 
 __all__ = [
     'FlareSyntaxError', 'LEFT', 'CENTER', 'RIGHT', 'Sentenai', 'span',
-    'any_of', 'all_of', 'V', 'delta', 'event', 'stream', 'select',
+    'any_of', 'all_of', 'V', 'delta', 'event', 'returning', 'stream', 'select',
     'ast', 'within_distance', 'inside_region', 'merge'
 ]
 
@@ -41,6 +41,14 @@ def select(start=None, end=None):
     if end:
         kwargs['end'] = end
     return Select(**kwargs)
+
+def _span(*q, **kwargs):
+    return Select().span(*q, **kwargs)
+
+select.span = _span
+
+def returning(*args, **kwargs):
+    return Returning(*args, **kwargs)
 
 
 def span(*q, **kwargs):

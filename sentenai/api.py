@@ -13,7 +13,7 @@ from functools import partial
 from sentenai.exceptions import *
 from sentenai.exceptions import handle
 from sentenai.utils import *
-from sentenai.flare import EventPath, Stream, stream, project, ast_dict, delta, Delta, Select
+from sentenai.flare import EventPath, Stream, stream, delta, Delta, Query
 
 if not PY3:
     import virtualtime
@@ -34,36 +34,36 @@ class Uploader(object):
         self.iterator = iterator
         self.pool = ThreadPool(processes)
 
-    def process(self, data):
-        def waits():
-            yield 0
-            wl = (0,1)
-            while True:
-                wl = (wl[-1], sum(wl))
-                yield wl[-1]
-
-        event = self.validate(data)
-        if isinstance(tuple, event):
-            return event
-
-        wait = waits()
-        while event:
-            try:
-                self.client.put(**event)
-            except AuthenticationError:
-                raise
-            except APIError as e:
-                if e.response.status_code == 400:
-                    # probably bad JSON
-                    return data
-                else:
-                    time.sleep(next(wait))
-            else:
-                return
 
     def start(self):
+        def process(data):
+            def waits():
+                yield 0
+                wl = (0,1)
+                while True:
+                    wl = (wl[-1], sum(wl))
+                    yield wl[-1]
+
+            event = self.validate(data)
+            if isinstance(event, tuple):
+                return event
+
+            wait = waits()
+            while event:
+                try:
+                    self.client.put(**event)
+                except AuthenticationError:
+                    raise
+                except Exception as e:
+                    if e.response.status_code == 400:
+                        # probably bad JSON
+                        return data
+                    else:
+                        time.sleep(next(wait))
+                else:
+                    return
         data = self.pool.map(process, self.iterator)
-        return { 'saved': len(data), 'failed': filter(data) }
+        return { 'saved': len(data), 'failed': filter(None, data) }
 
 
     def validate(self, data):
@@ -74,8 +74,13 @@ class Uploader(object):
         except:
             return (data, "invalid timestamp")
 
-        sid = data.get('id')
-        if sid: sid = str(sid)
+        sid = data.get('stream')
+        if isinstance(sid, Stream):
+            strm = sid
+        elif sid:
+            strm = stream(str(sid))
+        else:
+            return (data, "missing stream")
 
         try:
             evt = data['event']
@@ -84,7 +89,7 @@ class Uploader(object):
         except Exception:
             return (data, "invalid event data")
         else:
-            return {"stream": stream(sid), "timestamp": ts, "id": sid}
+            return {"stream": strm, "timestamp": ts, "id": data.get('id'), "event": evt}
 
 
 class Sentenai(object):
@@ -296,7 +301,7 @@ class Sentenai(object):
         status_codes(resp)
         return [json.loads(line) for line in resp.text.splitlines()]
 
-    def query(self, query=None, returning=None):
+    def query(self, *statements):
         """Execute a flare query.
 
         Arguments:
@@ -321,9 +326,7 @@ class Sentenai(object):
                                 }
                             }
         """
-        if isinstance(returning, Stream):
-            returning = {returning: True}
-        return Cursor(self, query or Select(), returning)
+        return Cursor(self, Query(*statements))
 
 
     def fields(self, stream):
@@ -397,16 +400,15 @@ class Sentenai(object):
 
 
 class Cursor(object):
-    def __init__(self, client, query, returning=None, limit=None):
+    def __init__(self, client, query, limit=None):
         self.client = client
         self.query = query
-        self.returning = returning
         self._limit = limit
         self.headers = {'content-type': 'application/json', 'auth-key': client.auth_key}
 
         url = '{0}/query'.format(client.host)
 
-        r = handle(requests.post(url, json=ast_dict(query, returning), headers=self.headers))
+        r = handle(requests.post(url, json=self.query(), headers=self.headers))
         self.query_id = r.headers['location']
         self._pool = None
 
@@ -498,6 +500,8 @@ class Cursor(object):
         finally:
             pool.close()
 
+    def dataframe(self, *args, **kwargs):
+        return self.dataset().dataframe(*args, **kwargs)
 
     def spans(self, refresh=False):
         """Get list of spans of time when query conditions are true."""

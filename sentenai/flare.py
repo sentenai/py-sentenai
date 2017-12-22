@@ -44,6 +44,67 @@ class Flare(object):
         return str(self)
 
 
+class Returning(object):
+    def __init__(self, *streams, **kwargs):
+        self.projs = []
+        for s in streams:
+            if isinstance(s, Stream):
+                self.projs.append(Proj(s))
+            elif isinstance(s, tuple):
+                for x in s:
+                    if isinstance(x, Stream):
+                        self.projs.append(Proj(x))
+                    elif isinstance(x, Proj):
+                        self.projs.append(x)
+            elif isinstance(s, Proj):
+                self.projs.append(s)
+            else:
+                raise FlareSyntaxError("Invalid projection type in `returning`")
+        self.default = kwargs.get('default', True)
+
+    def __call__(self):
+        return dict(projections={'explicit': map(apply, self.projs)})
+
+
+
+class Proj(object):
+    def __init__(self, stream, proj=True):
+        if not isinstance(stream, Stream):
+            raise FlareSyntaxError("returning dict top-level keys must be streams.")
+        self.stream = stream
+        self.proj = proj
+
+    def __call__(self):
+        if self.proj is True:
+            return {'stream': self.stream(), 'projection': "default"}
+        elif self.proj is False:
+            return {'stream': self.stream(), 'projection': {}}
+        else:
+            nd = {}
+            l = [(self.proj, nd)]
+            while l:
+                old, new = l.pop(0)
+                for key, val in old.items():
+                    if isinstance(val, EventPath):
+                        z = val()
+                        new[key] = [{'var': z['path'][1:]}]
+                    elif isinstance(val, float):
+                        new[key] = [{'lit': {'val': val, 'type': 'double'}}]
+                    elif isinstance(val, int):
+                        new[key] = [{'lit': {'val': val, 'type': 'int'}}]
+                    elif isinstance(val, str):
+                        new[key] = [{'lit': {'val': val, 'type': 'string'}}]
+                    elif isinstance(val, bool):
+                        new[key] = [{'lit': {'val': val, 'type': 'bool'}}]
+                    elif isinstance(val, dict):
+                        new[key] = {}
+                        l.append((val,new[key]))
+                    else:
+                        raise FlareSyntaxError("%s: %s is unsupported." % (key, val.__class__))
+            return {'stream': self.stream(), 'projection': nd}
+
+
+
 class InCircle(Flare):
     """Used in conjunction with a Cond and shapely.geometry.Point."""
 
@@ -427,6 +488,16 @@ class Stream(object):
         self._meta = meta
         self._info = info
         self._filters = filters
+
+    def __pos__(self):
+        return Proj(self, True)
+
+    def __neg__(self):
+        print("oops")
+        return Proj(self, False)
+
+    def __mod__(self, pdict):
+        return Proj(self, pdict)
 
     def __eq__(self, other):
         """Define the `==` operator for streams.
@@ -1303,44 +1374,43 @@ def typecheck_kwargs(valid_types_dict, input_kwargs):
             typecheck(valid_types_dict[k], k, v)
 
 
-def project(stream, proj):
-    if not isinstance(stream, Stream):
-        raise FlareSyntaxError("returning dict top-level keys must be streams.")
-    if proj is True:
-        return {'stream': stream(), 'projection': "default"}
-    elif proj is False:
-        return {'stream': stream(), 'projection': {}}
-    else:
-        nd = {}
-        l = [(proj, nd)]
-        while l:
-            old, new = l.pop(0)
-            for key, val in old.items():
-                if isinstance(val, EventPath):
-                    z = val()
-                    new[key] = [{'var': z['path'][1:]}]
-                elif isinstance(val, float):
-                    new[key] = [{'lit': {'val': val, 'type': 'double'}}]
-                elif isinstance(val, int):
-                    new[key] = [{'lit': {'val': val, 'type': 'int'}}]
-                elif isinstance(val, str):
-                    new[key] = [{'lit': {'val': val, 'type': 'string'}}]
-                elif isinstance(val, bool):
-                    new[key] = [{'lit': {'val': val, 'type': 'bool'}}]
-                elif isinstance(val, dict):
-                    new[key] = {}
-                    l.append((val,new[key]))
+
+class Query(Flare):
+    def __init__(self, *statements):
+        self.statements = statements
+
+    def __call__(self):
+        """Generate an Abstract Syntax Tree for a given query"""
+        q, r = None, None
+        for s in self.statements:
+            if isinstance(s, Select):
+                if q is None:
+                    q = s()
                 else:
-                    raise FlareSyntaxError("%s: %s is unsupported." % (key, val.__class__))
-        return {'stream': stream(), 'projection': nd}
+                    raise FlareSyntaxError("Only one `select` statement may be present in a query")
+            elif isinstance(s, Span):
+                if q is None:
+                    z = Select()
+                    z._query = [s]
+                    q = z()
+                else:
+                    raise FlareSyntaxError("Only one `select` statement may be present in a query")
+            elif isinstance(s, Returning):
+                if r is None:
+                    r = s()
+                else:
+                    raise FlareSyntaxError("Only one `returning` statement may be present in a query")
+            else:
+                raise FlareSyntaxError("Statement must be either `returning` or `select`")
 
-def ast_dict(query, returning=None):
-    """Generate an Abstract Syntax Tree for a given query"""
-    q = query()
-    if returning:
-        q['projections'] = {'explicit': [project(s, p) for s, p in returning.items()]}
-    return q
+        if q is None:
+            q = Select()()
+        if r is None:
+            r = {}
 
-def ast(query):
+        q.update(r)
+        return q
+
+def ast(*statements):
     """Print the query as an Abstract Syntax Tree JSON string"""
-    return json.dumps(ast_dict(query), indent=4)
+    return json.dumps(Query(*statements)(), indent=4)
