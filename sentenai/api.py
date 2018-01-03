@@ -107,6 +107,26 @@ class Sentenai(object):
         self.session = requests.Session()
         self.session.headers.update({ 'auth-key': auth_key })
 
+    def upload(self, iterable, processes=4):
+        """Takes a list of events and creates an instance of a Bulk uploader.
+
+        Arguments:
+            iterable -- an iterable object or list of events with each
+                        event in this format:
+                { "stream": Stream("foo) or "foo",
+                  "id": "my-unique-id" (optional),
+                  "ts": "2000-10-10T00:00:00Z",
+                  "event": {<<event body>>}
+                }
+            processes -- number of processes to use. Too many processes might
+                         cause a slowdown in upload speed.
+
+        The Uploader object returned needs to be triggered with its `.start()`
+        method.
+
+        """
+        return Uploader(self, iterable, processes)
+
     def __str__(self):
         """Return a string representation of the object."""
         return repr(self)
