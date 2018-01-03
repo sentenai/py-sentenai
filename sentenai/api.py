@@ -55,11 +55,15 @@ class Uploader(object):
                 except AuthenticationError:
                     raise
                 except Exception as e:
+                    print(e)
+                    time.sleep(next(wait))
+                    """
                     if e.response.status_code == 400:
                         # probably bad JSON
                         return data
                     else:
                         time.sleep(next(wait))
+                    """
                 else:
                     return
         data = self.pool.map(process, self.iterator)
