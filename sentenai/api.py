@@ -1,5 +1,7 @@
+from __future__ import print_function
 import json
-import re
+import pytz
+import re, sys, time
 import requests
 
 import numpy as np
@@ -7,8 +9,9 @@ import pandas as pd
 
 from pandas.io.json import json_normalize
 from datetime import timedelta
-from multiprocessing.pool import ThreadPool
 from functools import partial
+from multiprocessing.pool import ThreadPool
+from threading import Lock
 
 from sentenai.exceptions import *
 from sentenai.exceptions import handle
@@ -33,9 +36,11 @@ class Uploader(object):
         self.client = client
         self.iterator = iterator
         self.pool = ThreadPool(processes)
+        self.succeeded = 0
+        self.failed = 0
+        self.lock = Lock()
 
-
-    def start(self):
+    def start(self, progress=False):
         def process(data):
             def waits():
                 yield 0
@@ -56,7 +61,13 @@ class Uploader(object):
                     raise
                 except Exception as e:
                     print(e)
-                    time.sleep(next(wait))
+                    w = next(wait)
+                    if w < 15: # 15 second wait limit
+                        time.sleep(next(wait))
+                    else:
+                        with self.lock:
+                            self.failed += 1
+                        return (event, e)
                     """
                     if e.response.status_code == 400:
                         # probably bad JSON
@@ -65,8 +76,39 @@ class Uploader(object):
                         time.sleep(next(wait))
                     """
                 else:
+                    with self.lock:
+                        self.succeeded += 1
                     return
-        data = self.pool.map(process, self.iterator)
+        if progress:
+            events = list(self.iterator)
+            total  = len(events)
+            def bar():
+                sys.stderr.write("\r" * 60)
+                sc = int(round(50 * self.succeeded / float(total)))
+                fc = int(round(50 * self.failed    / float(total)))
+                pd = (self.failed + self.succeeded) / float(total) * 100.
+                sys.stderr.write(" [\033[92m{0}\033[91m{1}\033[0m{2}] {3:>6.2f}%   ".format( "#" * sc, "#" * fc, " " * (50 - sc - fc), pd))
+                sys.stderr.flush()
+
+            t0 = datetime.utcnow()
+            data = self.pool.map_async(process, events)
+            #sys.stderr.write("\n " + "-" * 62 + " \n")
+            sys.stderr.write("\n {:<60} \n".format("Uploading {} objects:".format(total)))
+            while not data.ready():
+                bar()
+                time.sleep(.1)
+            else:
+                bar()
+            t1 = datetime.utcnow()
+            sys.stderr.write("\n {:<60} ".format("Time elapsed: {}".format(t1 - t0)))
+            sys.stderr.write("\n {:<60} ".format("Mean Obj/s: {:.1f}".format(float(total)/(t1 - t0).total_seconds())))
+            sys.stderr.write("\n {:<60} \n\n".format("Failures: {}".format(self.failed)))
+            #sys.stderr.write("\n " + "-" * 62 + " \n\n")
+            sys.stderr.flush()
+            #data.wait()
+            data = data.get()
+        else:
+            data = self.pool.map(process, events)
         return { 'saved': len(data), 'failed': filter(None, data) }
 
 
@@ -74,7 +116,7 @@ class Uploader(object):
         ts = data.get('ts')
         try:
             if not ts.tzinfo:
-                ts = pytz.localize(ts)
+                ts = pytz.utc.localize(ts)
         except:
             return (data, "invalid timestamp")
 
@@ -111,7 +153,8 @@ class Sentenai(object):
         self.session = requests.Session()
         self.session.headers.update({ 'auth-key': auth_key })
 
-    def upload(self, iterable, processes=4):
+
+    def upload(self, iterable, processes=4, progress=False):
         """Takes a list of events and creates an instance of a Bulk uploader.
 
         Arguments:
@@ -129,20 +172,25 @@ class Sentenai(object):
         method.
 
         """
-        return Uploader(self, iterable, processes)
+        ul = Uploader(self, iterable, processes)
+        return ul.start(progress)
+
 
     def __str__(self):
         """Return a string representation of the object."""
         return repr(self)
+
 
     def __repr__(self):
         """Return an unambiguous representation of the object."""
         return "Sentenai(auth_key='{}', server='{}')".format(
             self.auth_key, self.host)
 
+
     def debug(self, protocol="http", host="localhost", port=3000):
         self.host = protocol + "://" + host + ":" + str(port)
         return self
+
 
     def delete(self, stream, eid):
         """Delete event from a stream by its unique id.
