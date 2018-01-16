@@ -57,10 +57,12 @@ class Uploader(object):
             while event:
                 try:
                     self.client.put(**event)
+                    with self.lock:
+                        self.succeeded += 1
+                    return None
                 except AuthenticationError:
                     raise
                 except Exception as e:
-                    print(e)
                     w = next(wait)
                     if w < 15: # 15 second wait limit
                         time.sleep(next(wait))
@@ -75,10 +77,6 @@ class Uploader(object):
                     else:
                         time.sleep(next(wait))
                     """
-                else:
-                    with self.lock:
-                        self.succeeded += 1
-                    return
         if progress:
             events = list(self.iterator)
             total  = len(events)
@@ -863,7 +861,7 @@ def df(t0, data):
             evt['.id'] = event['id']
             evt['.ts'] = cts(event['ts'])
             events.append(evt)
-        dfs[s['stream']] = json_normalize(events)
+        dfs[json.dumps(s['stream'], sort_keys=True)] = json_normalize(events)
     return dfs
 
 def build_url(host, stream, eid=None):

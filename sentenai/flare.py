@@ -338,7 +338,7 @@ class Select(Flare):
             s = {}
 
         if len(self._query) == 0:
-            s['select'] = {"expr": "true"}
+            s['select'] = {"expr": True}
         elif len(self._query) == 1:
             s['select'] = self._query[0]()
         else:
@@ -493,7 +493,6 @@ class Stream(object):
         return Proj(self, True)
 
     def __neg__(self):
-        print("oops")
         return Proj(self, False)
 
     def __mod__(self, pdict):
