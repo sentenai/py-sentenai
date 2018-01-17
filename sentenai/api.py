@@ -679,9 +679,17 @@ class Cursor(object):
                                   for k in fr}
 
 
+                cols = []
                 for s in fr.keys():
                     fr[s] = fr[s].set_index(keys=['.ts'])
-                    fr[s].rename(columns={k: s + ":" + k for k in fr[s].columns}, inplace=True)
+                    sm = json.loads(s)
+                    for col in fr[s].columns:
+                        qualname = ":".join([sm['name'], col])
+                        if qualname in cols:
+                            raise Exception("overlapping column names: {}".format(col))
+                        else:
+                            cols.append(qualname)
+                    fr[s].rename(columns={k: sm['name'] + ":" + k for k in fr[s].columns}, inplace=True)
 
                 if len(fr.keys()) > 1:
                     to_join = list(fr.values())
@@ -747,9 +755,18 @@ class Cursor(object):
                 fts = max(fr[k]['.ts'][0] for k in fr)
                 lts = min(fr[k]['.ts'][-1] for k in fr) + timedelta(seconds=1)
 
+
+                cols = []
                 for s in fr.keys():
                     fr[s] = fr[s].set_index(keys=['.ts'])
-                    fr[s].rename(columns={k: s + ":" + k for k in fr[s].columns}, inplace=True)
+                    sm = json.loads(s)
+                    for col in fr[s].columns:
+                        qualname = ":".join([sm['name'], col])
+                        if qualname in cols:
+                            raise Exception("overlapping column names: {}".format(col))
+                        else:
+                            cols.append(qualname)
+                    fr[s].rename(columns={k: sm['name'] + ":" + k for k in fr[s].columns}, inplace=True)
 
                 if len(fr.keys()) > 1:
                     to_join = list(fr.values())
@@ -764,7 +781,14 @@ class Cursor(object):
 
         return FrameGroup(iterator)
 
+class ResultSpan(object):
+    def __init__(self, cursor, start=None, end=None):
+        self.cursor = cursor
+        self.start = start
+        self.end = end
 
+    def __repr__(self):
+        return "ResultSpan(start={}, end={}, cursor={})".format(self.start, self.end, self.cursor)
 
 class FrameGroup(object):
     def __init__(self, iterator, inverted=False):
@@ -785,6 +809,7 @@ class FrameGroup(object):
         found result.
         """
         drop_prefixes = kwargs.get('drop_stream_names', False)
+
         def cname(stream, path):
             return "{}:{}".format(stream['name'], ".".join(path[1:]))
 
@@ -858,7 +883,6 @@ def df(t0, data):
         events = []
         for event in s['events']:
             evt = event['event']
-            evt['.id'] = event['id']
             evt['.ts'] = cts(event['ts'])
             events.append(evt)
         dfs[json.dumps(s['stream'], sort_keys=True)] = json_normalize(events)
