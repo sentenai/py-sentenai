@@ -234,13 +234,15 @@ class Switch(Flare):
             cds = []
 
             for s in self._query:
-                if len(s) > 1:
-                    cds.append({'type': '&&', 'args': [x() for x in s]})
-                elif len(s) == 1:
-                    cds.append(s[0]())
-                else:
-                    raise FlareSyntaxError(
-                        "Switches must have non-empty conditions")
+                if len(s) < 1:
+                    raise FlareSyntaxError("Switches must have non-empty conditions")
+                expr = s[-1]()
+                for x in s[-2::-1]:
+                    expr = {
+                        'expr': '&&',
+                        'args': [x(), expr]
+                    }
+                cds.append(expr)
 
             return {'type': 'switch', 'conds': cds, 'stream': self._stream()}
 
@@ -585,14 +587,14 @@ class Stream(object):
         if sw is None:
             b = {'name': self._name}
             if self._filters:
-                if len(self._filters) > 1:
-                    b['filter'] = {
-                        'type': '&&',
-                        'args': [x() for x in self._filters]
+                expr = s[-1]()
+                for x in s[-2::-1]:
+                    expr = {
+                        'expr': '&&',
+                        'args': [x(), expr]
                     }
-                elif len(self._filters) == 1:
-                    b['filter'] = self._filters[0]()
-                    del b['filter']['type']
+                if 'type' in expr:
+                    del expr['type']
             return b
         else:
             try:
@@ -930,7 +932,19 @@ class Or(Flare):
 
     def __call__(self):
         """Generate an AST representation of the Or."""
-        return {'expr': '||', 'args': [q() for q in self.query]}
+        if len(self.query) == 0:
+            raise FlareSynxtaxError('Not enough arguments in Or')
+        elif len(self.query) == 1:
+            return self.query[0]()
+        else:
+            d = {'expr': '&&', 'args': [self.query[0](), self.query[-1]()]}
+            for q in self.query[-2:0:-1]:
+                d['args'][1] = {
+                    'expr': '||',
+                    'args': [q(), d['args'][1]]
+                }
+            return d
+
 
     def __str__(self):
         """Generate a string representation of the Or."""
@@ -1149,7 +1163,14 @@ class Span(Flare):
                 d.update(self.query[0]())
         else:
             d['expr'] = '&&'
-            d['args'] = [q() for q in self.query]
+            d['args'] = [self.query[0](), self.query[-1]()]
+            for q in self.query[-2:0:-1]:
+                d['args'][1] = {
+                    'expr': '&&',
+                    'args': [q(), d['args'][1]]
+                }
+
+
         return d
 
 
