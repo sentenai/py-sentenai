@@ -599,7 +599,7 @@ class Stream(object):
                         'expr': '&&',
                         'args': [y, expr]
                     }
-                b['filters'] = expr
+                b['filter'] = expr
             return b
         else:
             try:
