@@ -517,7 +517,6 @@ class Cursor(object):
         while c is not None:
             url = '{host}/query/{cursor}/events'.format(host=self.client.host, cursor=c)
             resp = self.client.session.get(url)
-            print(resp.headers)
 
             if not resp.ok and retries >= max_retries:
                 raise Exception("failed to get cursor")
