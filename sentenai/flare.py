@@ -942,7 +942,7 @@ class Or(Flare):
         elif len(self.query) == 1:
             return self.query[0]()
         else:
-            d = {'expr': '&&', 'args': [self.query[0](), self.query[-1]()]}
+            d = {'expr': '||', 'args': [self.query[0](), self.query[-1]()]}
             for q in self.query[-2:0:-1]:
                 d['args'][1] = {
                     'expr': '||',
