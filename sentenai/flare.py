@@ -1436,6 +1436,10 @@ class Query(Flare):
         q.update(r)
         return q
 
+# Needed for testing
+def ast_dict(*statements):
+    return Query(*statements)()
+
 def ast(*statements):
     """Print the query as an Abstract Syntax Tree JSON string"""
-    return json.dumps(Query(*statements)(), indent=4)
+    return json.dumps(ast_dict(*statements), indent=4)
