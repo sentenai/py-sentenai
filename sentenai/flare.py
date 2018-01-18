@@ -63,7 +63,7 @@ class Returning(object):
         self.default = kwargs.get('default', True)
 
     def __call__(self):
-        return dict(projections={'explicit': map(apply, self.projs)})
+        return dict(projections={'explicit': map(apply, self.projs), '...': self.default})
 
 
 
@@ -587,14 +587,19 @@ class Stream(object):
         if sw is None:
             b = {'name': self._name}
             if self._filters:
+                s = self._filters
                 expr = s[-1]()
-                for x in s[-2::-1]:
-                    expr = {
-                        'expr': '&&',
-                        'args': [x(), expr]
-                    }
                 if 'type' in expr:
                     del expr['type']
+                for x in s[-2::-1]:
+                    y = x()
+                    if 'type' in y:
+                        del y['type']
+                    expr = {
+                        'expr': '&&',
+                        'args': [y, expr]
+                    }
+                b['filters'] = expr
             return b
         else:
             try:
