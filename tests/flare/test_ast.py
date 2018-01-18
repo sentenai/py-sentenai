@@ -24,38 +24,40 @@ def test_basic_select_span():
 def test_any_of_comparisons():
     s = stream("moose")
     real = ast_dict(
-        any_of(
+        select().span(any_of(
             span(s.x < 0),
             span(s.x >= 3.141592653589793),
             span(s.b != False)
-        )
+        ))
     )
 
     expected = {
-        "type": "any",
-        "conds": [
-            {
-                "stream": { "name": "moose" },
-                "arg": { "type": "double", "val": 0 },
-                "path": ( "event", "x" ),
-                "type": "span",
-                "op": "<"
-            },
-            {
-                "stream": { "name": "moose" },
-                "arg": { "type": "double", "val": 3.141592653589793 },
-                "path": ( "event", "x" ),
-                "type": "span",
-                "op": ">="
-            },
-            {
-                "stream": { "name": "moose" },
-                "arg": { "type": "bool", "val": False },
-                "path": ( "event", "b" ),
-                "type": "span",
-                "op": "!="
-            }
-        ]
+        "select": {
+            "type": "any",
+            "conds": [
+                {
+                    "stream": { "name": "moose" },
+                    "arg": { "type": "double", "val": 0 },
+                    "path": ( "event", "x" ),
+                    "type": "span",
+                    "op": "<"
+                },
+                {
+                    "stream": { "name": "moose" },
+                    "arg": { "type": "double", "val": 3.141592653589793 },
+                    "path": ( "event", "x" ),
+                    "type": "span",
+                    "op": ">="
+                },
+                {
+                    "stream": { "name": "moose" },
+                    "arg": { "type": "bool", "val": False },
+                    "path": ( "event", "b" ),
+                    "type": "span",
+                    "op": "!="
+                }
+            ]
+        }
     }
 
     assert real == expected
