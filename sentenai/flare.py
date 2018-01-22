@@ -63,7 +63,7 @@ class Returning(object):
         self.default = kwargs.get('default', True)
 
     def __call__(self):
-        return dict(projections={'explicit': map(apply, self.projs), '...': self.default})
+        return dict(projections={'explicit': [p() for p in self.projs], '...': self.default})
 
 
 
