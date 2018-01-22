@@ -371,7 +371,7 @@ class Sentenai(object):
         status_codes(resp)
         return [json.loads(line) for line in resp.text.splitlines()]
 
-    def query(self, *statements, limit=None):
+    def query(self, *statements, **kwargs):
         """Execute a flare query.
 
         Arguments:
@@ -396,7 +396,7 @@ class Sentenai(object):
                                 }
                             }
         """
-        return Cursor(self, Query(*statements), limit=limit)
+        return Cursor(self, Query(*statements), limit=kwargs.get('limit', None))
 
 
     def fields(self, stream):
