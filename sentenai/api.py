@@ -371,7 +371,7 @@ class Sentenai(object):
         status_codes(resp)
         return [json.loads(line) for line in resp.text.splitlines()]
 
-    def query(self, *statements):
+    def query(self, *statements, limit=None):
         """Execute a flare query.
 
         Arguments:
@@ -396,7 +396,7 @@ class Sentenai(object):
                                 }
                             }
         """
-        return Cursor(self, Query(*statements))
+        return Cursor(self, Query(*statements), limit=limit)
 
 
     def fields(self, stream):
@@ -593,7 +593,7 @@ class Cursor(object):
                 spans.extend(r['spans'])
 
                 cid = r.get('cursor')
-                if self._limit and spans >= self._limit:
+                if self._limit and len(spans) >= self._limit:
                     break
             self._spans = spans
         sps = []
