@@ -375,29 +375,11 @@ class Sentenai(object):
         """Execute a flare query.
 
         Arguments:
-           query     -- A query object created via the `select` function.
+           *statements -- Includes query objects created via the `select`
+                          function and projections created via `returning`.
            limit     -- A limit to the number of result spans returned.
-           returning -- An optional dictionary object mapping streams to
-                        projections. Each projection is a JSON-serializable
-                        dictionary where each value is either a literal
-                        (int, bool, float, str) or an EventPath `V.foo`
-                        that corresponds to an existing path within the
-                        stream's events.
-                        example returning dictionary:
-                        >>> bos = stream("weather")
-                        >>> returning = {
-                                bos : {
-                                    'high': V.temperatureMax,
-                                    'low': V.temperatureMin,
-                                    'ccc': {
-                                        'foo': 534.2,
-                                        'bar': "hello, world!"
-                                    }
-                                }
-                            }
         """
         return Cursor(self, Query(*statements), limit=kwargs.get('limit', None))
-
 
     def fields(self, stream):
         """Get a list of field names for a given stream

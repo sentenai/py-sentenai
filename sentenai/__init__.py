@@ -48,6 +48,20 @@ def _span(*q, **kwargs):
 select.span = _span
 
 def returning(*args, **kwargs):
+    """
+    Define projections for query results where each key is a string and each
+    value is either a literal (int, bool, float, str) or an EventPath `V.foo`
+    that corresponds to an existing path within the stream's events e.g.
+        >>> boston = stream('weather')
+        >>> returning(boston % {
+                'high': V.temperatureMax,
+                'low': V.temperatureMin,
+                'ccc': {
+                    'foo': 534.2,
+                    'bar': "hello, world!"
+                }
+            })
+    """
     return Returning(*args, **kwargs)
 
 
