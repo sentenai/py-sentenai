@@ -78,7 +78,7 @@ class Proj(object):
         if self.proj is True:
             return {'stream': self.stream(), 'projection': "default"}
         elif self.proj is False:
-            return {'stream': self.stream(), 'projection': {}}
+            return {'stream': self.stream(), 'projection': False}
         else:
             nd = {}
             l = [(self.proj, nd)]
