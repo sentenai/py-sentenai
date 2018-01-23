@@ -595,6 +595,8 @@ class Stream(object):
         """
         if sw is None:
             b = {'name': self._name}
+            if self.tz:
+                b['timezone'] = self.tz
             if self._filters:
                 s = self._filters
                 expr = s[-1]()
@@ -609,7 +611,6 @@ class Stream(object):
                         'args': [y, expr]
                     }
                 b['filter'] = expr
-                b['timezone'] = self.tz
             return b
         else:
             try:
