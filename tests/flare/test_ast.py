@@ -350,3 +350,45 @@ def test_switches():
         }
     }
     assert real == expected
+
+def test_returning():
+    s = stream('weather')
+    real = ast_dict(
+        returning(s % {
+            'value': V.maxTemp,
+            'other': {
+                'constant': 3
+            }
+        })
+    )
+    expected = {
+        'select': {'expr': True},
+        'projections': {
+            'explicit': [{
+                'stream': {'name': 'weather'},
+                'projection': {
+                    'value': [{'var': ('maxTemp',)}],
+                    'other': {'constant': [{'lit': {'val': 3, 'type': 'int'}}]}
+                }
+            }],
+            '...': True
+        }
+    }
+    assert real == expected
+
+def test_returning_excluding():
+    s = stream('weather')
+    real = ast_dict(
+        returning(-s)
+    )
+    expected = {
+        'select': {'expr': True},
+        'projections': {
+            'explicit': [{
+                'stream': {'name': 'weather'},
+                'projection': False
+            }],
+            '...': True
+        }
+    }
+    assert real == expected
