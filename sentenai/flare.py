@@ -1,4 +1,5 @@
 import inspect, json
+from copy import copy
 import numpy as np
 
 from datetime import date, datetime, timedelta
@@ -460,6 +461,7 @@ class Cond(Flare):
         if self.path.stream:
             d['type'] = 'span'
         if stream:
+            stream = copy(stream)
             stream.tz = tz
             d.update(self.path(stream))
         else:
@@ -496,7 +498,7 @@ class Stream(object):
         self._meta = meta
         self._info = info
         self._filters = filters
-        self.tz = None
+        self.tz = tz
 
     def __pos__(self):
         return Proj(self, True)
