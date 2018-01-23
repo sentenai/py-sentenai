@@ -299,6 +299,31 @@ def test_stream_filters():
     }
     assert real == expected
 
+def test_or_stream_filters():
+    s = stream('S', (V.season == "summer") | (V.season == "winter"))
+    real = ast_dict(
+        select().span(s.sunny == True)
+    )
+    expected = {
+        'select': {
+            'type': 'span',
+            'op': '==',
+            'arg': {'type': 'bool', 'val': True},
+            'path': ('event', 'sunny'),
+            'stream': {
+                'name': 'S',
+                'filter': {
+                    'expr': '||',
+                    'args': [
+                        {'op': '==', 'arg': {'type': 'string', 'val': 'summer'}, 'type': 'span', 'path': ('event', 'season')},
+                        {'op': '==', 'arg': {'type': 'string', 'val': 'winter'}, 'type': 'span', 'path': ('event', 'season')}
+                    ]
+                }
+            }
+        }
+    }
+    assert real == expected
+
 def test_switches():
     s = stream('S')
     real = ast_dict(
