@@ -427,6 +427,7 @@ class Cond(Flare):
         """
         val = self.val
         op = self.op
+        tz = None
         if isinstance(self.val, float):
             vt = 'double'
         elif isinstance(self.val, bool):
@@ -448,6 +449,10 @@ class Cond(Flare):
         elif isinstance(self.val, datetime):
             vt = "datetime"
             val = iso8601(self.val)
+            try:
+                tz = self.val.tzinfo.zone
+            except:
+                pass
         else:
             vt = 'string'
 
@@ -455,6 +460,7 @@ class Cond(Flare):
         if self.path.stream:
             d['type'] = 'span'
         if stream:
+            stream.tz = tz
             d.update(self.path(stream))
         else:
             d.update(self.path())
@@ -473,7 +479,7 @@ class Stream(object):
     used when writing queries, access specific API end points, and manipulating
     result sets.
     """
-    def __init__(self, name, meta, info, *filters):
+    def __init__(self, name, meta, info, tz, *filters):
         """Initialize a stream object.
 
         Arguments:
@@ -490,6 +496,7 @@ class Stream(object):
         self._meta = meta
         self._info = info
         self._filters = filters
+        self.tz = None
 
     def __pos__(self):
         return Proj(self, True)
@@ -600,6 +607,7 @@ class Stream(object):
                         'args': [y, expr]
                     }
                 b['filter'] = expr
+                b['timezone'] = self.tz
             return b
         else:
             try:
@@ -1307,7 +1315,8 @@ class Delta(Flare):
 
 def stream(name, *args, **kwargs):
     """Define a stream, possibly with a list of filter arguments."""
-    return Stream(name, kwargs.get('meta', {}), kwargs.get('info', {}), *args)
+    tz = kwargs.get('tz')
+    return Stream(name, kwargs.get('meta', {}), kwargs.get('info', {}), tz, *args)
 
 
 def merge(s1, s2):
