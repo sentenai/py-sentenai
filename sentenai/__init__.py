@@ -2,7 +2,7 @@ import json
 
 from sentenai.flare import (
     delta, stream, EventPath, FlareSyntaxError, InCircle, InPolygon, Par,
-    Select, Span, Switch, merge, project, ast
+    Select, Span, Switch, merge, ast, Returning
 )
 from sentenai.api import Sentenai
 from sentenai.utils import LEFT, RIGHT, CENTER, PY3
@@ -10,7 +10,7 @@ from sentenai.utils import LEFT, RIGHT, CENTER, PY3
 
 __all__ = [
     'FlareSyntaxError', 'LEFT', 'CENTER', 'RIGHT', 'Sentenai', 'span',
-    'any_of', 'all_of', 'V', 'delta', 'event', 'stream', 'select',
+    'any_of', 'all_of', 'V', 'delta', 'event', 'returning', 'stream', 'select',
     'ast', 'within_distance', 'inside_region', 'merge'
 ]
 
@@ -41,6 +41,28 @@ def select(start=None, end=None):
     if end:
         kwargs['end'] = end
     return Select(**kwargs)
+
+def _span(*q, **kwargs):
+    return Select().span(*q, **kwargs)
+
+select.span = _span
+
+def returning(*args, **kwargs):
+    """
+    Define projections for query results where each key is a string and each
+    value is either a literal (int, bool, float, str) or an EventPath `V.foo`
+    that corresponds to an existing path within the stream's events e.g.
+        >>> boston = stream('weather')
+        >>> returning(boston % {
+                'high': V.temperatureMax,
+                'low': V.temperatureMin,
+                'ccc': {
+                    'foo': 534.2,
+                    'bar': "hello, world!"
+                }
+            })
+    """
+    return Returning(*args, **kwargs)
 
 
 def span(*q, **kwargs):

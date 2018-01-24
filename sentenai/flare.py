@@ -1,4 +1,5 @@
 import inspect, json
+from copy import copy
 import numpy as np
 
 from datetime import date, datetime, timedelta
@@ -42,6 +43,67 @@ class Flare(object):
     def __repr__(self):
         """An unambiguous representation of the Flare query."""
         return str(self)
+
+
+class Returning(object):
+    def __init__(self, *streams, **kwargs):
+        self.projs = []
+        for s in streams:
+            if isinstance(s, Stream):
+                self.projs.append(Proj(s))
+            elif isinstance(s, tuple):
+                for x in s:
+                    if isinstance(x, Stream):
+                        self.projs.append(Proj(x))
+                    elif isinstance(x, Proj):
+                        self.projs.append(x)
+            elif isinstance(s, Proj):
+                self.projs.append(s)
+            else:
+                raise FlareSyntaxError("Invalid projection type in `returning`")
+        self.default = kwargs.get('default', True)
+
+    def __call__(self):
+        return dict(projections={'explicit': [p() for p in self.projs], '...': self.default})
+
+
+
+class Proj(object):
+    def __init__(self, stream, proj=True):
+        if not isinstance(stream, Stream):
+            raise FlareSyntaxError("returning dict top-level keys must be streams.")
+        self.stream = stream
+        self.proj = proj
+
+    def __call__(self):
+        if self.proj is True:
+            return {'stream': self.stream(), 'projection': "default"}
+        elif self.proj is False:
+            return {'stream': self.stream(), 'projection': False}
+        else:
+            nd = {}
+            l = [(self.proj, nd)]
+            while l:
+                old, new = l.pop(0)
+                for key, val in old.items():
+                    if isinstance(val, EventPath):
+                        z = val()
+                        new[key] = [{'var': z['path'][1:]}]
+                    elif isinstance(val, float):
+                        new[key] = [{'lit': {'val': val, 'type': 'double'}}]
+                    elif isinstance(val, int):
+                        new[key] = [{'lit': {'val': val, 'type': 'int'}}]
+                    elif isinstance(val, str):
+                        new[key] = [{'lit': {'val': val, 'type': 'string'}}]
+                    elif isinstance(val, bool):
+                        new[key] = [{'lit': {'val': val, 'type': 'bool'}}]
+                    elif isinstance(val, dict):
+                        new[key] = {}
+                        l.append((val,new[key]))
+                    else:
+                        raise FlareSyntaxError("%s: %s is unsupported." % (key, val.__class__))
+            return {'stream': self.stream(), 'projection': nd}
+
 
 
 class InCircle(Flare):
@@ -173,13 +235,15 @@ class Switch(Flare):
             cds = []
 
             for s in self._query:
-                if len(s) > 1:
-                    cds.append({'type': '&&', 'args': [x() for x in s]})
-                elif len(s) == 1:
-                    cds.append(s[0]())
-                else:
-                    raise FlareSyntaxError(
-                        "Switches must have non-empty conditions")
+                if len(s) < 1:
+                    raise FlareSyntaxError("Switches must have non-empty conditions")
+                expr = s[-1]()
+                for x in s[-2::-1]:
+                    expr = {
+                        'expr': '&&',
+                        'args': [x(), expr]
+                    }
+                cds.append(expr)
 
             return {'type': 'switch', 'conds': cds, 'stream': self._stream()}
 
@@ -277,7 +341,7 @@ class Select(Flare):
             s = {}
 
         if len(self._query) == 0:
-            s['select'] = {"expr": "true"}
+            s['select'] = {"expr": True}
         elif len(self._query) == 1:
             s['select'] = self._query[0]()
         else:
@@ -364,6 +428,7 @@ class Cond(Flare):
         """
         val = self.val
         op = self.op
+        tz = None
         if isinstance(self.val, float):
             vt = 'double'
         elif isinstance(self.val, bool):
@@ -385,6 +450,10 @@ class Cond(Flare):
         elif isinstance(self.val, datetime):
             vt = "datetime"
             val = iso8601(self.val)
+            try:
+                tz = self.val.tzinfo.zone
+            except:
+                pass
         else:
             vt = 'string'
 
@@ -392,6 +461,8 @@ class Cond(Flare):
         if self.path.stream:
             d['type'] = 'span'
         if stream:
+            stream = copy(stream)
+            stream.tz = tz
             d.update(self.path(stream))
         else:
             d.update(self.path())
@@ -410,7 +481,7 @@ class Stream(object):
     used when writing queries, access specific API end points, and manipulating
     result sets.
     """
-    def __init__(self, name, meta, info, *filters):
+    def __init__(self, name, meta, info, tz, *filters):
         """Initialize a stream object.
 
         Arguments:
@@ -427,6 +498,16 @@ class Stream(object):
         self._meta = meta
         self._info = info
         self._filters = filters
+        self.tz = tz
+
+    def __pos__(self):
+        return Proj(self, True)
+
+    def __neg__(self):
+        return Proj(self, False)
+
+    def __mod__(self, pdict):
+        return Proj(self, pdict)
 
     def __eq__(self, other):
         """Define the `==` operator for streams.
@@ -514,15 +595,22 @@ class Stream(object):
         """
         if sw is None:
             b = {'name': self._name}
+            if self.tz:
+                b['timezone'] = self.tz
             if self._filters:
-                if len(self._filters) > 1:
-                    b['filter'] = {
-                        'type': '&&',
-                        'args': [x() for x in self._filters]
+                s = self._filters
+                expr = s[-1]()
+                if 'type' in expr:
+                    del expr['type']
+                for x in s[-2::-1]:
+                    y = x()
+                    if 'type' in y:
+                        del y['type']
+                    expr = {
+                        'expr': '&&',
+                        'args': [y, expr]
                     }
-                elif len(self._filters) == 1:
-                    b['filter'] = self._filters[0]()
-                    del b['filter']['type']
+                b['filter'] = expr
             return b
         else:
             try:
@@ -860,7 +948,19 @@ class Or(Flare):
 
     def __call__(self):
         """Generate an AST representation of the Or."""
-        return {'expr': '||', 'args': [q() for q in self.query]}
+        if len(self.query) == 0:
+            raise FlareSynxtaxError('Not enough arguments in Or')
+        elif len(self.query) == 1:
+            return self.query[0]()
+        else:
+            d = {'expr': '||', 'args': [self.query[0](), self.query[-1]()]}
+            for q in self.query[-2:0:-1]:
+                d['args'][1] = {
+                    'expr': '||',
+                    'args': [q(), d['args'][1]]
+                }
+            return d
+
 
     def __str__(self):
         """Generate a string representation of the Or."""
@@ -1079,7 +1179,14 @@ class Span(Flare):
                 d.update(self.query[0]())
         else:
             d['expr'] = '&&'
-            d['args'] = [q() for q in self.query]
+            d['args'] = [self.query[0](), self.query[-1]()]
+            for q in self.query[-2:0:-1]:
+                d['args'][1] = {
+                    'expr': '&&',
+                    'args': [q(), d['args'][1]]
+                }
+
+
         return d
 
 
@@ -1211,7 +1318,8 @@ class Delta(Flare):
 
 def stream(name, *args, **kwargs):
     """Define a stream, possibly with a list of filter arguments."""
-    return Stream(name, kwargs.get('meta', {}), kwargs.get('info', {}), *args)
+    tz = kwargs.get('tz')
+    return Stream(name, kwargs.get('meta', {}), kwargs.get('info', {}), tz, *args)
 
 
 def merge(s1, s2):
@@ -1303,44 +1411,47 @@ def typecheck_kwargs(valid_types_dict, input_kwargs):
             typecheck(valid_types_dict[k], k, v)
 
 
-def project(stream, proj):
-    if not isinstance(stream, Stream):
-        raise FlareSyntaxError("returning dict top-level keys must be streams.")
-    if proj is True:
-        return {'stream': stream(), 'projection': "default"}
-    elif proj is False:
-        return {'stream': stream(), 'projection': {}}
-    else:
-        nd = {}
-        l = [(proj, nd)]
-        while l:
-            old, new = l.pop(0)
-            for key, val in old.items():
-                if isinstance(val, EventPath):
-                    z = val()
-                    new[key] = [{'var': z['path'][1:]}]
-                elif isinstance(val, float):
-                    new[key] = [{'lit': {'val': val, 'type': 'double'}}]
-                elif isinstance(val, int):
-                    new[key] = [{'lit': {'val': val, 'type': 'int'}}]
-                elif isinstance(val, str):
-                    new[key] = [{'lit': {'val': val, 'type': 'string'}}]
-                elif isinstance(val, bool):
-                    new[key] = [{'lit': {'val': val, 'type': 'bool'}}]
-                elif isinstance(val, dict):
-                    new[key] = {}
-                    l.append((val,new[key]))
+
+class Query(Flare):
+    def __init__(self, *statements):
+        self.statements = statements
+
+    def __call__(self):
+        """Generate an Abstract Syntax Tree for a given query"""
+        q, r = None, None
+        for s in self.statements:
+            if isinstance(s, Select):
+                if q is None:
+                    q = s()
                 else:
-                    raise FlareSyntaxError("%s: %s is unsupported." % (key, val.__class__))
-        return {'stream': stream(), 'projection': nd}
+                    raise FlareSyntaxError("Only one `select` statement may be present in a query")
+            elif isinstance(s, Span):
+                if q is None:
+                    z = Select()
+                    z._query = [s]
+                    q = z()
+                else:
+                    raise FlareSyntaxError("Only one `select` statement may be present in a query")
+            elif isinstance(s, Returning):
+                if r is None:
+                    r = s()
+                else:
+                    raise FlareSyntaxError("Only one `returning` statement may be present in a query")
+            else:
+                raise FlareSyntaxError("Statement must be either `returning` or `select`")
 
-def ast_dict(query, returning=None):
-    """Generate an Abstract Syntax Tree for a given query"""
-    q = query()
-    if returning:
-        q['projections'] = {'explicit': [project(s, p) for s, p in returning.items()]}
-    return q
+        if q is None:
+            q = Select()()
+        if r is None:
+            r = {}
 
-def ast(query):
+        q.update(r)
+        return q
+
+# Needed for testing
+def ast_dict(*statements):
+    return Query(*statements)()
+
+def ast(*statements):
     """Print the query as an Abstract Syntax Tree JSON string"""
-    return json.dumps(ast_dict(query), indent=4)
+    return json.dumps(ast_dict(*statements), indent=4)

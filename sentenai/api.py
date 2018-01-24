@@ -1,5 +1,7 @@
+from __future__ import print_function
 import json
-import re
+import pytz
+import re, sys, time
 import requests
 
 import numpy as np
@@ -7,13 +9,14 @@ import pandas as pd
 
 from pandas.io.json import json_normalize
 from datetime import timedelta
-from multiprocessing.pool import ThreadPool
 from functools import partial
+from multiprocessing.pool import ThreadPool
+from threading import Lock
 
 from sentenai.exceptions import *
 from sentenai.exceptions import handle
 from sentenai.utils import *
-from sentenai.flare import EventPath, Stream, stream, project, ast_dict, delta, Delta, Select
+from sentenai.flare import EventPath, Stream, stream, delta, Delta, Query
 
 if not PY3:
     import virtualtime
@@ -33,49 +36,95 @@ class Uploader(object):
         self.client = client
         self.iterator = iterator
         self.pool = ThreadPool(processes)
+        self.succeeded = 0
+        self.failed = 0
+        self.lock = Lock()
 
-    def process(self, data):
-        def waits():
-            yield 0
-            wl = (0,1)
-            while True:
-                wl = (wl[-1], sum(wl))
-                yield wl[-1]
+    def start(self, progress=False):
+        def process(data):
+            def waits():
+                yield 0
+                wl = (0,1)
+                while True:
+                    wl = (wl[-1], sum(wl))
+                    yield wl[-1]
 
-        event = self.validate(data)
-        if isinstance(tuple, event):
-            return event
+            event = self.validate(data)
+            if isinstance(event, tuple):
+                return event
 
-        wait = waits()
-        while event:
-            try:
-                self.client.put(**event)
-            except AuthenticationError:
-                raise
-            except APIError as e:
-                if e.response.status_code == 400:
-                    # probably bad JSON
-                    return data
-                else:
-                    time.sleep(next(wait))
+            wait = waits()
+            while event:
+                try:
+                    self.client.put(**event)
+                    with self.lock:
+                        self.succeeded += 1
+                    return None
+                except AuthenticationError:
+                    raise
+                except Exception as e:
+                    w = next(wait)
+                    if w < 15: # 15 second wait limit
+                        time.sleep(next(wait))
+                    else:
+                        with self.lock:
+                            self.failed += 1
+                        return (event, e)
+                    """
+                    if e.response.status_code == 400:
+                        # probably bad JSON
+                        return data
+                    else:
+                        time.sleep(next(wait))
+                    """
+        if progress:
+            events = list(self.iterator)
+            total  = len(events)
+            def bar():
+                sys.stderr.write("\r" * 60)
+                sc = int(round(50 * self.succeeded / float(total)))
+                fc = int(round(50 * self.failed    / float(total)))
+                pd = (self.failed + self.succeeded) / float(total) * 100.
+                sys.stderr.write(" [\033[92m{0}\033[91m{1}\033[0m{2}] {3:>6.2f}%   ".format( "#" * sc, "#" * fc, " " * (50 - sc - fc), pd))
+                sys.stderr.flush()
+
+            t0 = datetime.utcnow()
+            data = self.pool.map_async(process, events)
+            #sys.stderr.write("\n " + "-" * 62 + " \n")
+            sys.stderr.write("\n {:<60} \n".format("Uploading {} objects:".format(total)))
+            while not data.ready():
+                bar()
+                time.sleep(.1)
             else:
-                return
-
-    def start(self):
-        data = self.pool.map(process, self.iterator)
-        return { 'saved': len(data), 'failed': filter(data) }
+                bar()
+            t1 = datetime.utcnow()
+            sys.stderr.write("\n {:<60} ".format("Time elapsed: {}".format(t1 - t0)))
+            sys.stderr.write("\n {:<60} ".format("Mean Obj/s: {:.1f}".format(float(total)/(t1 - t0).total_seconds())))
+            sys.stderr.write("\n {:<60} \n\n".format("Failures: {}".format(self.failed)))
+            #sys.stderr.write("\n " + "-" * 62 + " \n\n")
+            sys.stderr.flush()
+            #data.wait()
+            data = data.get()
+        else:
+            data = self.pool.map(process, events)
+        return { 'saved': len(data), 'failed': filter(None, data) }
 
 
     def validate(self, data):
         ts = data.get('ts')
         try:
             if not ts.tzinfo:
-                ts = pytz.localize(ts)
+                ts = pytz.utc.localize(ts)
         except:
             return (data, "invalid timestamp")
 
-        sid = data.get('id')
-        if sid: sid = str(sid)
+        sid = data.get('stream')
+        if isinstance(sid, Stream):
+            strm = sid
+        elif sid:
+            strm = stream(str(sid))
+        else:
+            return (data, "missing stream")
 
         try:
             evt = data['event']
@@ -84,7 +133,7 @@ class Uploader(object):
         except Exception:
             return (data, "invalid event data")
         else:
-            return {"stream": stream(sid), "timestamp": ts, "id": sid}
+            return {"stream": strm, "timestamp": ts, "id": data.get('id'), "event": evt}
 
 
 class Sentenai(object):
@@ -102,18 +151,44 @@ class Sentenai(object):
         self.session = requests.Session()
         self.session.headers.update({ 'auth-key': auth_key })
 
+
+    def upload(self, iterable, processes=4, progress=False):
+        """Takes a list of events and creates an instance of a Bulk uploader.
+
+        Arguments:
+            iterable -- an iterable object or list of events with each
+                        event in this format:
+                { "stream": Stream("foo) or "foo",
+                  "id": "my-unique-id" (optional),
+                  "ts": "2000-10-10T00:00:00Z",
+                  "event": {<<event body>>}
+                }
+            processes -- number of processes to use. Too many processes might
+                         cause a slowdown in upload speed.
+
+        The Uploader object returned needs to be triggered with its `.start()`
+        method.
+
+        """
+        ul = Uploader(self, iterable, processes)
+        return ul.start(progress)
+
+
     def __str__(self):
         """Return a string representation of the object."""
         return repr(self)
+
 
     def __repr__(self):
         """Return an unambiguous representation of the object."""
         return "Sentenai(auth_key='{}', server='{}')".format(
             self.auth_key, self.host)
 
+
     def debug(self, protocol="http", host="localhost", port=3000):
         self.host = protocol + "://" + host + ":" + str(port)
         return self
+
 
     def delete(self, stream, eid):
         """Delete event from a stream by its unique id.
@@ -296,35 +371,15 @@ class Sentenai(object):
         status_codes(resp)
         return [json.loads(line) for line in resp.text.splitlines()]
 
-    def query(self, query=None, returning=None):
+    def query(self, *statements, **kwargs):
         """Execute a flare query.
 
         Arguments:
-           query     -- A query object created via the `select` function.
+           *statements -- Includes query objects created via the `select`
+                          function and projections created via `returning`.
            limit     -- A limit to the number of result spans returned.
-           returning -- An optional dictionary object mapping streams to
-                        projections. Each projection is a JSON-serializable
-                        dictionary where each value is either a literal
-                        (int, bool, float, str) or an EventPath `V.foo`
-                        that corresponds to an existing path within the
-                        stream's events.
-                        example returning dictionary:
-                        >>> bos = stream("weather")
-                        >>> returning = {
-                                bos : {
-                                    'high': V.temperatureMax,
-                                    'low': V.temperatureMin,
-                                    'ccc': {
-                                        'foo': 534.2,
-                                        'bar': "hello, world!"
-                                    }
-                                }
-                            }
         """
-        if isinstance(returning, Stream):
-            returning = {returning: True}
-        return Cursor(self, query or Select(), returning)
-
+        return Cursor(self, Query(*statements), limit=kwargs.get('limit', None))
 
     def fields(self, stream):
         """Get a list of field names for a given stream
@@ -397,16 +452,15 @@ class Sentenai(object):
 
 
 class Cursor(object):
-    def __init__(self, client, query, returning=None, limit=None):
+    def __init__(self, client, query, limit=None):
         self.client = client
         self.query = query
-        self.returning = returning
         self._limit = limit
         self.headers = {'content-type': 'application/json', 'auth-key': client.auth_key}
 
         url = '{0}/query'.format(client.host)
 
-        r = handle(requests.post(url, json=ast_dict(query, returning), headers=self.headers))
+        r = handle(requests.post(url, json=self.query(), headers=self.headers))
         self.query_id = r.headers['location']
         self._pool = None
 
@@ -498,6 +552,8 @@ class Cursor(object):
         finally:
             pool.close()
 
+    def dataframe(self, *args, **kwargs):
+        return self.dataset().dataframe(*args, **kwargs)
 
     def spans(self, refresh=False):
         """Get list of spans of time when query conditions are true."""
@@ -519,7 +575,7 @@ class Cursor(object):
                 spans.extend(r['spans'])
 
                 cid = r.get('cursor')
-                if self._limit and spans >= self._limit:
+                if self._limit and len(spans) >= self._limit:
                     break
             self._spans = spans
         sps = []
@@ -605,9 +661,17 @@ class Cursor(object):
                                   for k in fr}
 
 
+                cols = []
                 for s in fr.keys():
                     fr[s] = fr[s].set_index(keys=['.ts'])
-                    fr[s].rename(columns={k: s + ":" + k for k in fr[s].columns}, inplace=True)
+                    sm = json.loads(s)
+                    for col in fr[s].columns:
+                        qualname = ":".join([sm['name'], col])
+                        if qualname in cols:
+                            raise Exception("overlapping column names: {}".format(col))
+                        else:
+                            cols.append(qualname)
+                    fr[s].rename(columns={k: sm['name'] + ":" + k for k in fr[s].columns}, inplace=True)
 
                 if len(fr.keys()) > 1:
                     to_join = list(fr.values())
@@ -673,9 +737,18 @@ class Cursor(object):
                 fts = max(fr[k]['.ts'][0] for k in fr)
                 lts = min(fr[k]['.ts'][-1] for k in fr) + timedelta(seconds=1)
 
+
+                cols = []
                 for s in fr.keys():
                     fr[s] = fr[s].set_index(keys=['.ts'])
-                    fr[s].rename(columns={k: s + ":" + k for k in fr[s].columns}, inplace=True)
+                    sm = json.loads(s)
+                    for col in fr[s].columns:
+                        qualname = ":".join([sm['name'], col])
+                        if qualname in cols:
+                            raise Exception("overlapping column names: {}".format(col))
+                        else:
+                            cols.append(qualname)
+                    fr[s].rename(columns={k: sm['name'] + ":" + k for k in fr[s].columns}, inplace=True)
 
                 if len(fr.keys()) > 1:
                     to_join = list(fr.values())
@@ -690,7 +763,14 @@ class Cursor(object):
 
         return FrameGroup(iterator)
 
+class ResultSpan(object):
+    def __init__(self, cursor, start=None, end=None):
+        self.cursor = cursor
+        self.start = start
+        self.end = end
 
+    def __repr__(self):
+        return "ResultSpan(start={}, end={}, cursor={})".format(self.start, self.end, self.cursor)
 
 class FrameGroup(object):
     def __init__(self, iterator, inverted=False):
@@ -711,6 +791,7 @@ class FrameGroup(object):
         found result.
         """
         drop_prefixes = kwargs.get('drop_stream_names', False)
+
         def cname(stream, path):
             return "{}:{}".format(stream['name'], ".".join(path[1:]))
 
@@ -784,10 +865,9 @@ def df(t0, data):
         events = []
         for event in s['events']:
             evt = event['event']
-            evt['.id'] = event['id']
             evt['.ts'] = cts(event['ts'])
             events.append(evt)
-        dfs[s['stream']] = json_normalize(events)
+        dfs[json.dumps(s['stream'], sort_keys=True)] = json_normalize(events)
     return dfs
 
 def build_url(host, stream, eid=None):

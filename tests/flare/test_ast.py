@@ -24,38 +24,40 @@ def test_basic_select_span():
 def test_any_of_comparisons():
     s = stream("moose")
     real = ast_dict(
-        any_of(
+        select().span(any_of(
             span(s.x < 0),
             span(s.x >= 3.141592653589793),
             span(s.b != False)
-        )
+        ))
     )
 
     expected = {
-        "type": "any",
-        "conds": [
-            {
-                "stream": { "name": "moose" },
-                "arg": { "type": "double", "val": 0 },
-                "path": ( "event", "x" ),
-                "type": "span",
-                "op": "<"
-            },
-            {
-                "stream": { "name": "moose" },
-                "arg": { "type": "double", "val": 3.141592653589793 },
-                "path": ( "event", "x" ),
-                "type": "span",
-                "op": ">="
-            },
-            {
-                "stream": { "name": "moose" },
-                "arg": { "type": "bool", "val": False },
-                "path": ( "event", "b" ),
-                "type": "span",
-                "op": "!="
-            }
-        ]
+        "select": {
+            "type": "any",
+            "conds": [
+                {
+                    "stream": { "name": "moose" },
+                    "arg": { "type": "double", "val": 0 },
+                    "path": ( "event", "x" ),
+                    "type": "span",
+                    "op": "<"
+                },
+                {
+                    "stream": { "name": "moose" },
+                    "arg": { "type": "double", "val": 3.141592653589793 },
+                    "path": ( "event", "x" ),
+                    "type": "span",
+                    "op": ">="
+                },
+                {
+                    "stream": { "name": "moose" },
+                    "arg": { "type": "bool", "val": False },
+                    "path": ( "event", "b" ),
+                    "type": "span",
+                    "op": "!="
+                }
+            ]
+        }
     }
 
     assert real == expected
@@ -297,6 +299,31 @@ def test_stream_filters():
     }
     assert real == expected
 
+def test_or_stream_filters():
+    s = stream('S', (V.season == "summer") | (V.season == "winter"))
+    real = ast_dict(
+        select().span(s.sunny == True)
+    )
+    expected = {
+        'select': {
+            'type': 'span',
+            'op': '==',
+            'arg': {'type': 'bool', 'val': True},
+            'path': ('event', 'sunny'),
+            'stream': {
+                'name': 'S',
+                'filter': {
+                    'expr': '||',
+                    'args': [
+                        {'op': '==', 'arg': {'type': 'string', 'val': 'summer'}, 'type': 'span', 'path': ('event', 'season')},
+                        {'op': '==', 'arg': {'type': 'string', 'val': 'winter'}, 'type': 'span', 'path': ('event', 'season')}
+                    ]
+                }
+            }
+        }
+    }
+    assert real == expected
+
 def test_switches():
     s = stream('S')
     real = ast_dict(
@@ -320,6 +347,48 @@ def test_switches():
                     "path": ( "event", "x" )
                 }
             ]
+        }
+    }
+    assert real == expected
+
+def test_returning():
+    s = stream('weather')
+    real = ast_dict(
+        returning(s % {
+            'value': V.maxTemp,
+            'other': {
+                'constant': 3
+            }
+        })
+    )
+    expected = {
+        'select': {'expr': True},
+        'projections': {
+            'explicit': [{
+                'stream': {'name': 'weather'},
+                'projection': {
+                    'value': [{'var': ('maxTemp',)}],
+                    'other': {'constant': [{'lit': {'val': 3, 'type': 'int'}}]}
+                }
+            }],
+            '...': True
+        }
+    }
+    assert real == expected
+
+def test_returning_excluding():
+    s = stream('weather')
+    real = ast_dict(
+        returning(-s)
+    )
+    expected = {
+        'select': {'expr': True},
+        'projections': {
+            'explicit': [{
+                'stream': {'name': 'weather'},
+                'projection': False
+            }],
+            '...': True
         }
     }
     assert real == expected

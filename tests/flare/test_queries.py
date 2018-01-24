@@ -34,11 +34,11 @@ def all_multitypes():
 
 def assume_parsable(query):
     assume(type(query) == Cond)
-    assume(type(ast(query)) == str)
+    assume(type(ast(span(query))) == str)
 
 def assert_parsable(query):
     assert (type(query) == Cond)
-    assert (type(ast(query)) == str)
+    assert (type(ast(span(query))) == str)
 
 
 def check_syntax_with_type(query, is_multitype=False):
