@@ -228,15 +228,14 @@ class Switch(Flare):
 
     def __call__(self):
         """Generate AST code from the switch."""
-        if len(self._query) <= 1:
-            raise FlareSyntaxError(
-                "Switches must contain at least two `event()`'s")
-        else:
-            cds = []
+        if not self._stream:
+            raise FlareSyntaxError("Switch must be bound to stream")
+        cds = []
 
-            for s in self._query:
-                if len(s) < 1:
-                    raise FlareSyntaxError("Switches must have non-empty conditions")
+        for s in self._query:
+            if len(s) < 1:
+                expr = {'expr': True}
+            else:
                 expr = s[-1]()
                 for x in s[-2::-1]:
                     expr = {
@@ -244,19 +243,24 @@ class Switch(Flare):
                         'args': [x(), expr]
                     }
                 cds.append(expr)
-
-            return {'type': 'switch', 'conds': cds, 'stream': self._stream()}
+        if len(cds) == 0:
+            cds = [{'expr': True}, {'expr': True}]
+        elif len(cds) == 1:
+            cds.insert(0, {'expr': True})
+        return {'type': 'switch', 'conds': cds, 'stream': self._stream()}
 
     def __str__(self):
         """Generate a string representation of the switch."""
-        if len(self._query) < 2:
-            raise FlareSyntaxError("Switches must have two conditions")
+        if len(self._query) == 0:
+            d = "true -> true"
+        elif len(self._query) == 1:
+            d = "true -> {}".format(" && ".join([str(x) if PY3 else str(x).decode('utf-8') for x in self._query[0]]) or "true")
         else:
-            d = " -> ".join(" && ".join([str(x) if PY3 else str(x).decode('utf-8') for x in q]) for q in self._query)  # NOQA
-            if self._stream:
-                return "{}:({})".format(str(self._stream), d)
-            else:
-                return "(" + d + ")"
+            d = " -> ".join(" && ".join([str(x) if PY3 else str(x).decode('utf-8') for x in q]) or "true" for q in self._query)  # NOQA
+        if self._stream:
+            return "{}:({})".format(str(self._stream), d)
+        else:
+            return "(" + d + ")"
 
 
 @py2str
@@ -792,6 +796,15 @@ class StreamPath(object):
             name -- a variable name to add to the path.
         """
         return StreamPath(self.__attrlist + (name,), self.__stream)
+
+    def __getitem__(self, name):
+        if name == "stream":
+            return self.__stream
+        elif name == "path":
+            return StreamPath(self.__attrlist)
+        else:
+            raise KeyError
+
 
     def _(self, name):
         """Generate a new stream path by chaining two paths together.
