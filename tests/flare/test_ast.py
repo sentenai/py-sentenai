@@ -351,6 +351,28 @@ def test_switches():
     }
     assert real == expected
 
+def test_unary_switch():
+    s = stream('S')
+    real = ast_dict(
+        select().span(s(event(V.x < 0)))
+    )
+    expected = {
+        "select": {
+            "type": "switch",
+            "stream": { "name": "S" },
+            "conds": [
+                {'expr': True},
+                {
+                    "op": "<",
+                    "arg": { "type": "double", "val": 0 },
+                    "type": "span",
+                    "path": ( "event", "x" )
+                }
+            ]
+        }
+    }
+    assert real == expected
+
 def test_returning():
     s = stream('weather')
     real = ast_dict(
