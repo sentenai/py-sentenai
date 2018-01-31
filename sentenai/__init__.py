@@ -10,7 +10,7 @@ from sentenai.utils import LEFT, RIGHT, CENTER, PY3
 
 __all__ = [
     'FlareSyntaxError', 'LEFT', 'CENTER', 'RIGHT', 'Sentenai', 'span',
-    'any_of', 'all_of', 'V', 'delta', 'event', 'returning', 'stream', 'select',
+    'any_of', 'all_of', 'V', 'delta', 'during', 'event', 'returning', 'stream', 'select',
     'ast', 'within_distance', 'inside_region', 'merge'
 ]
 
@@ -63,6 +63,9 @@ def any_of(*q):
     """Return events that match any specified conditions."""
     return Par("any", q)
 
+def during(*q):
+    """Return events that match any specified conditions."""
+    return Par("during", q)
 
 def all_of(*q):
     """Return events that match all specified conditions."""
