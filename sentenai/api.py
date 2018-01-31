@@ -391,6 +391,7 @@ class Sentenai(object):
         if isinstance(stream, Stream):
             url = "/".join([self.host, "streams", stream['name'], "fields"])
             resp = self.session.get(url)
+            status_codes(resp)
             return resp.json()
         else:
             raise SentenaiException("Must be called on stream")
@@ -409,6 +410,7 @@ class Sentenai(object):
         if isinstance(stream, Stream):
             url = "/".join([self.host, "streams", stream['name'], "values"])
             resp = self.session.get(url)
+            status_codes(resp)
             return resp.json()
         else:
             raise SentenaiException("Must be called on stream")
@@ -423,6 +425,7 @@ class Sentenai(object):
         if isinstance(stream, Stream):
             url = "/".join([self.host, "streams", stream['name'], "newest"])
             resp = self.session.get(url)
+            status_codes(resp)
             return {
                     "event": resp.json(),
                     "ts": cts(resp.headers['Timestamp']),
@@ -442,6 +445,7 @@ class Sentenai(object):
         if isinstance(stream, Stream):
             url = "/".join([self.host, "streams", stream['name'], "oldest"])
             resp = self.session.get(url)
+            status_codes(resp)
             return {
                     "event": resp.json(),
                     "ts": cts(resp.headers['Timestamp']),
