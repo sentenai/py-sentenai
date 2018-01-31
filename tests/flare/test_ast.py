@@ -390,3 +390,47 @@ def test_returning_excluding():
         }
     }
     assert real == expected
+
+def test_during():
+    s = stream('S')
+    real = ast_dict(
+        select().span(during(
+            s.foo == 'bar',
+            s.baz > 1.5
+        ))
+    )
+    expected = {
+        "select": {
+            "type": "during",
+            "conds": [{
+                "op": "==",
+                "arg": {
+                    "type": "string",
+                    "val": "bar"
+                },
+                "type": "span",
+                "path": (
+                    "event",
+                    "foo"
+                ),
+                "stream": {
+                    "name": "S"
+                }
+            }, {
+                "op": ">",
+                "arg": {
+                    "type": "double",
+                    "val": 1.5
+                },
+                "type": "span",
+                "path": (
+                    "event",
+                    "baz"
+                ),
+                "stream": {
+                    "name": "S"
+                }
+            }]
+        }
+    }
+    assert real == expected
