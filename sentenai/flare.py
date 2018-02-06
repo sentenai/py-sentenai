@@ -45,6 +45,65 @@ class Flare(object):
         return str(self)
 
 
+
+class Projection(Flare):
+    def __add__(self, other):
+        return ProjMath("+", self, other)
+
+    def __radd__(self, other):
+        return ProjMath("+", other, self)
+
+    def __sub__(self, other):
+        return ProjMath("-", self, other)
+
+    def __rsub__(self, other):
+        return ProjMath("-", other, self)
+
+    def __mul__(self, other):
+        return ProjMath("*", self, other)
+
+    def __rmul__(self, other):
+        return ProjMath("*", other, self)
+
+    def __div__(self, other):
+        return ProjMath("/", self, other)
+
+    def __rdiv__(self, other):
+        return ProjMath("/", other, self)
+
+    def __or__(self, other):
+        raise NotImplemented
+        return ProjMath("/", other, self)
+
+    def __ror__(self, other):
+        raise NotImplemented
+        return ProjMath("/", other, self)
+
+
+class ProjMath(Projection):
+    def __init__(self, op, p1, p2):
+        self.lhs = p1
+        self.rhs = p2
+        self.op = op
+
+    def __call__(self):
+
+        def convert(p):
+            if isinstance(p, float):
+                return {'lit': {'val': p, 'type': 'double'}}
+            elif isinstance(p, int):
+                return {'lit': {'val': p, 'type': 'int'}}
+            elif isinstance(p, EventPath):
+                return {'var': p()['path']}
+            elif isinstance(p, ProjMath):
+                return p()
+            else:
+                raise FlareSyntaxError("projection math with non-numeric types is unsupported.")
+            return {'stream': self.stream(), 'projection': nd}
+
+        return [{'op': self.op, 'lhs': convert(self.lhs), 'rhs': convert(self.rhs)}]
+
+
 class Returning(object):
     def __init__(self, *streams, **kwargs):
         self.projs = []
@@ -88,7 +147,9 @@ class Proj(object):
                 for key, val in old.items():
                     if isinstance(val, EventPath):
                         z = val()
-                        new[key] = [{'var': z['path'][1:]}]
+                        new[key] = [{'var': z['path']}]
+                    elif isinstance(val, ProjMath):
+                        new[key] = [val()]
                     elif isinstance(val, float):
                         new[key] = [{'lit': {'val': val, 'type': 'double'}}]
                     elif isinstance(val, int):
@@ -648,7 +709,7 @@ class Stream(object):
 
 
 @py2str
-class EventPath(object):
+class EventPath(Projection):
     """An event's attribute path.
 
     Used to reference variables within a single event. Combine with operators
@@ -766,7 +827,7 @@ class EventPath(object):
 
 
 @py2str
-class StreamPath(object):
+class StreamPath(Projection):
     """A stream's attribute path. Used to reference variables within events.
 
     Combine with operators like `==` and values to create condition objects.
@@ -1455,3 +1516,7 @@ def ast_dict(*statements):
 def ast(*statements):
     """Print the query as an Abstract Syntax Tree JSON string"""
     return json.dumps(ast_dict(*statements), indent=4)
+
+
+
+
