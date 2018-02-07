@@ -367,7 +367,7 @@ def test_returning():
             'explicit': [{
                 'stream': {'name': 'weather'},
                 'projection': {
-                    'value': [{'var': ('maxTemp',)}],
+                    'value': [{'var': ('event', 'maxTemp')}],
                     'other': {'constant': [{'lit': {'val': 3, 'type': 'int'}}]}
                 }
             }],
