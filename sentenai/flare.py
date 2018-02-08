@@ -101,7 +101,7 @@ class ProjMath(Projection):
                 raise FlareSyntaxError("projection math with non-numeric types is unsupported.")
             return {'stream': self.stream(), 'projection': nd}
 
-        return [{'op': self.op, 'lhs': convert(self.lhs), 'rhs': convert(self.rhs)}]
+        return {'op': self.op, 'lhs': convert(self.lhs), 'rhs': convert(self.rhs)}
 
 
 class Returning(object):
