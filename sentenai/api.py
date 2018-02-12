@@ -794,7 +794,7 @@ class FrameGroup(object):
         Return a generator of dataframes with one dataframe per
         found result.
         """
-        drop_prefixes = kwargs.get('drop_stream_names', False)
+        drop_prefixes = kwargs.get('drop_stream_names', True)
 
         def cname(stream, path):
             return "{}:{}".format(stream['name'], ".".join(path[1:]))
