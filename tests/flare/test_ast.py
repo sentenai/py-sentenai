@@ -315,8 +315,8 @@ def test_or_stream_filters():
                 'filter': {
                     'expr': '||',
                     'args': [
-                        {'op': '==', 'arg': {'type': 'string', 'val': 'summer'}, 'type': 'span', 'path': ('event', 'season')},
-                        {'op': '==', 'arg': {'type': 'string', 'val': 'winter'}, 'type': 'span', 'path': ('event', 'season')}
+                        {'op': '==', 'arg': {'type': 'string', 'val': 'summer'}, 'path': ('event', 'season')},
+                        {'op': '==', 'arg': {'type': 'string', 'val': 'winter'}, 'path': ('event', 'season')}
                     ]
                 }
             }
@@ -337,13 +337,11 @@ def test_switches():
                 {
                     "op": "<",
                     "arg": { "type": "double", "val": 0 },
-                    "type": "span",
                     "path": ( "event", "x" )
                 },
                 {
                     "op": ">",
                     "arg": { "type": "double", "val": 0 },
-                    "type": "span",
                     "path": ( "event", "x" )
                 }
             ]

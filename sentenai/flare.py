@@ -519,7 +519,7 @@ class Cond(Flare):
             vt = 'string'
 
         d = {'op': op, 'arg': {'type': vt, 'val': val}}
-        if self.path.stream:
+        if isinstance(self.path, StreamPath):
             d['type'] = 'span'
         if stream:
             stream = copy(stream)
