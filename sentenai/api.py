@@ -107,7 +107,7 @@ class Uploader(object):
             data = data.get()
         else:
             data = self.pool.map(process, self.iterator)
-        return { 'saved': len(data), 'failed': filter(None, data) }
+        return { 'saved': self.succeeded, 'failed': list(filter(None, data)) }
 
 
     def validate(self, data):
