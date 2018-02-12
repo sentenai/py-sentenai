@@ -934,7 +934,7 @@ class StreamPath(Projection):
     def __str__(self):
         """Generate a string representation of the StreamPath."""
         attrs = [x if PY3 else x.decode('utf-8') for x in self.__attrlist]
-        foo = ".".join(attrs)
+        foo = ".".join(["'{}'".format(attr) if '.' in attr else attr for attr in attrs])
         return '{stream}:{attrs}'.format(stream=str(self.__stream), attrs=foo)
 
     def __call__(self):
