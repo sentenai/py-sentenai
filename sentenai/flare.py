@@ -1187,7 +1187,7 @@ class Span(Flare):
         elif self._max_width and not self._min_width:
             cs += " for at most {}".format(self._max_width)
         elif self._max_width and self._min_width:
-            cs += " for at least {} and at most {}".format(
+            cs += " for {} .. {}".format(
                 self._min_width, self._max_width)
         return cs
 
