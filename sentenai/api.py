@@ -106,7 +106,7 @@ class Uploader(object):
             #data.wait()
             data = data.get()
         else:
-            data = self.pool.map(process, list(self.iterator))
+            data = self.pool.map(process, self.iterator)
         return { 'saved': len(data), 'failed': filter(None, data) }
 
 
