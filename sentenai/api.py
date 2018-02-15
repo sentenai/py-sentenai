@@ -16,7 +16,7 @@ from threading import Lock
 from sentenai.exceptions import *
 from sentenai.exceptions import handle
 from sentenai.utils import *
-from sentenai.flare import EventPath, Stream, stream, delta, Delta, Query
+from sentenai.flare import EventPath, Stream, Returning, stream, delta, Delta, Query
 
 if not PY3:
     import virtualtime
@@ -453,6 +453,11 @@ class Sentenai(object):
             }
         else:
             raise SentenaiException("Must be called on stream")
+
+    def uniques(self, streamPath):
+        return self.query(Returning(streamPath['stream'] % {
+            'field': streamPath['path']
+        })).dataframe(drop_stream_names=True).field.unique()
 
 
 class Cursor(object):
