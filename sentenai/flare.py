@@ -843,6 +843,14 @@ class StreamPath(Projection):
         self.__stream = stream
         self.__attrlist = tuple(namet)
 
+    def __getitem__(self, name):
+        if name == "stream":
+            return self.__stream
+        elif name == "path":
+            return EventPath(self.__attrlist)
+        else:
+            raise KeyError
+
     def __getattr__(self, name):
         """Generate a new stream path by chaining two paths together.
 
