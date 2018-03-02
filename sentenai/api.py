@@ -731,7 +731,7 @@ class Cursor(object):
             else:
                 spans = []
             for sp in spans:
-                start, end, cur = sp.get('start', DTMIN), sp.get('end', DTMAX), sp['cursor']
+                start, end, cur = sp.get('start') or DTMIN, sp.get('end') or DTMAX, sp['cursor']
                 data = self._slice(cur, start, end + horizon)
                 fr = df(start, data)
                 fr = {k: fr[k].set_index(keys=['.ts'])
