@@ -697,6 +697,8 @@ class Cursor(object):
             horizon = horizon.timedelta
         if isinstance(slide, Delta):
             slide = slide.timedelta
+        if isinstance(freq, Delta):
+            freq = freq.timedelta
 
         def slides(start, end):
             cslide = timedelta(0)
