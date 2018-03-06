@@ -391,7 +391,7 @@ class Sentenai(object):
         else:
             raise SentenaiException("Must be called on stream")
 
-    def values(self, stream):
+    def values(self, stream, timestamp=None):
         """Get all the latest values for a given stream.
 
         If the events in the stream don't share all their fields, this will
@@ -404,7 +404,10 @@ class Sentenai(object):
         """
         if isinstance(stream, Stream):
             url = "/".join([self.host, "streams", stream['name'], "values"])
-            resp = self.session.get(url)
+            headers = {}
+            if timestamp:
+                headers['timestamp'] = iso8601(timestamp)
+            resp = self.session.get(url, headers=headers)
             status_codes(resp)
             return resp.json()
         else:
