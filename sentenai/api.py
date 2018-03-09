@@ -657,7 +657,7 @@ class Cursor(object):
             pool = self.pool
             for start, data in pool.map(lambda s: (s[1], self._slice(*s)), [win(**sp) for sp in spans]):
                 fr = df(start, data)
-                for s in fr.keys():
+                for s in list(fr.keys()):
                     if fr[s].empty:
                         del fr[s]
 
