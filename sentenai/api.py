@@ -711,19 +711,6 @@ class Cursor(object):
                 yield (start + cslide, start + cslide + lookback + horizon)
                 cslide += slide
 
-        def shape(inverted):
-            self.spans()
-            if not inverted:
-                spans = self._spans
-            elif self._spans:
-                spans = [{'cursor': self._spans[0]['cursor'], 'start': "1900-01-01T00:00:00Z", 'end': self._spans[0]['start']}]
-                for t0, t1 in zip(self._spans, self._spans[1:]):
-                    spans.append({'cursor': t0['cursor'], 'start': t0['end'], 'end': t1['start']})
-            rows = 0
-            for sp in spans:
-                rows += len([x for x in slides(sp['start'], sp['end'])])
-            return (rows, len(pd.date_range(t0, t1, freq=freq, closed='right')))
-
         def iterator(inverted):
             self.spans()
             if not inverted:
