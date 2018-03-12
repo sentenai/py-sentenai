@@ -405,9 +405,11 @@ class Sentenai(object):
         if isinstance(stream, Stream):
             url = "/".join([self.host, "streams", stream['name'], "values"])
             headers = {}
+            params = {}
             if timestamp:
                 headers['timestamp'] = iso8601(timestamp)
-            resp = self.session.get(url, headers=headers)
+                params['at'] = iso8601(timestamp)
+            resp = self.session.get(url, params=params, headers=headers)
             status_codes(resp)
             return resp.json()
         else:
