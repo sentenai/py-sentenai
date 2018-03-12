@@ -628,6 +628,8 @@ class Cursor(object):
 
         if isinstance(window, Delta):
             window = window.timedelta
+        if isinstance(freq, Delta):
+            freq = freq.timedelta
 
         def win(cursor, start=DTMIN, end=DTMAX):
             start = start or DTMIN
