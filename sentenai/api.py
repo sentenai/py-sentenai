@@ -730,7 +730,7 @@ class Cursor(object):
                 spans = self._spans
             elif self._spans:
                 if 'start' in self._spans[0]:
-                    spans = [{'cursor': self._spans[0]['cursor'], 'start': "1900-01-01T00:00:00Z", 'end': self._spans[0]['start']}]
+                    spans = [{'cursor': self._spans[0]['cursor'], 'start': DTMIN, 'end': self._spans[0]['start']}]
                 else:
                     spans = []
                 for t0, t1 in zip(self._spans, self._spans[1:]):
