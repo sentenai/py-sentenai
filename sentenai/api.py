@@ -560,7 +560,8 @@ class Cursor(object):
             pool.close()
 
     def dataframe(self, *args, **kwargs):
-        return self.dataset().dataframe(*args, **kwargs)
+        dataset_kwargs = {k: kwargs[k] for k in ['window', 'align', 'freq'] if k in kwargs}
+        return self.dataset(**dataset_kwargs).dataframe(*args, **kwargs)
 
     def spans(self, refresh=False):
         """Get list of spans of time when query conditions are true."""
