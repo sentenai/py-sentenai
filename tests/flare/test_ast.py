@@ -363,7 +363,6 @@ def test_unary_switch():
                 {
                     "op": "<",
                     "arg": { "type": "double", "val": 0 },
-                    "type": "span",
                     "path": ( "event", "x" )
                 }
             ]
