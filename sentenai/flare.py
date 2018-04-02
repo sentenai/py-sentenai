@@ -499,7 +499,7 @@ class Cond(Flare):
         elif isinstance(self.val, bool):
             vt = 'bool'
         elif isinstance(self.val, int):
-            vt = 'double'
+            vt = 'int'
         elif isinstance(self.val, InPolygon):
             vt = "polygon"
             op = "in"
