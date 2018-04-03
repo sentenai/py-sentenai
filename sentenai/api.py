@@ -487,15 +487,13 @@ class Cursor(object):
             return self._pool
 
     def _slice(self, cursor, start, end, max_retries=3):
-        """Slice a set of spans and events.
-
-        TODO: Add descriptions
+        """Slice a set of events for a span defined by start and end.
 
         Arguments:
-            cursor      --
-            start       --
-            end         --
-            max_retries --
+            cursor      -- cursor ID specifying which query results to fetch
+            start       -- start of span
+            end         -- end of span
+            max_retries -- number of request attempts in case of failure
         """
         streams = {}
         retries = 0
@@ -699,6 +697,34 @@ class Cursor(object):
 
 
     def sliding(self, lookback, horizon, slide, freq):
+        """
+        Returns a FrameGroup by sliding a window across query results.
+
+        Arguments:
+            All arguments should be either a `timedelta` or `delta`.
+            lookback -- width of sliding window
+            horizon  -- how far past the window to look into the future
+            slide    -- width of a step when sliding the window
+            freq     -- resampling rate for final output
+
+        Here's an example, using arbitrary but consistent units of time. Each
+        character inside the square brackets represents one unit of time.
+
+        With a lookback of 4, a horizon of 2, and a slide of 2, we'll slide a
+        window across our query results.
+
+        [ QUERY RESULTS  ]
+
+        [      ]
+          [      ]
+            [      ]
+              [      ]
+                [      ]
+                  [      ]
+                    [      ]
+
+        The return value is a FrameGroup representing these seven frames.
+        """
         if isinstance(lookback, Delta):
             lookback = lookback.timedelta
         if isinstance(horizon, Delta):
@@ -790,6 +816,11 @@ class FrameGroup(object):
         """
         Return a generator of dataframes with one dataframe per
         found result.
+
+        Arguments:
+            *columns -- columns from query results to include in the dataframes
+            drop_stream_names -- defaults to True. If False, column names are
+               prefix with stream identifier
         """
         drop_prefixes = kwargs.get('drop_stream_names', True)
 
@@ -806,6 +837,11 @@ class FrameGroup(object):
                 yield df[[cname(**p()) for p in columns]] if columns else df
 
     def tensor(self, *columns, **kwargs):
+        """
+        Return query results as a tensor for ease of use in learning models.
+
+        All arguments are forwarded through to `dataframes`.
+        """
         return np.stack(self.dataframes(*columns, **kwargs))
 
     def dataframe(self, *columns, **kwargs):
