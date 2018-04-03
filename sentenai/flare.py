@@ -16,7 +16,7 @@ except:
 
 
 def delta(seconds=0, minutes=0, hours=0, days=0, weeks=0, months=0, years=0):
-    """A convience function for creating Delta objects.
+    """A convenience function for creating Delta objects.
 
     Deltas define specific lengths of time which can be used as part of
     conditions in a query.
@@ -971,7 +971,7 @@ class Par(Flare):
     Par objects are used to define operators that act on sets of conditions.
     For example, we use a par object to define the ANY operator which returns
     True if any one of a set of conditions is true or the ALL operator which
-    returns True if and only iff all conditionsin a set are true.
+    returns True if and only iff all conditions in a set are true.
 
     High level functions `all_of()` and `any_of()` are used to generate Par
     objects for these cases.
