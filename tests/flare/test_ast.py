@@ -37,7 +37,7 @@ def test_any_of_comparisons():
             "conds": [
                 {
                     "stream": { "name": "moose" },
-                    "arg": { "type": "double", "val": 0 },
+                    "arg": { "type": "int", "val": 0 },
                     "path": ( "event", "x" ),
                     "type": "span",
                     "op": "<"
@@ -249,7 +249,7 @@ def test_nested_relative_spans():
                     "op":"<",
                     "stream":{"name":"S"},
                     "path":("event","x"),
-                    "arg":{"type":"double", "val":0}
+                    "arg":{"type":"int", "val":0}
                 },
                 {
                     "type": "serial",
@@ -259,14 +259,14 @@ def test_nested_relative_spans():
                             "op":"==",
                             "stream":{"name":"S"},
                             "path":("event","x"),
-                            "arg":{"type":"double", "val":0}
+                            "arg":{"type":"int", "val":0}
                         },
                         {
                             "type":"span",
                             "op":">",
                             "stream":{"name":"S"},
                             "path":("event","x"),
-                            "arg":{"type":"double", "val":0},
+                            "arg":{"type":"int", "val":0},
                             "within": {"seconds":1}
                         }
                     ],
@@ -288,7 +288,7 @@ def test_stream_filters():
             "args": [
               {"type": "span", "op": ">=",
                "stream": {"name": "S", "filter": {"op":"==", "path":("event","season"), "arg":{"type":"string","val":"summer"}}},
-               "path":("event","temperature"), "arg": {"type":"double", "val":77}
+               "path":("event","temperature"), "arg": {"type":"int", "val":77}
               },
               {"type": "span", "op": "==",
                "stream": {"name": "S", "filter": {"op":"==", "path":("event","season"), "arg":{"type":"string","val":"summer"}}},
@@ -336,12 +336,12 @@ def test_switches():
             "conds": [
                 {
                     "op": "<",
-                    "arg": { "type": "double", "val": 0 },
+                    "arg": { "type": "int", "val": 0 },
                     "path": ( "event", "x" )
                 },
                 {
                     "op": ">",
-                    "arg": { "type": "double", "val": 0 },
+                    "arg": { "type": "int", "val": 0 },
                     "path": ( "event", "x" )
                 }
             ]
@@ -362,7 +362,7 @@ def test_unary_switch():
                 {'expr': True},
                 {
                     "op": "<",
-                    "arg": { "type": "double", "val": 0 },
+                    "arg": { "type": "int", "val": 0 },
                     "path": ( "event", "x" )
                 }
             ]
