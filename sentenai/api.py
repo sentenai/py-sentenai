@@ -24,6 +24,11 @@ if not PY3:
 else:
     from queue import Queue
 
+if PY3:
+    string_types = str
+else:
+    string_types = basestring
+
 try:
     from urllib.parse import quote
 except:
@@ -113,6 +118,8 @@ class Uploader(object):
     def validate(self, data):
         ts = data.get('ts')
         try:
+            if isinstance(ts, string_types):
+                ts = cts(ts)
             if not ts.tzinfo:
                 ts = pytz.utc.localize(ts)
         except:
