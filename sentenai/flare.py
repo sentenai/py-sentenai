@@ -537,6 +537,9 @@ class Cond(Flare):
         """Define the `|` operator for conditions."""
         return Or(self, q)
 
+    def __and__(self, q):
+        return Span(self, q)
+
 
 @py2str
 class Stream(object):
