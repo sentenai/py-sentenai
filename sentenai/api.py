@@ -574,7 +574,11 @@ class Cursor(object):
                 if self._limit is None:
                     url = '{0}/query/{1}/spans'.format(self.client.host, cid)
                 else:
-                    url = '{0}/query/{1}/spans?limit={2}'.format(self.client.host, cid, self._limit)
+                    url = '{0}/query/{1}/spans?limit={2}'.format(
+                        self.client.host,
+                        cid,
+                        self._limit - len(spans)
+                    )
                 r = handle(self.client.session.get(url, headers=self.headers)).json()
 
                 for s in r['spans']:
