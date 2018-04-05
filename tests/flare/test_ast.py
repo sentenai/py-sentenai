@@ -195,6 +195,12 @@ def test_or():
     }
     assert real == expected
 
+def test_comma_matches_ampersand():
+    s = stream('s')
+    comma = ast_dict(select().span(s.x == True, s.y == True))
+    amp = ast_dict(select().span((s.x == True) & (s.y == True)))
+    assert comma == amp
+
 def test_relative_span():
     s = stream('s')
     t = stream('t')
