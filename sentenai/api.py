@@ -663,6 +663,9 @@ class Cursor(object):
             else:
                 spans = []
 
+            if len(spans) == 0:
+                return pd.DataFrame()
+
             pool = self.pool
             for start, data in pool.map(lambda s: (s[1], self._slice(*s)), [win(**sp) for sp in spans]):
                 fr = df(start, data)
