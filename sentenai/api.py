@@ -668,7 +668,7 @@ class Cursor(object):
 
             pool = self.pool
             for start, data in pool.map(lambda s: (s[1], self._slice(*s)), [win(**sp) for sp in spans]):
-                fr = df(start, data)
+                fr = df(data)
                 for s in list(fr.keys()):
                     if fr[s].empty:
                         del fr[s]
@@ -737,7 +737,7 @@ class Cursor(object):
             for sp in spans:
                 start, end, cur = sp.get('start') or DTMIN, sp.get('end') or DTMAX, sp['cursor']
                 data = self._slice(cur, start, end + horizon)
-                fr = df(start, data)
+                fr = df(data)
                 fr = {k: fr[k].set_index(keys=['.ts'])
                               .resample(freq).ffill()
                               .reset_index()
@@ -867,7 +867,7 @@ class FrameGroup(object):
         return ds
 
 
-def df(t0, data):
+def df(data):
     dfs = {}
     for s in data['streams']:
         events = []
