@@ -528,9 +528,9 @@ class Cond(Flare):
         if stream:
             stream = copy(stream)
             stream.tz = tz
-            d.update(self.path(stream))
+            d.update({'path': ('event',) + self.path._attrlist, 'stream': self.path._stream()})
         else:
-            d.update(self.path())
+            d.update({'path': ('event',) + self.path._attrlist, 'stream': self.path._stream()})
         return d
 
     def __or__(self, q):
@@ -539,7 +539,7 @@ class Cond(Flare):
 
 
 @py2str
-class Stream(object):
+class Stream(Flare):
     """A stream of events.
 
     Stream objects reference streams of events stored in Sentenai. They are
@@ -610,25 +610,18 @@ class Stream(object):
                 self._name, self._filters)
 
     def __getitem__(self, key):
-        """Get attibutes of the stream object itself.
+        """Get a StreamPath for a stream.
 
-        >>> stream[key]
+        Used primarily to escape segments of paths that would be invalid
+        in the host language. For example, if a path segment contains `:`
 
-        This method does not get attributes of stream events. For that see
-        `this.__getattr__()`.
+        >>> s = stream("foo")
+        >>> s.bar["..."].baz.bat
 
         Arguments:
-            key -- the name of the attribut to get.
-                   Can be either 'name' or 'meta'
+            name -- The name of the variable to get.
         """
-        if key == "name":
-            return self._name
-        elif key == "meta":
-            return self._meta
-        elif key == "info":
-            return self._info
-        else:
-            raise KeyError
+        return StreamPath((key,), self)
 
     def __str__(self):
         """A string representation of the stream object."""
@@ -695,21 +688,11 @@ class Stream(object):
         Arguments:
             name -- The name of the variable to get
         """
-        return StreamPath((name,), self)
+        if not name.startswith('_'):
+            return StreamPath((name,), self)
+        else:
+            return self.__getattribute__(name)
 
-    def _(self, name):
-        """Get a StreamPath for a stream.
-
-        Used primarily to escape segments of paths that would be invalid
-        in the host language. For example, if a path segment contains `:`
-
-        >>> s = stream("foo")
-        >>> s.bar._("...").baz.bat
-
-        Arguments:
-            name -- The name of the variable to get.
-        """
-        return StreamPath((name,), self)
 
 
 @py2str
@@ -728,9 +711,9 @@ class EventPath(Projection):
                      ['foo', 'bar', 'baz'] becomes 'foo.bar.baz'
         """
         if not namet:
-            self.__attrlist = tuple()
+            self._attrlist = tuple()
         else:
-            self.__attrlist = tuple(namet)
+            self._attrlist = tuple(namet)
 
     def __getattr__(self, name):
         """Get an EventPath for an event.
@@ -742,7 +725,7 @@ class EventPath(Projection):
         Arguments:
             name -- the name of the variable to get.
         """
-        return EventPath(self.__attrlist + (name,))
+        return EventPath(self._attrlist + (name,))
 
     def _(self, name):
         """Get an EventPath for an event.
@@ -755,7 +738,7 @@ class EventPath(Projection):
         Arguments:
             name -- the name of the variable to get.
         """
-        return EventPath(self.__attrlist + (name,))
+        return EventPath(self._attrlist + (name,))
 
     def __eq__(self, val):
         """Create equality conditions for event variables.
@@ -772,7 +755,7 @@ class EventPath(Projection):
 
     def __iter__(self):
         """An iterator for event paths."""
-        return iter(self.__attrlist)
+        return iter(self._attrlist)
 
     def __ne__(self, val):
         """Create inequality conditions for event variable.
@@ -822,12 +805,8 @@ class EventPath(Projection):
 
     def __str__(self):
         """Generate a string representation of the EventPath."""
-        return '{}'.format(".".join(self.__attrlist))
+        return '{}'.format(".".join(self._attrlist))
 
-    def __call__(self):
-        """Generate an AST representation of the EventPath."""
-        d = {'path': ('event',) + self.__attrlist}
-        return d
 
 
 @py2str
@@ -844,16 +823,8 @@ class StreamPath(Projection):
             namet -- a list of names defining a path to an event variable
             stream -- a stream object to serve as the base path.
         """
-        self.__stream = stream
-        self.__attrlist = tuple(namet)
-
-    def __getitem__(self, name):
-        if name == "stream":
-            return self.__stream
-        elif name == "path":
-            return EventPath(self.__attrlist)
-        else:
-            raise KeyError
+        self._stream = stream
+        self._attrlist = tuple(namet)
 
     def __getattr__(self, name):
         """Generate a new stream path by chaining two paths together.
@@ -864,30 +835,24 @@ class StreamPath(Projection):
         Arguments:
             name -- a variable name to add to the path.
         """
-        return StreamPath(self.__attrlist + (name,), self.__stream)
+        if not name.startswith('_'):
+            return StreamPath(self._attrlist + (name,), self._stream)
+        else:
+            return self.__getattribute__(name)
 
     def __getitem__(self, name):
-        if name == "stream":
-            return self.__stream
-        elif name == "path":
-            return StreamPath(self.__attrlist)
-        else:
-            raise KeyError
-
-
-    def _(self, name):
         """Generate a new stream path by chaining two paths together.
 
         This is a convinience function to escape invalid paths in the host
         language.
 
-        >>> s = stream('foo')
-        >>>s.foo._('...').bar
+        >>> s = stream['foo']
+        >>>s.foo['...'].bar
 
         Arguments:
             name -- a variable name to add to the path.
         """
-        return StreamPath(self.__attrlist + (name,), self.__stream)
+        return StreamPath(self._attrlist + (name,), self._stream)
 
     def __eq__(self, val):
         """Create an equality condition for stream event variables.
@@ -904,7 +869,7 @@ class StreamPath(Projection):
 
     def __iter__(self):
         """Iterate through all levels of the StreamPath."""
-        return iter(self.__attrlist)
+        return iter(self._attrlist)
 
     def __ne__(self, val):
         """Create a not equal condition for stream event variables.
@@ -950,18 +915,22 @@ class StreamPath(Projection):
 
     def __repr__(self):
         """Generate an unambiguous representation of the StreamPath."""
-        return str(self)
+        return ".".join(self._attrlist)
 
     def __str__(self):
         """Generate a string representation of the StreamPath."""
-        attrs = [x if PY3 else x.decode('utf-8') for x in self.__attrlist]
+        attrs = [x if PY3 else x.decode('utf-8') for x in self._attrlist]
         foo = ".".join(["'{}'".format(attr) if '.' in attr else attr for attr in attrs])
-        return '{stream}:{attrs}'.format(stream=str(self.__stream), attrs=foo)
+        return '{stream}:{attrs}'.format(stream=str(self._stream), attrs=foo)
 
-    def __call__(self):
-        """Generate an AST representation of the StreamPath."""
-        d = {'path': ('event',) + self.__attrlist, 'stream': self.__stream()}
-        return d
+    def __call__(self, *args, **kwargs):
+        if len(self._attrlist) == 1:
+            return self._stream.__getattr__("_"+self._attrlist[0])(*args, **kwargs)
+        elif self._attrlist[-1] == 'stats':
+            return self._stream.__getattr__("_stats")(".".join(self._attrlist[:-1]), *args, **kwargs)
+        else:
+            raise FlareSyntaxError("cannot call path")
+
 
 
 @py2str

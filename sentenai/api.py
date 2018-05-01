@@ -17,6 +17,7 @@ from sentenai.exceptions import *
 from sentenai.exceptions import handle
 from sentenai.utils import *
 from sentenai.flare import EventPath, Stream, Returning, stream, delta, Delta, Query
+import sentenai.flare as flare
 
 if not PY3:
     import virtualtime
@@ -34,6 +35,24 @@ try:
 except:
     from urllib import quote
 
+
+import logging
+# These two lines enable debugging at httplib level (requests->urllib3->http.client)
+# You will see the REQUEST, including HEADERS and DATA, and RESPONSE with HEADERS but without DATA.
+# The only thing missing will be the response.body which is not logged.
+try:
+    import http.client as http_client
+except ImportError:
+    # Python 2
+    import httplib as http_client
+http_client.HTTPConnection.debuglevel = 1
+
+# You must initialize logging, otherwise you'll not see debug output.
+logging.basicConfig()
+logging.getLogger().setLevel(logging.DEBUG)
+requests_log = logging.getLogger("requests.packages.urllib3")
+requests_log.setLevel(logging.DEBUG)
+requests_log.propagate = True
 
 
 class Uploader(object):
@@ -143,6 +162,66 @@ class Uploader(object):
             return {"stream": strm, "timestamp": ts, "id": data.get('id'), "event": evt}
 
 
+class Stream(flare.Stream):
+    def __init__(self, client, name, meta, info, tz, *filters):
+        self._client = client
+        flare.Stream.__init__(self, name, meta, info, tz, *filters)
+
+    def _oldest(self):
+        return self._client.oldest(self)
+
+    def _newest(self):
+        return self._client.newest(self)
+
+    def _fields(self):
+        fs = []
+        for f in self._client.fields(self):
+            x = self
+            for segment in f:
+                x = x[segment]
+            fs.append(x)
+        return fs
+
+    def _values(self):
+        values = self._client.values(self)
+        values_rendered = []
+        for value in values:
+            # create path
+            pth = self
+            for segment in value['path']:
+                pth = pth[segment]
+            ts = cts(value['ts'])
+            values_rendered.append({
+                'timestamp': ts,
+                'event': value['id'],
+                'value': value['value'],
+                'path': pth,
+            })
+        return values_rendered
+
+
+
+
+
+    def _destroy(self):
+        return self._client.destroy(self)
+
+    def _delete(self, id):
+        return self._client.delete(self, id)
+
+    def _get(self, id):
+        return self._client.get(self, id)
+
+    def _stats(self, field, start=None, end=None):
+        return self._client.stats(self, field, start, end)
+
+    def _put(self, event, id=None, timestamp=None):
+        return self._client.put(self, event, id, timestamp)
+
+    def _range(self, start, end):
+        return self._client.range(self, start, end)
+
+
 class Sentenai(object):
     def __init__(self, auth_key="", host="https://api.sentenai.com"):
         """Initialize a Sentenai client.
@@ -157,6 +236,11 @@ class Sentenai(object):
         self.build_url = partial(build_url, self.host)
         self.session = requests.Session()
         self.session.headers.update({ 'auth-key': auth_key })
+
+
+    def stream(self, name, *args, **kwargs):
+        tz = kwargs.get('tz')
+        return Stream(self, name, kwargs.get('meta', {}), kwargs.get('info', {}), tz, *args)
 
 
     def upload(self, iterable, processes=4, progress=False):
@@ -330,7 +414,7 @@ class Sentenai(object):
             return f
 
         try:
-            return [stream(**v) for v in resp.json() if filtered(v)]
+            return [Stream(self, v['name'], v.get('meta', {}), v.get('info', {}), v.get('tz', None)) for v in resp.json() if filtered(v)]
         except:
             raise SentenaiException("Something went wrong")
 
@@ -391,7 +475,7 @@ class Sentenai(object):
                      in Sentenai.
         """
         if isinstance(stream, Stream):
-            url = "/".join([self.host, "streams", stream['name'], "fields"])
+            url = "/".join([self.host, "streams", stream._name, "fields"])
             resp = self.session.get(url)
             status_codes(resp)
             return resp.json()
@@ -410,7 +494,7 @@ class Sentenai(object):
                      in Sentenai.
         """
         if isinstance(stream, Stream):
-            url = "/".join([self.host, "streams", stream['name'], "values"])
+            url = "/".join([self.host, "streams", stream._name, "values"])
             headers = {}
             params = {}
             if timestamp:
@@ -430,7 +514,7 @@ class Sentenai(object):
                      in Sentenai.
         """
         if isinstance(stream, Stream):
-            url = "/".join([self.host, "streams", stream['name'], "newest"])
+            url = "/".join([self.host, "streams", stream._name, "newest"])
             resp = self.session.get(url)
             status_codes(resp)
             return {
@@ -450,7 +534,7 @@ class Sentenai(object):
                      in Sentenai.
         """
         if isinstance(stream, Stream):
-            url = "/".join([self.host, "streams", stream['name'], "oldest"])
+            url = "/".join([self.host, "streams", stream._name, "oldest"])
             resp = self.session.get(url)
             status_codes(resp)
             return {
@@ -805,7 +889,7 @@ class FrameGroup(object):
         drop_prefixes = kwargs.get('drop_stream_names', True)
 
         def cname(stream, path):
-            return "{}:{}".format(stream['name'], ".".join(path[1:]))
+            return "{}:{}".format(stream._name, ".".join(path[1:]))
 
         for df in self.iterator(self.inverted):
             if drop_prefixes:
