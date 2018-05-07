@@ -73,11 +73,9 @@ class Projection(Flare):
 
     def __or__(self, other):
         raise NotImplemented
-        return ProjMath("/", other, self)
 
     def __ror__(self, other):
         raise NotImplemented
-        return ProjMath("/", other, self)
 
 
 class ProjMath(Projection):
@@ -99,7 +97,6 @@ class ProjMath(Projection):
                 return p()
             else:
                 raise FlareSyntaxError("projection math with non-numeric types is unsupported.")
-            return {'stream': self.stream(), 'projection': nd}
 
         return {'op': self.op, 'lhs': convert(self.lhs), 'rhs': convert(self.rhs)}
 
