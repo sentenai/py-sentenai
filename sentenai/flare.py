@@ -863,15 +863,6 @@ class StreamPath(Projection):
         """
         return StreamPath(self.__attrlist + (name,), self.__stream)
 
-    def __getitem__(self, name):
-        if name == "stream":
-            return self.__stream
-        elif name == "path":
-            return StreamPath(self.__attrlist)
-        else:
-            raise KeyError
-
-
     def _(self, name):
         """Generate a new stream path by chaining two paths together.
 
