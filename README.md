@@ -11,7 +11,7 @@ also allows you to manage your anaconda installations. This repository
 should be compatible with python 2.7+ and 3.5+, however development
 happens in python-3.6.0.
 
-This library depends [shapely][], which in turn depends on the static
+This library depends on [shapely][], which in turn depends on the static
 Geos C library:
   - ubuntu: `sudo apt install libgeos-c1v5`
   - freebsd: `sudo pkg install geos`
