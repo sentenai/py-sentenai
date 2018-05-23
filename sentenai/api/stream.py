@@ -131,7 +131,7 @@ class Fields(object):
         return repr(self._fields)
 
     def __iter__(self):
-        return self._fields
+        return iter(self._fields)
 
 
 
