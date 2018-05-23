@@ -48,8 +48,6 @@ class Search(object):
     def ast(self):
         return self.query()
 
-
-    @property
     def df(self):
         return ResultSet(self).df
 
