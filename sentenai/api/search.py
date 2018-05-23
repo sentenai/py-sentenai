@@ -52,6 +52,7 @@ class Search(object):
         return ResultSet(self).df
 
 
+
 class ResultPage(object):
     def __init__(self, search, *results, **kwargs):
         self.search = search

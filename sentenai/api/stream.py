@@ -116,6 +116,25 @@ class Values(object):
 
 
 
+class Fields(object):
+    def __init__(self, fields):
+        self._fields = fields
+
+    def __getitem__(self, path):
+        xs = []
+        for field in self._fields:
+            if field._attrlist == path._attrlist[:len(field._attrlist)]:
+                xs.append(field)
+        return Fields(xs)
+
+    def __repr__(self):
+        return repr(self._fields)
+
+    def __iter__(self):
+        return self._fields
+
+
+
 class Stream(BaseStream):
     def __init__(self, client, name, meta, events, tz, *filters):
         self._client = client
@@ -124,21 +143,6 @@ class Stream(BaseStream):
 
     def __len__(self):
         return self._info.get('size', 0)
-
-    def _oldest(self):
-        return self._client.oldest(self)
-
-    def _newest(self):
-        return self._client.newest(self)
-
-    def _fields(self):
-        fs = []
-        for f in self._client.fields(self):
-            x = self
-            for segment in f:
-                x = x[segment]
-            fs.append(x)
-        return fs
 
     def __bool__(self):
         return self._events is not None
@@ -149,7 +153,25 @@ class Stream(BaseStream):
         else:
             return int(self._events)
 
-    def _values(self, at=None):
+    def oldest(self):
+        return self._client.oldest(self)
+    _oldest = oldest
+
+    def newest(self):
+        return self._client.newest(self)
+    _newest = newest
+
+    def fields(self):
+        fs = []
+        for f in self._client.fields(self):
+            x = self
+            for segment in f:
+                x = x[segment]
+            fs.append(x)
+        return Fields(fs)
+    _fields = fields
+
+    def values(self, at=None):
         at = at or datetime.utcnow()
         values = self._client.values(self, at)
         values_rendered = []
@@ -166,12 +188,13 @@ class Stream(BaseStream):
                 'path': pth,
             })
         return Values(self, at, values_rendered)
+    _values = values
 
     def Event(self, *args, **kwargs):
         return Event(self.client, self, *args, **kwargs)
+    _Event = Event
 
 
-    @property
     def healthy(self):
         resp = self.session.get("/".join([self.client.host, "streams", self.name]))
         if resp.status_code == 200:
@@ -180,6 +203,8 @@ class Stream(BaseStream):
             return None
         else:
             handle(resp)
+
+    _healthy = healthy
 
 
 
