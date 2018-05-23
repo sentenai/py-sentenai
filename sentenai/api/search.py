@@ -41,6 +41,19 @@ class Search(object):
             except:
                 retries += 1
 
+    def _repr_html_(self):
+        return "<pre>%s</pre>" % str(self.query)
+
+    @property
+    def ast(self):
+        return self.query()
+
+
+    @property
+    def df(self):
+        return ResultSet(self).df
+
+
 class ResultPage(object):
     def __init__(self, search, *results, **kwargs):
         self.search = search
@@ -155,6 +168,17 @@ class ResultSet(object):
         self.cursors[-1] is None
 
 
+    @property
+    def df(self):
+        dfs = []
+        for x in self[:]:
+            dfs.append(x.df)
+        return pd.concat(dfs, keys=range(0,len(dfs)))
+
+
+
+
+
     def all(self):
         while self.cursors[-1]:
             if self.cursors[-1] not in self.spans:
@@ -232,7 +256,7 @@ class Result(object):
                 else:
                     raise SentenaiException(r.status_code)
         except:
-            if max_retries > 0: 
+            if max_retries > 0:
                 return self._events(max_retries - 1)
             else:
                 raise
@@ -245,6 +269,12 @@ class Result(object):
             return self._json
         except:
             return self._events()
+
+    @property
+    def df(self):
+        x = json_normalize([evt.json() for evt in list(self)])
+        return x
+
 
     @property
     def streams(self):

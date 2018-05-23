@@ -698,18 +698,21 @@ class EventPath(Projection):
         """
         return EventPath(self._attrlist + (name,))
 
-    def _(self, name):
+    def __getitem__(self, name):
         """Get an EventPath for an event.
 
         Used primarily to escape segments of paths that would be invalid
         in the host language. For example, if a path segment contains `:
 
-        >>> evt.foo._('...').bar.bat
+        >>> evt.foo['...'].bar.bat
 
         Arguments:
             name -- the name of the variable to get.
         """
-        return EventPath(self._attrlist + (name,))
+        if hasattr(name, "isalnum"):
+            return EventPath(self._attrlist + (name,))
+        else:
+            raise KeyError
 
     def __eq__(self, val):
         """Create equality conditions for event variables.
@@ -724,8 +727,12 @@ class EventPath(Projection):
         else:
             return Cond(self, '==', val)
 
+    def __contains__(self, path):
+        joiner = "$$$$%$$$$"
+        return joiner.join(self._attrlist) in joiner.join(self._attrlist)
+
+
     def __iter__(self):
-        """An iterator for event paths."""
         return iter(self._attrlist)
 
     def __ne__(self, val):
@@ -796,6 +803,9 @@ class StreamPath(Projection):
         """
         self._stream = stream
         self._attrlist = tuple(namet)
+
+    def __iter__(self):
+        return list(self._attrlist)
 
     def __getattr__(self, name):
         """Generate a new stream path by chaining two paths together.
@@ -1606,6 +1616,9 @@ class Query(HistoriQL):
 
         q.update(r)
         return q
+
+    def __str__(self):
+        return "\n".join(map(str, self.statements))
 
 # Needed for testing
 def ast_dict(*statements):

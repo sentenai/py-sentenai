@@ -48,8 +48,12 @@ class SQ(object):
         return x
 
     def __call__(self, *args):
-        p = Query(Select(*args)[self.timerange] if self.timerange else Select(*args))
-        return Search(self.client, p)
+        try:
+            p = Query(Select(*args)[self.timerange] if self.timerange else Select(*args))
+            return Search(self.client, p)
+        finally:
+            self.query = None
+            self.timerange = None
 
 
 class Sentenai(object):
@@ -279,7 +283,11 @@ class Sentenai(object):
             return f
 
         try:
-            return [Stream(self, v['name'], v.get('meta', {}), v.get('info', {}), v.get('tz', None)) for v in resp.json() if filtered(v)]
+            return sorted(
+                    [Stream(self, v['name'], v.get('meta', {}), v.get('info', {}), v.get('tz', None))
+                        for v in resp.json() if filtered(v)],
+                    key=lambda k: k.name
+                    )
         except:
             raise SentenaiException("Something went wrong")
 

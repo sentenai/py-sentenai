@@ -231,7 +231,7 @@ class Stream(BaseStream):
            start  -- Optional argument indicating start time in stream for calculations.
            end    -- Optional argument indicating end time in stream for calculations.
         """
-        raise NotImplemented
+        raise NotImplementedError
         return self._client.stats(self, field, start, end)
     _describe = describe
 
@@ -243,7 +243,7 @@ class Stream(BaseStream):
            start  -- Optional argument indicating start time in stream for calculations.
            end    -- Optional argument indicating end time in stream for calculations.
         """
-        raise NotImplemented
+        raise NotImplementedError
     _unique = unique
 
     def put(self, event, id=None, timestamp=None):
