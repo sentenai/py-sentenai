@@ -1,6 +1,6 @@
 __all__ = ["Within", "After", "Lasting", "During", "And", "Or", 'V']
 
-from sentenai.historiQL import Within, After, Lasting, And, Or, EventPath
+from sentenai.historiQL import Within, After, Lasting, And, Or, EventPath, Par
 
 from sentenai.utils import PY3
 
