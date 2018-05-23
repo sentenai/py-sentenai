@@ -123,7 +123,7 @@ class Fields(object):
     def __getitem__(self, path):
         xs = []
         for field in self._fields:
-            if field._attrlist == path._attrlist[:len(field._attrlist)]:
+            if field._attrlist[:len(path._attrlist)] == path._attrlist:
                 xs.append(field)
         return Fields(xs)
 
