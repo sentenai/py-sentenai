@@ -16,210 +16,40 @@ from threading import Lock
 from sentenai.exceptions import *
 from sentenai.exceptions import handle
 from sentenai.utils import *
-from sentenai.flare import EventPath, Stream, Returning, stream, delta, Delta, Query
-import sentenai.flare as flare
+from sentenai.historiQL import EventPath, Returning, delta, Delta, Query, Select
 
-if not PY3:
-    import virtualtime
-    from Queue import Queue
-else:
-    from queue import Queue
+from sentenai.api.uploader import Uploader
+from sentenai.api.stream import Stream, Event
+from sentenai.api.search import Search
+
 
 if PY3:
     string_types = str
 else:
     string_types = basestring
 
+if not PY3:
+    import virtualtime
+
 try:
     from urllib.parse import quote
 except:
     from urllib import quote
 
-
-import logging
-# These two lines enable debugging at httplib level (requests->urllib3->http.client)
-# You will see the REQUEST, including HEADERS and DATA, and RESPONSE with HEADERS but without DATA.
-# The only thing missing will be the response.body which is not logged.
-try:
-    import http.client as http_client
-except ImportError:
-    # Python 2
-    import httplib as http_client
-http_client.HTTPConnection.debuglevel = 1
-
-# You must initialize logging, otherwise you'll not see debug output.
-logging.basicConfig()
-logging.getLogger().setLevel(logging.DEBUG)
-requests_log = logging.getLogger("requests.packages.urllib3")
-requests_log.setLevel(logging.DEBUG)
-requests_log.propagate = True
-
-
-class Uploader(object):
-    def __init__(self, client, iterator, processes=32):
+class SQ(object):
+    def __init__(self, client):
         self.client = client
-        self.iterator = iterator
-        self.pool = ThreadPool(processes)
-        self.succeeded = 0
-        self.failed = 0
-        self.lock = Lock()
+        self.timerange = None
+        self.query = None
 
-    def start(self, progress=False):
-        def process(data):
-            def waits():
-                yield 0
-                wl = (0,1)
-                while True:
-                    wl = (wl[-1], sum(wl))
-                    yield wl[-1]
+    def __getitem__(self, s):
+        x = SQ(self.client)
+        x.timerange = s
+        return x
 
-            event = self.validate(data)
-            if isinstance(event, tuple):
-                return event
-
-            wait = waits()
-            while event:
-                try:
-                    self.client.put(**event)
-                    with self.lock:
-                        self.succeeded += 1
-                    return None
-                except AuthenticationError:
-                    raise
-                except Exception as e:
-                    w = next(wait)
-                    if w < 15: # 15 second wait limit
-                        time.sleep(next(wait))
-                    else:
-                        with self.lock:
-                            self.failed += 1
-                        return (event, e)
-                    """
-                    if e.response.status_code == 400:
-                        # probably bad JSON
-                        return data
-                    else:
-                        time.sleep(next(wait))
-                    """
-        if progress:
-            events = list(self.iterator)
-            total  = len(events)
-            def bar():
-                sys.stderr.write("\r" * 60)
-                sc = int(round(50 * self.succeeded / float(total)))
-                fc = int(round(50 * self.failed    / float(total)))
-                pd = (self.failed + self.succeeded) / float(total) * 100.
-                sys.stderr.write(" [\033[92m{0}\033[91m{1}\033[0m{2}] {3:>6.2f}%   ".format( "#" * sc, "#" * fc, " " * (50 - sc - fc), pd))
-                sys.stderr.flush()
-
-            t0 = datetime.utcnow()
-            data = self.pool.map_async(process, events)
-            #sys.stderr.write("\n " + "-" * 62 + " \n")
-            sys.stderr.write("\n {:<60} \n".format("Uploading {} objects:".format(total)))
-            while not data.ready():
-                bar()
-                time.sleep(.1)
-            else:
-                bar()
-            t1 = datetime.utcnow()
-            sys.stderr.write("\n {:<60} ".format("Time elapsed: {}".format(t1 - t0)))
-            sys.stderr.write("\n {:<60} ".format("Mean Obj/s: {:.1f}".format(float(total)/(t1 - t0).total_seconds())))
-            sys.stderr.write("\n {:<60} \n\n".format("Failures: {}".format(self.failed)))
-            #sys.stderr.write("\n " + "-" * 62 + " \n\n")
-            sys.stderr.flush()
-            #data.wait()
-            data = data.get()
-        else:
-            data = self.pool.map(process, self.iterator)
-        return { 'saved': self.succeeded, 'failed': list(filter(None, data)) }
-
-
-    def validate(self, data):
-        ts = data.get('ts')
-        try:
-            if isinstance(ts, string_types):
-                ts = cts(ts)
-            if not ts.tzinfo:
-                ts = pytz.utc.localize(ts)
-        except:
-            return (data, "invalid timestamp")
-
-        sid = data.get('stream')
-        if isinstance(sid, Stream):
-            strm = sid
-        elif sid:
-            strm = stream(str(sid))
-        else:
-            return (data, "missing stream")
-
-        try:
-            evt = data['event']
-        except KeyError:
-            return (data, "missing event data")
-        except Exception:
-            return (data, "invalid event data")
-        else:
-            return {"stream": strm, "timestamp": ts, "id": data.get('id'), "event": evt}
-
-
-class Stream(flare.Stream):
-    def __init__(self, client, name, meta, info, tz, *filters):
-        self._client = client
-        flare.Stream.__init__(self, name, meta, info, tz, *filters)
-
-    def _oldest(self):
-        return self._client.oldest(self)
-
-    def _newest(self):
-        return self._client.newest(self)
-
-    def _fields(self):
-        fs = []
-        for f in self._client.fields(self):
-            x = self
-            for segment in f:
-                x = x[segment]
-            fs.append(x)
-        return fs
-
-    def _values(self):
-        values = self._client.values(self)
-        values_rendered = []
-        for value in values:
-            # create path
-            pth = self
-            for segment in value['path']:
-                pth = pth[segment]
-            ts = cts(value['ts'])
-            values_rendered.append({
-                'timestamp': ts,
-                'event': value['id'],
-                'value': value['value'],
-                'path': pth,
-            })
-        return values_rendered
-
-
-
-
-
-    def _destroy(self):
-        return self._client.destroy(self)
-
-    def _delete(self, id):
-        return self._client.delete(self, id)
-
-    def _get(self, id):
-        return self._client.get(self, id)
-
-    def _stats(self, field, start=None, end=None):
-        return self._client.stats(self, field, start, end)
-
-    def _put(self, event, id=None, timestamp=None):
-        return self._client.put(self, event, id, timestamp)
-
-    def _range(self, start, end):
-        return self._client.range(self, start, end)
+    def __call__(self, *args):
+        p = Query(Select(*args)[self.timerange] if self.timerange else Select(*args))
+        return Search(self.client, p)
 
 
 class Sentenai(object):
@@ -236,11 +66,44 @@ class Sentenai(object):
         self.build_url = partial(build_url, self.host)
         self.session = requests.Session()
         self.session.headers.update({ 'auth-key': auth_key })
+        self.select = SQ(self)
+
+    def returning(self, *rets):
+        return Search(self, Query(Select(), Returning(*rets)))
+
+    @staticmethod
+    def _debug(enable=True):
+        """Toggle connection debugging."""
+        import logging
+        try:
+            import http.client as http_client
+        except ImportError:
+            # Python 2
+            import httplib as http_client
+        http_client.HTTPConnection.debuglevel = 1
+        logging.basicConfig()
+        logging.getLogger().setLevel(logging.DEBUG)
+        requests_log = logging.getLogger("requests.packages.urllib3")
+        requests_log.setLevel(logging.DEBUG)
+        requests_log.propagate = enable
 
 
-    def stream(self, name, *args, **kwargs):
+    def __call__(self, *args, **kwargs):
+        return Search(self, *args, **kwargs)
+
+
+
+    def Stream(self, name, *args, **kwargs):
         tz = kwargs.get('tz')
-        return Stream(self, name, kwargs.get('meta', {}), kwargs.get('info', {}), tz, *args)
+        resp = self.session.get("/".join([self.host, "streams", name]))
+        if resp.status_code == 404:
+            return Stream(self, name, kwargs.get('meta', {}), None, tz, *args)
+        elif resp.status_code == 200:
+            data = resp.json()
+            return Stream(self, name, data.get('meta', {}), data.get('size', None), tz, *args)
+        else:
+            handle(resp)
+
 
 
     def upload(self, iterable, processes=4, progress=False):
@@ -288,6 +151,7 @@ class Sentenai(object):
         url = self.build_url(stream, eid)
         resp = self.session.delete(url)
         status_codes(resp)
+
 
     def get(self, stream, eid=None):
         """Get event or stream as JSON.
@@ -390,6 +254,7 @@ class Sentenai(object):
                 status_codes(resp)
                 raise APIError(resp)
 
+
     def streams(self, name=None, meta={}):
         """Get list of available streams.
 
@@ -418,18 +283,22 @@ class Sentenai(object):
         except:
             raise SentenaiException("Something went wrong")
 
-    def destroy(self, stream):
+
+    def destroy(self, stream, **kwargs):
         """Delete stream.
 
-        Argument:
-           stream -- A stream object corresponding to a stream stored
-                     in Sentenai.
+        Keyword Argument:
+            confirm -- Must be `True` to confirm destroy stream
         """
-        url = "/".join([self.host, "streams", stream()['name']])
-        headers = {'auth-key': self.auth_key}
-        resp = requests.delete(url, headers=headers)
-        status_codes(resp)
-        return None
+        if not kwargs.get('confirm') is True:
+            print("Stream not destroyed. You must confirm destroy command via argument confirm=True.")
+        else:
+            url = "/".join([self.host, "streams", stream.name])
+            headers = {'auth-key': self.auth_key}
+            resp = requests.delete(url, headers=headers)
+            status_codes(resp)
+            return None
+
 
     def range(self, stream, start, end):
         """Get all stream events between start (inclusive) and end (exclusive).
@@ -455,17 +324,8 @@ class Sentenai(object):
         )
         resp = self.session.get(url)
         status_codes(resp)
-        return [json.loads(line) for line in resp.text.splitlines()]
+        return [Event(self, stream, **json.loads(line)) for line in resp.text.splitlines()]
 
-    def query(self, *statements, **kwargs):
-        """Execute a flare query.
-
-        Arguments:
-           *statements -- Includes query objects created via the `select`
-                          function and projections created via `returning`.
-           limit     -- A limit to the number of result spans returned.
-        """
-        return Cursor(self, Query(*statements), limit=kwargs.get('limit', None))
 
     def fields(self, stream):
         """Get a list of field names for a given stream
@@ -481,6 +341,7 @@ class Sentenai(object):
             return resp.json()
         else:
             raise SentenaiException("Must be called on stream")
+
 
     def values(self, stream, timestamp=None):
         """Get all the latest values for a given stream.
@@ -517,11 +378,7 @@ class Sentenai(object):
             url = "/".join([self.host, "streams", stream._name, "newest"])
             resp = self.session.get(url)
             status_codes(resp)
-            return {
-                    "event": resp.json(),
-                    "ts": cts(resp.headers['Timestamp']),
-                    "id": resp.headers['Location']
-            }
+            return Event(self, stream, resp.headers['Location'], cts(resp.headers['Timestamp']), resp.json(), saved=True)
         else:
             raise SentenaiException("Must be called on stream")
 
@@ -537,11 +394,7 @@ class Sentenai(object):
             url = "/".join([self.host, "streams", stream._name, "oldest"])
             resp = self.session.get(url)
             status_codes(resp)
-            return {
-                    "event": resp.json(),
-                    "ts": cts(resp.headers['Timestamp']),
-                    "id": resp.headers['Location']
-            }
+            return Event(self, stream, resp.headers['Location'], cts(resp.headers['Timestamp']), resp.json(), saved=True)
         else:
             raise SentenaiException("Must be called on stream")
 
@@ -955,6 +808,8 @@ class FrameGroup(object):
         return ds
 
 
+
+
 def df(t0, data):
     dfs = {}
     for s in data['streams']:
@@ -965,6 +820,9 @@ def df(t0, data):
             events.append(evt)
         dfs[json.dumps(s['stream'], sort_keys=True)] = json_normalize(events)
     return dfs
+
+
+
 
 def build_url(host, stream, eid=None):
     """Build a url for the Sentenai API.

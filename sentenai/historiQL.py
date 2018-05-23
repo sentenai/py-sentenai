@@ -4,7 +4,7 @@ import numpy as np
 
 from datetime import date, datetime, timedelta
 
-from sentenai.exceptions import FlareSyntaxError
+from sentenai.exceptions import QuerySyntaxError
 from sentenai.utils import iso8601, py2str, PY3
 
 if not PY3: import virtualtime
@@ -37,16 +37,16 @@ def delta(seconds=0, minutes=0, hours=0, days=0, weeks=0, months=0, years=0):
     return Delta(**locals())
 
 
-class Flare(object):
-    """A Flare query object."""
+class HistoriQL(object):
+    """A HistoriQL query object."""
 
     def __repr__(self):
-        """An unambiguous representation of the Flare query."""
+        """An unambiguous representation of the HistoriQL query."""
         return str(self)
 
 
 
-class Projection(Flare):
+class Projection(HistoriQL):
     def __add__(self, other):
         return ProjMath("+", self, other)
 
@@ -98,7 +98,7 @@ class ProjMath(Projection):
             elif isinstance(p, ProjMath):
                 return p()
             else:
-                raise FlareSyntaxError("projection math with non-numeric types is unsupported.")
+                raise QuerySyntaxError("projection math with non-numeric types is unsupported.")
             return {'stream': self.stream(), 'projection': nd}
 
         return {'op': self.op, 'lhs': convert(self.lhs), 'rhs': convert(self.rhs)}
@@ -119,7 +119,7 @@ class Returning(object):
             elif isinstance(s, Proj):
                 self.projs.append(s)
             else:
-                raise FlareSyntaxError("Invalid projection type in `returning`")
+                raise QuerySyntaxError("Invalid projection type in `returning`")
         self.default = kwargs.get('default', True)
 
     def __call__(self):
@@ -130,7 +130,7 @@ class Returning(object):
 class Proj(object):
     def __init__(self, stream, proj=True):
         if not isinstance(stream, Stream):
-            raise FlareSyntaxError("returning dict top-level keys must be streams.")
+            raise QuerySyntaxError("returning dict top-level keys must be streams.")
         self.stream = stream
         self.proj = proj
 
@@ -146,8 +146,8 @@ class Proj(object):
                 old, new = l.pop(0)
                 for key, val in old.items():
                     if isinstance(val, EventPath):
-                        z = val()
-                        new[key] = [{'var': z['path']}]
+                        z = ('event',) + val._attrlist
+                        new[key] = [{'var': z}]
                     elif isinstance(val, ProjMath):
                         new[key] = [val()]
                     elif isinstance(val, float):
@@ -162,12 +162,12 @@ class Proj(object):
                         new[key] = {}
                         l.append((val,new[key]))
                     else:
-                        raise FlareSyntaxError("%s: %s is unsupported." % (key, val.__class__))
+                        raise QuerySyntaxError("%s: %s is unsupported." % (key, val.__class__))
             return {'stream': self.stream(), 'projection': nd}
 
 
 
-class InCircle(Flare):
+class InCircle(HistoriQL):
     """Used in conjunction with a Cond and shapely.geometry.Point."""
 
     def __init__(self, center, radius):
@@ -198,7 +198,7 @@ class InCircle(Flare):
 
 
 @py2str
-class InPolygon(Flare):
+class InPolygon(HistoriQL):
     """Used in conjuction with a Cond an shapely.geometry.Polygon."""
 
     def __init__(self, poly):
@@ -221,8 +221,8 @@ class InPolygon(Flare):
 
 
 @py2str
-class Switch(Flare):
-    """A Flare Switch condition.
+class Switch(HistoriQL):
+    """A HistoriQL Switch condition.
 
     Switches are used to define transitions between events in sequences.
     You can define switches by applying the >> operator to events.
@@ -253,9 +253,9 @@ class Switch(Flare):
         for c in q:
             if isinstance(c, Cond):
                 if not isinstance(c.path, EventPath):
-                    raise FlareSyntaxError('Use V. for paths within event()')
+                    raise QuerySyntaxError('Use V. for paths within event()')
             else:
-                raise FlareSyntaxError('Use V. for paths within event()')
+                raise QuerySyntaxError('Use V. for paths within event()')
 
         self._query = (tuple(q),)
         self._stream = None
@@ -290,7 +290,7 @@ class Switch(Flare):
     def __call__(self):
         """Generate AST code from the switch."""
         if not self._stream:
-            raise FlareSyntaxError("Switch must be bound to stream")
+            raise QuerySyntaxError("Switch must be bound to stream")
         cds = []
 
         for s in self._query:
@@ -325,7 +325,7 @@ class Switch(Flare):
 
 
 @py2str
-class Select(Flare):
+class Select(HistoriQL):
     """Select events from a span of time.
 
     Keyword arguments:
@@ -333,69 +333,31 @@ class Select(Flare):
     end -- select events occuring before `datetime()`.
     """
 
-    def __init__(self, **kwargs):
-        """Initialize the select.
+    def __init__(self, *args):
+        """Select data."""
+        self._after = None
+        self._before = None
+        self._query = args
 
-        TODO: Define what kwargs can be.
-        Arguments:
-            start -- the minimum timestamp an event can have
-            end -- the maximum timestamp an event can have
-            kwargs -- additional parameters
-        """
-        self._after = kwargs.get("start")
-        self._before = kwargs.get("end")
-        self._query = []
+    def __getitem__(self, sl):
+        x = Select(*self._query)
+        if isinstance(sl, datetime):
+            sl = slice(sl, sl + timedelta(1))
+        x._after = sl.start
+        x._before = sl.stop
+        return x
 
-    def span(self, *q, **kwargs):
-        """A span of time where a set of conditions is continuously satisfied.
 
-        Conditions can be defined across one or more streams.
-
-        Keyword arguments:
-            min -- The minimum valid span duration `delta()`.
-            max -- The maximum valid span duration `delta()`.
-            exactly -- The exact valid span duration `delta()`.
-            within -- The maximum distance in time between the end of the
-                      previous span and the start of this span.
-            after -- The minimum distance in time between the end of the
-                     previous span and the start of this span.
-        """
-        for k in kwargs:
-            if k not in ['min', 'max', 'exactly']:
-                raise FlareSyntaxError(
-                    'first span in a select supports only '
-                    '`min`, `max` and `exactly` duration arguments')
-        if self._query:
-            raise FlareSyntaxError("Use .then method")
-        else:
-            self._query.append(Span(*q, **kwargs))
-        return self
-
-    def then(self, *q, **kwargs):
-        """A span of time following the previous span satisfying new conditions.
-
-        Conditions can be defined across one or more streams and must also
-        be satisfied continuously.
-
-        Keyword arguments:
-           min -- The minimum valid span duration `delta()`.
-           max -- The maximum valid span duration `delta()`.
-           exactly -- The exact valid span duration `delta()`.
-           within -- The maximum distance in time between the end of
-                     the previous span and the start of this span.
-           after -- The minimum distance in time between the end of
-                    the previous span and the start of this span.
-        """
-        if not self._query:
-            raise FlareSyntaxError("Use .span method to start select")
-        else:
-            if "after" not in kwargs and "within" not in kwargs:
-                kwargs["within"] = delta(seconds=0)
-            self._query.append(Span(*q, **kwargs))
-        return self
-
-    def __call__(self):
+    def __call__(self, *args):
         """Generate AST from the query object."""
+
+        # if called with args, make new Select
+        if args and not self._query:
+            x = Select(*args)
+            x._after = self._after
+            x._before = self._before
+            return Query(x)
+
         if self._after and self._before:
             s = {'between': [iso8601(self._after), iso8601(self._before)]}
         elif self._after:
@@ -413,6 +375,7 @@ class Select(Flare):
             s['select'] = Serial(*self._query)()
 
         return s
+
 
     def __str__(self):
         """Generate a string representation of the select."""
@@ -443,8 +406,8 @@ class Select(Flare):
 
 
 @py2str
-class Cond(Flare):
-    """A Flare condition.
+class Cond(HistoriQL):
+    """A HistoriQL condition.
 
     Conditions are used to search specific events or sets of
     events in a stream. You can define them explicitly using the class
@@ -472,7 +435,7 @@ class Cond(Flare):
         self.val = val
         if isinstance(self.val, InPolygon) or isinstance(self.val, InCircle):
             if op not in ('==',):
-                raise FlareSyntaxError(
+                raise QuerySyntaxError(
                     "Only `==` operator can be used with regions")
 
     def __str__(self):
@@ -537,16 +500,20 @@ class Cond(Flare):
         """Define the `|` operator for conditions."""
         return Or(self, q)
 
+    def __and__(self, q):
+        """Define the `&` operator for conditions."""
+        return And(self, q)
+
 
 @py2str
-class Stream(Flare):
+class Stream(HistoriQL):
     """A stream of events.
 
     Stream objects reference streams of events stored in Sentenai. They are
     used when writing queries, access specific API end points, and manipulating
     result sets.
     """
-    def __init__(self, name, meta, info, tz, *filters):
+    def __init__(self, name, meta, tz, *filters):
         """Initialize a stream object.
 
         Arguments:
@@ -561,7 +528,6 @@ class Stream(Flare):
         """
         self._name = quote(name.encode('utf-8'))
         self._meta = meta
-        self._info = info
         self._filters = filters
         self.tz = tz
 
@@ -573,6 +539,9 @@ class Stream(Flare):
 
     def __mod__(self, pdict):
         return Proj(self, pdict)
+
+    def __cmp__(self, other):
+        raise QuerySyntaxError("cannot compare stream to value.")
 
     def __eq__(self, other):
         """Define the `==` operator for streams.
@@ -688,8 +657,10 @@ class Stream(Flare):
         Arguments:
             name -- The name of the variable to get
         """
-        if not name.startswith('_'):
+        if not name.startswith('_') and name not in ['name']:
             return StreamPath((name,), self)
+        elif name == 'name':
+            return self.__getattribute__("_name")
         else:
             return self.__getattribute__(name)
 
@@ -926,16 +897,18 @@ class StreamPath(Projection):
     def __call__(self, *args, **kwargs):
         if len(self._attrlist) == 1:
             return self._stream.__getattr__("_"+self._attrlist[0])(*args, **kwargs)
-        elif self._attrlist[-1] == 'stats':
-            return self._stream.__getattr__("_stats")(".".join(self._attrlist[:-1]), *args, **kwargs)
+        elif self._attrlist[-1] == 'describe':
+            return self._stream.__getattr__("_describe")(".".join(self._attrlist[:-1]), *args, **kwargs)
+        elif self._attrlist[-1] == 'unique':
+            return self._stream.__getattr__("_unique")(".".join(self._attrlist[:-1]), *args, **kwargs)
         else:
-            raise FlareSyntaxError("cannot call path")
+            raise QuerySyntaxError("cannot call path")
 
 
 
 @py2str
-class Par(Flare):
-    """A Flare Par Object.
+class Par(HistoriQL):
+    """A HistoriQL Par Object.
 
     Par objects are used to define operators that act on sets of conditions.
     For example, we use a par object to define the ANY operator which returns
@@ -957,13 +930,13 @@ class Par(Flare):
         """
         self._f = f
         if len(q) < 1:
-            raise FlareSyntaxError
+            raise QuerySyntaxError
         self.query = q
 
     def __str__(self):
         """Generate a string representation of the par."""
         if len(self.query) < 1:
-            raise FlareSyntaxError
+            raise QuerySyntaxError
         elif len(self.query) == 1:
             return str(self.query[0]) if PY3 else str(self.query[0]).decode('utf-8')  # NOQA
         else:
@@ -973,7 +946,7 @@ class Par(Flare):
     def __call__(self):
         """Generate an AST representation of the Par."""
         if len(self.query) < 1:
-            raise FlareSyntaxError
+            raise QuerySyntaxError
         elif len(self.query) == 1:
             return self.query[0]()
         else:
@@ -981,8 +954,8 @@ class Par(Flare):
 
 
 @py2str
-class Or(Flare):
-    """A Flare Or object.
+class Or(HistoriQL):
+    """A HistoriQL Or object.
 
     TODO: Check my understanding here.
     The Or object is used to compare two spans. If the conditions of either
@@ -996,11 +969,15 @@ class Or(Flare):
             q -- queries to join with an or.
         """
         self.query = q
+        self._within = None
+        self._after = None
+        self._width = None
+
 
     def __call__(self):
         """Generate an AST representation of the Or."""
         if len(self.query) == 0:
-            raise FlareSynxtaxError('Not enough arguments in Or')
+            raise HistoriQLSynxtaxError('Not enough arguments in Or')
         elif len(self.query) == 1:
             return self.query[0]()
         else:
@@ -1010,6 +987,16 @@ class Or(Flare):
                     'expr': '||',
                     'args': [q(), d['args'][1]]
                 }
+
+            if self._within is not None:
+                d['within'] = self._within()
+
+            if self._after is not None:
+                d['after'] = self._after()
+
+            if self._width is not None:
+                d.update(self._width())
+
             return d
 
 
@@ -1018,7 +1005,7 @@ class Or(Flare):
         qs = []
         for x in self.query:
             q = str(x) if PY3 else str(x).decode('utf-8')
-            if isinstance(x, Span):
+            if isinstance(x, And):
                 if x._within is not None:
                     qs.append("(" + q + ")")
                 else:
@@ -1029,18 +1016,20 @@ class Or(Flare):
         cs = " || ".join(qs)
         return cs
 
+
     def __or__(self, q):
         """Define the behavior of `|` operator.
 
         Arguments:
             q -- a query to or together with existing queries.
         """
-        self.query.append(q)
+        self.query += (q,)
         return self
 
 
+
 @py2str
-class Serial(Flare):
+class Serial(HistoriQL):
     """A Serial object.
 
     Serial objects are used to define queries looking for chains of events or
@@ -1051,41 +1040,36 @@ class Serial(Flare):
     """
 
     def __init__(self, *q):
-        """Initialize the Serial.
-
-        TODO: Define q in this case
-        Arguments:
-            q --
-
-        """
         self.query = []
-        for x in q:
-            if isinstance(x, Serial):
-                self.query.extend(x.query)
+        self._within = None
+        self._after = None
+        self._width = None
+        for i in q:
+            if isinstance(i, tuple):
+                self.query.append(Serial(*i))
             else:
-                self.query.append(x)
-
-    def then(self, *q, **kwargs):
-        """A span of time following the previous span satisfying new conditions.
-
-        Arguments:
-            q -- conditions to query for
-            min -- The minimum valid span duration `delta()`.
-            max -- The maximum valid span duration `delta()`.
-            exactly -- The exact valid span duration `delta()`.
-            within -- The maximum distance in time between the end of the
-                      previous span and the start of this span.
-            after -- The minimum distance in time between the end of the
-                     previous span and the start of this span.
-        """
-        if "after" not in kwargs and "within" not in kwargs:
-            kwargs["within"] = delta(seconds=0)
-        self.query.append(Span(*q, **kwargs))
-        return self
+                self.query.append(i)
 
     def __call__(self):
         """Generate an AST representation of the Serial."""
-        return {'type': 'serial', 'conds': [q() for q in self.query]}
+        gs = group_spans(self.query)
+        if len(gs) == 0:
+            d = {'expr': True}
+        elif len(gs) == 1:
+            d = gs[0]()
+        else:
+            d = {'type': 'serial', 'conds': [q() for q in gs]}
+
+        if self._within is not None:
+            d['within'] = self._within()
+
+        if self._after is not None:
+            d['after'] = self._after()
+
+        if self._width is not None:
+            d.update(self._width())
+
+        return d
 
     def __str__(self):
         """Generate a string representation of the Serial."""
@@ -1094,8 +1078,8 @@ class Serial(Flare):
 
 
 @py2str
-class Span(Flare):
-    """A Span of time where events continuously satisfy a set of conditions.
+class And(HistoriQL):
+    """A And of time where events continuously satisfy a set of conditions.
 
     A span is defined by looking for events that continuously meet a set of
     conditions. For example, a simple span of time in weather data may be
@@ -1103,8 +1087,8 @@ class Span(Flare):
     Conditions can be chained together to find more complicated patterns.
     """
 
-    def __init__(self, *q, **kwargs):
-        """Initialize the Span.
+    def __init__(self, *q):
+        """Initialize the And.
 
         Arguments:
             q -- a set of conditions
@@ -1117,14 +1101,12 @@ class Span(Flare):
                      previous span and the start of this span.
         """
         if len(q) < 1:
-            raise FlareSyntaxError
+            raise QuerySyntaxError
 
         self.query = q
-        self._within = kwargs.get('within')
-        self._after = kwargs.get('after')
-        self._min_width = kwargs.get('min')
-        self._max_width = kwargs.get('max')
-        self._width = kwargs.get('exactly')
+        self._within = None
+        self._after = None
+        self._width = None
 
     def __and__(self, q):
         """Define the `and` operator for spans.
@@ -1132,7 +1114,7 @@ class Span(Flare):
         Arguments:
             q -- a span to `and` with this one.
         """
-        return Span(self, q)
+        return And(self, q)
 
     def __or__(self, q):
         """Define the `or` operator for spans.
@@ -1153,10 +1135,10 @@ class Span(Flare):
         return Serial(self, q)
 
     def __str__(self):
-        """Generate a string representation of the Span."""
+        """Generate a string representation of the And."""
         qs = []
         for x in self.query:
-            if isinstance(x, Span):
+            if isinstance(x, And):
                 if x._within is not None:
                     qs.append("(" + str(x) + ")")
                 else:
@@ -1171,36 +1153,13 @@ class Span(Flare):
         if self._within:
             cs += " within {}".format(self._within)
         if self._width:
-            cs += " for exactly {}".format(self._width)
-        elif self._min_width and not self._max_width:
-            cs += " for at least {}".format(self._min_width)
-        elif self._max_width and not self._min_width:
-            cs += " for at most {}".format(self._max_width)
-        elif self._max_width and self._min_width:
-            cs += " for {} .. {}".format(
-                self._min_width, self._max_width)
+            cs += " {}".format(self._width)
         return cs
 
-    def then(self, *q, **kwargs):
-        """A span of time following the previous span satisfying new conditions.
-
-        Arguments:
-            q -- conditions to query for
-            min -- The minimum valid span duration `delta()`.
-            max -- The maximum valid span duration `delta()`.
-            exactly -- The exact valid span duration `delta()`.
-            within -- The maximum distance in time between the end of the
-                      previous span and the start of this span.
-            after -- The minimum distance in time between the end of the
-                     previous span and the start of this span.
-        """
-        if "after" not in kwargs and "within" not in kwargs:
-            kwargs["within"] = delta(seconds=0)
-        return Serial(self, Span(*q, **kwargs))
 
     def __call__(self):
         """Generate an AST representation of the span."""
-        d = {'for': {}}
+        d = {}
 
         if self._within is not None:
             d['within'] = self._within()
@@ -1208,20 +1167,11 @@ class Span(Flare):
         if self._after is not None:
             d['after'] = self._after()
 
-        if self._min_width is not None:
-            d['for']['at-least'] = self._min_width()
-
-        if self._max_width is not None:
-            d['for']['at-most'] = self._max_width()
-
         if self._width is not None:
-            d['for'] = self._width()
-
-        if not d['for']:
-            del d['for']
+            d.update(self._width())
 
         if len(self.query) == 1:
-            if isinstance(self.query[0], Span):
+            if isinstance(self.query[0], And):
                 return merge(self, self.query[0])()
             elif isinstance(self.query[0], Or):
                 d.update(self.query[0]())
@@ -1242,7 +1192,7 @@ class Span(Flare):
 
 
 @py2str
-class Delta(Flare):
+class Delta(HistoriQL):
     """A Delta object.
 
     Delta objects represent durations of time
@@ -1327,6 +1277,8 @@ class Delta(Flare):
         Arguments:
             val -- the other delta to compare with
         """
+        if val is None:
+            return False
         typecheck(Delta, 'val', val)
         return self.timedelta == val.timedelta
 
@@ -1366,11 +1318,122 @@ class Delta(Flare):
         typecheck(Delta, 'val', val)
         return self.timedelta < val.timedelta
 
+class Modifier(Delta): pass
+class Within(Modifier): pass
+class After(Modifier): pass
 
-def stream(name, *args, **kwargs):
-    """Define a stream, possibly with a list of filter arguments."""
-    tz = kwargs.get('tz')
-    return Stream(name, kwargs.get('meta', {}), kwargs.get('info', {}), tz, *args)
+class Lasting(Modifier):
+    def __new__(cls, *args, **kwargs):
+        return super(Modifier, cls).__new__(LastingExactly, *args, **kwargs)
+
+    def __call__(self):
+        """Generate an AST representation of the Delta."""
+        if (self._exactly, self._min, self._max) == (None, None, None):
+            raise QuerySyntaxError('empty `Lasting`')
+        elif self._exactly != None:
+            if (self._min, self._max) != (None, None):
+                raise QuerySyntaxError('Cannot have both exact and ranged `Lasting`')
+            else:
+                return {'for': self._exactly()}
+        else:
+            x = {'for': {}}
+            if self._min != None:
+                x['for']['at-least'] = self._min()
+            if self._max != None:
+                x['for']['at-most'] = self._max()
+            return x
+
+    @staticmethod
+    def min(**kwargs):
+        return LastingMin(**kwargs)
+
+    @staticmethod
+    def max(**kwargs):
+        return LastingMax(**kwargs)
+
+class LastingExactly(Lasting):
+    def __new__(cls, *args, **kwargs):
+        return super(Modifier, cls).__new__(LastingExactly, *args, **kwargs)
+
+    def __str__(self):
+        """Generate a string representation of the delta."""
+        return str(self._exactly)
+
+    def __init__(self, **kwargs):
+        self._exactly = Delta(**kwargs)
+        self._min = None
+        self._max = None
+
+    def max(self, **kwargs):
+        raise QuerySyntaxError("Cannot apply `max` to exact duration.")
+
+    def min(self, **kwargs):
+        raise QuerySyntaxError("Cannot apply `min` to exact duration.")
+
+
+class LastingMax(Lasting):
+    def __new__(cls, *args, **kwargs):
+        return super(Modifier, cls).__new__(LastingMax, *args, **kwargs)
+
+    def __str__(self):
+        """Generate a string representation of the delta."""
+        return str(self._max)
+
+    def __init__(self, **kwargs):
+        self._exactly = None
+        self._min = None
+        self._max = Delta(**kwargs)
+
+    def max(self, **kwargs):
+        if kwargs == None: return self
+        raise QuerySyntaxError("Cannot apply `max` twice.")
+
+    def min(self, **kwargs):
+        if kwargs == None: return self
+        return LastingRange(Delta(**kwargs), self._max)
+
+
+class LastingMin(Lasting):
+    def __new__(cls, *args, **kwargs):
+        return super(Modifier, cls).__new__(LastingMin, *args, **kwargs)
+
+    def __str__(self):
+        """Generate a string representation of the delta."""
+        return str(self._min)
+
+    def __init__(self, **kwargs):
+        self._exactly = None
+        self._min = Delta(**kwargs)
+        self._max = None
+
+    def min(self, **kwargs):
+        if kwargs == None: return self
+        raise QuerySyntaxError("Cannot apply `max` twice.")
+
+    def max(self, **kwargs):
+        if kwargs == None: return self
+        return LastingRange(self._min, Delta(**kwargs))
+
+class LastingRange(Lasting):
+    def __new__(cls, *args, **kwargs):
+        return super(Modifier, cls).__new__(LastingRange, *args, **kwargs)
+
+    def __str__(self):
+        """Generate a string representation of the delta."""
+        return "{} to {}".format(self._min, self._max)
+
+    def __init__(self, mindt, maxdt):
+        self._exactly = None
+        self._min = mindt
+        self._max = maxdt
+
+    def min(self, **kwargs):
+        if kwargs == None: return self
+        raise QuerySyntaxError("Cannot apply `max` twice.")
+
+    def min(self, **kwargs):
+        if kwargs == None: return self
+        raise QuerySyntaxError("Cannot apply `min` twice.")
 
 
 def merge(s1, s2):
@@ -1385,9 +1448,9 @@ def merge(s1, s2):
         s1 -- the first span
         s2 -- the second span
     """
-    typecheck(Span, 'left side of merge', s1)
-    typecheck(Span, 'right side of merge', s2)
-    s3 = Span(*s2.query)
+    typecheck(And, 'left side of merge', s1)
+    typecheck(And, 'right side of merge', s2)
+    s3 = And(*s2.query)
 
     def go(op, attr):
         a1 = s1.__getattribute__(attr)
@@ -1397,14 +1460,59 @@ def merge(s1, s2):
         else:
             return op(a1, a2)
 
-    def delta_or_first(width1, width2):
+    def merge_width(width1, width2):
+        minw = maxw = exw = None
+        if width1._min != None and width2._min != None:
+            minw = max(width1._min, width2._min)
+        else:
+            minw = width1._min or width2._min
+
+        if width1._max != None and width2._max != None:
+            maxw = min(width1._max, width2._max)
+        else:
+            maxw = width1._max or width2._max
+
+        if width1._exactly != None and width2._exactly != None:
+            if width1._exactly != width2._exactly:
+                raise QuerySyntaxError("Cannot decide between two exact durations.")
+            else:
+                exw = width1._exactly
+        else:
+            exw = width1._exactly or width2._exactly
+
+        if minw > maxw:
+            raise QuerySyntaxError("Min duration larger than max duration")
+        elif exw and minw and maxw:
+            if maxw >= exw >= minw:
+                minw = None
+                maxw = None
+            else:
+                raise QuerySyntaxError("Cannot have both exact range and duration")
+        elif exw and minw:
+            if exw > minw:
+                minw = None
+            else:
+                raise QuerySyntaxError("Conflicting durations in query.")
+        elif exw and maxw:
+            if exw < maxw:
+                maxw = None
+            else:
+                raise QuerySyntaxError("Conflicting durations in query.")
+
+        x = Lasting()
+        x._min = minw
+        x._max = maxw
+        x._exactly = exw
+        return x
+
+
+
+
         return delta() if width1 != width2 else width1
 
     s3._within = go(min, '_within')
     s3._after = go(max, '_after')
-    s3._min_width = go(max, '_min_width')
-    s3._max_width = go(min, '_max_width')
-    s3._width = go(delta_or_first, '_width')
+    s3._width = go(merge_width, '_width')
 
     return s3
 
@@ -1463,7 +1571,7 @@ def typecheck_kwargs(valid_types_dict, input_kwargs):
 
 
 
-class Query(Flare):
+class Query(HistoriQL):
     def __init__(self, *statements):
         self.statements = statements
 
@@ -1475,21 +1583,21 @@ class Query(Flare):
                 if q is None:
                     q = s()
                 else:
-                    raise FlareSyntaxError("Only one `select` statement may be present in a query")
-            elif isinstance(s, Span):
+                    raise QuerySyntaxError("Only one `select` statement may be present in a query")
+            elif isinstance(s, And):
                 if q is None:
                     z = Select()
                     z._query = [s]
                     q = z()
                 else:
-                    raise FlareSyntaxError("Only one `select` statement may be present in a query")
+                    raise QuerySyntaxError("Only one `select` statement may be present in a query")
             elif isinstance(s, Returning):
                 if r is None:
                     r = s()
                 else:
-                    raise FlareSyntaxError("Only one `returning` statement may be present in a query")
+                    raise QuerySyntaxError("Only one `returning` statement may be present in a query")
             else:
-                raise FlareSyntaxError("Statement must be either `returning` or `select`")
+                raise QuerySyntaxError("Statement must be either `returning` or `select`")
 
         if q is None:
             q = Select()()
@@ -1510,3 +1618,29 @@ def ast(*statements):
 
 
 
+def group_spans(qparts):
+    spans = []
+    for q in qparts:
+        if isinstance(q, Within):
+            spans[-1]._within = q
+        elif isinstance(q, After):
+            spans[-1]._after = q
+        elif isinstance(q, Lasting):
+            spans[-1]._width = q
+        elif isinstance(q, And):
+            spans.append(q)
+        elif isinstance(q, Or):
+            spans.append(q)
+        elif isinstance(q, Cond):
+            spans.append(And(q))
+        elif isinstance(q, Switch):
+            spans.append(q)
+        elif isinstance(q, Par):
+            spans.append(q)
+        elif isinstance(q, Serial):
+            spans.append(q)
+        elif isinstance(q, tuple):
+            spans.append(Serial(*q))
+        else:
+            raise QuerySyntaxError
+    return spans
