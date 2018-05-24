@@ -61,7 +61,7 @@ class ResultPage(object):
         self.stop = kwargs.get("stop")
 
     def __len__(self):
-        return len(self.results)
+        return len(self.results) or 0
 
     def __getitem__(self, i):
         return self.results[i]
@@ -139,7 +139,7 @@ class ResultSet(object):
         return self
 
     def __len__(self):
-        return sum([len(x) for x in self.spans.values()])
+        return sum([len(x) for x in self.spans.values() if x])
 
     def __next__(self):
         pg, ps = self.pos
