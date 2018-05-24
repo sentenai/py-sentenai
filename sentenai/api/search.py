@@ -40,6 +40,8 @@ class Search(object):
                 return handle(self.client.session.get(url, params={'optimize': 'true'})).json()
             except:
                 retries += 1
+        else:
+            raise SentenaiException("Server failed.")
 
     def _repr_html_(self):
         return "<pre>%s</pre>" % str(self.query)
