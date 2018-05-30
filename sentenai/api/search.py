@@ -93,7 +93,6 @@ class ResultPage(object):
 class ResultSet(object):
     def __init__(self, search):
         self.search = search
-        self.pages = []
         r = handle(self.search.client.session.post(
                 '{0}/query'.format(search.client.host),
                 json = self.search.query(),

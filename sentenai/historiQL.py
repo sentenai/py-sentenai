@@ -289,7 +289,7 @@ class Switch(HistoriQL):
 
     def __call__(self):
         """Generate AST code from the switch."""
-        if not self._stream:
+        if self._stream is None:
             raise QuerySyntaxError("Switch must be bound to stream")
         cds = []
 
@@ -504,6 +504,132 @@ class Cond(HistoriQL):
         """Define the `&` operator for conditions."""
         return And(self, q)
 
+class CondChain(HistoriQL):
+    def __init__(self, op, lpath=None, lval=None, lcond=None, rpath=None, rval=None, rcond=None):
+        print("foo!")
+        self.op = op
+        self.lpath = lpath
+        self.rpath = rpath
+        self.lcond = lcond
+        self.rcond = rcond
+        self.lval  = lval
+        self.rval  = rval
+
+
+    def __call__(self):
+        if self.lcond and self.rcond:
+            if self.op is Switch:
+                print "asdfasdfas"
+                return self.op(self.lcond) >> self.op(self.rcond)
+            else:
+                return self.op(self.lcond, self.rcond)
+        else:
+            return self
+
+    def __lt__(self, val):
+        print self, val
+        if not self.rpath:
+            raise Exception("missing rpath")
+        elif isinstance(val, CondChain):
+            self.rval = val.lval
+            self.rcond = Cond(self.rpath, '<', self.rval)
+            val.lcond = self()
+            return val
+        elif isinstance(self.rcond, CondChain):
+            self.rcond = self.rcond < val
+            return self()
+        else:
+            self.rval = val
+            self.rcond = Cond(self.rpath, '<', val)
+            return self()
+
+    def __le__(self, val):
+        print self, val
+        if not self.rpath:
+            raise Exception("missing rpath")
+        elif isinstance(val, CondChain):
+            self.rval = val.lval
+            self.rcond = Cond(self.rpath, '<=', self.rval)
+            val.lcond = self()
+            return val
+        elif isinstance(self.rcond, CondChain):
+            self.rcond = self.rcond <= val
+            return self()
+        else:
+            self.rval = val
+            self.rcond = Cond(self.rpath, '<=', val)
+            return self()
+
+    def __eq__(self, val):
+        print self, val
+        if not self.rpath:
+            raise Exception("missing rpath")
+        elif isinstance(val, CondChain):
+            self.rval = val.lval
+            self.rcond = Cond(self.rpath, '==', self.rval)
+            val.lcond = self()
+            return val
+        elif isinstance(self.rcond, CondChain):
+            self.rcond = self.rcond == val
+            return self()
+        else:
+            self.rval = val
+            self.rcond = Cond(self.rpath, '==', val)
+            return self()
+
+    def __ne__(self, val):
+        print self, val
+        if not self.rpath:
+            raise Exception("missing rpath")
+        elif isinstance(val, CondChain):
+            self.rval = val.lval
+            self.rcond = Cond(self.rpath, '!=', self.rval)
+            val.lcond = self()
+            return val
+        elif isinstance(self.rcond, CondChain):
+            self.rcond = self.rcond != val
+            return self()
+        else:
+            self.rval = val
+            self.rcond = Cond(self.rpath, '!=', val)
+            return self()
+
+    def __gt__(self, val):
+        print self, val
+        if not self.rpath:
+            raise Exception("missing rpath")
+        elif isinstance(val, CondChain):
+            self.rval = val.lval
+            self.rcond = Cond(self.rpath, '>', self.rval)
+            val.lcond = self()
+            return val
+        elif isinstance(self.rcond, CondChain):
+            self.rcond = self.rcond > val
+            return self()
+        else:
+            self.rval = val
+            self.rcond = Cond(self.rpath, '>', val)
+            return self()
+
+    def __ge__(self, val):
+        print self, val
+        if not self.rpath:
+            raise Exception("missing rpath")
+        elif isinstance(val, CondChain):
+            self.rval = val.lval
+            self.rcond = Cond(self.rpath, '>=', self.rval)
+            val.lcond = self()
+            return val
+        elif isinstance(self.rcond, CondChain):
+            self.rcond = self.rcond >= val
+            return self()
+        else:
+            self.rval = val
+            self.rcond = Cond(self.rpath, '>=', val)
+            return self()
+
+    def __str__(self):
+        return "({},{},{},{},{},{})".format(self.lpath, self.lval, self.rpath, self.rval, self.lcond, self.rcond)
 
 @py2str
 class Stream(HistoriQL):
@@ -722,10 +848,11 @@ class EventPath(Projection):
         Arguments:
             val -- The value to compare the stream variable to.
         """
-        if type(val) == list:
-            return Cond(self, 'in', val)
+        if isinstance(val, CondChain):
+            val.lcond = Cond(self, 'in' if type(val.lval) is list else '==', val.lval)
+            return val()
         else:
-            return Cond(self, '==', val)
+            return Cond(self, 'in' if type(val) is list else '==', val)
 
     def __contains__(self, path):
         joiner = "$$$$%$$$$"
@@ -743,7 +870,12 @@ class EventPath(Projection):
         Arguments:
             val -- The value to compare the stream variable to.
         """
-        return Cond(self, '!=', val)
+        if isinstance(val, CondChain):
+            val.lpath = self
+            val.lcond = Cond(self, '!=', val.lval)
+            return val()
+        else:
+            return Cond(self, '!=', val)
 
     def __gt__(self, val):
         """Create greater than conditions for event variable.
@@ -751,7 +883,12 @@ class EventPath(Projection):
         Arguments:
             val -- The value to compare the stream variable to.
         """
-        return Cond(self, '>', val)
+        if isinstance(val, CondChain):
+            val.lpath = self
+            val.lcond = Cond(self, '>', val.lval)
+            return val()
+        else:
+            return Cond(self, '>', val)
 
     def __ge__(self, val):
         """Create greater than or equal to conditions for event variable.
@@ -759,7 +896,12 @@ class EventPath(Projection):
         Arguments:
             val -- The value to compare the stream variable to.
         """
-        return Cond(self, '>=', val)
+        if isinstance(val, CondChain):
+            val.lpath = self
+            val.lcond = Cond(self, '>=', val.lval)
+            return val()
+        else:
+            return Cond(self, '>=', val)
 
     def __le__(self, val):
         """Create less than or equal to conditions for event variable.
@@ -767,7 +909,12 @@ class EventPath(Projection):
         Arguments:
             val -- The value to compare the stream variable to.
         """
-        return Cond(self, '<=', val)
+        if isinstance(val, CondChain):
+            val.lpath = self
+            val.lcond = Cond(self, '<=', val.lval)
+            return val()
+        else:
+            return Cond(self, '<=', val)
 
     def __lt__(self, val):
         """Create less than conditions for event variable.
@@ -775,7 +922,12 @@ class EventPath(Projection):
         Arguments:
             val -- The value to compare the stream variable to.
         """
-        return Cond(self, '<', val)
+        if isinstance(val, CondChain):
+            val.lpath = self
+            val.lcond = Cond(self, '<', val.lval)
+            return val()
+        else:
+            return Cond(self, '<', val)
 
     def __repr__(self):
         """Generate an unambiguous representation of the EventPath."""
@@ -785,6 +937,16 @@ class EventPath(Projection):
         """Generate a string representation of the EventPath."""
         return '{}'.format(".".join(self._attrlist))
 
+
+    def __rrshift__(self, val):
+        return CondChain(Switch, lval=val, rpath=self)
+
+    def __rand__(self, other):
+        return CondChain(And, lval=other, rpath=self)
+
+    def __ror__(self, other):
+        #return CondChain(Or, lval=other, rpath=self)
+        raise HistoriQLSynxtaxError("Or not supported in event sequences.")
 
 
 @py2str
@@ -835,64 +997,105 @@ class StreamPath(Projection):
         """
         return StreamPath(self._attrlist + (name,), self._stream)
 
-    def __eq__(self, val):
-        """Create an equality condition for stream event variables.
-
-        If used with an array, treat this as `in`.
-
-        Arguments:
-            val -- the value to compare stream attributes to.
-        """
-        if type(val) == list:
-            return Cond(self, 'in', val)
-        else:
-            return Cond(self, '==', val)
+    def __contains__(self, path):
+        joiner = "$$$$%$$$$"
+        return joiner.join(self._attrlist) in joiner.join(self._attrlist)
 
     def __iter__(self):
         """Iterate through all levels of the StreamPath."""
         return iter(self._attrlist)
 
+    def __eq__(self, val):
+        """Create equality conditions for event variables.
+
+        If used with an array, treat this as `in`.
+
+        Arguments:
+            val -- The value to compare the stream variable to.
+        """
+        if isinstance(val, CondChain):
+            val.lcond = Cond(self, 'in' if type(val.lval) is list else '==', val.lval)
+            return val()
+        else:
+            return Cond(self, 'in' if type(val) is list else '==', val)
+
     def __ne__(self, val):
-        """Create a not equal condition for stream event variables.
+        """Create inequality conditions for event variable.
 
         If used with an array, treat this as `not in`.
 
         Arguments:
-            val -- the value to compare stream attributes to.
+            val -- The value to compare the stream variable to.
         """
-        return Cond(self, '!=', val)
+        if isinstance(val, CondChain):
+            val.lpath = self
+            val.lcond = Cond(self, '!=', val.lval)
+            return val()
+        else:
+            return Cond(self, '!=', val)
 
     def __gt__(self, val):
-        """Create a greater than condition for stream event variables.
+        """Create greater than conditions for event variable.
 
         Arguments:
-            val -- the value to compare stream attributes to.
+            val -- The value to compare the stream variable to.
         """
-        return Cond(self, '>', val)
+        if isinstance(val, CondChain):
+            val.lpath = self
+            val.lcond = Cond(self, '>', val.lval)
+            return val()
+        else:
+            return Cond(self, '>', val)
 
     def __ge__(self, val):
-        """Create a greater than or equal condition for stream event variables.
+        """Create greater than or equal to conditions for event variable.
 
         Arguments:
-            val -- the value to compare stream attributes to.
+            val -- The value to compare the stream variable to.
         """
-        return Cond(self, '>=', val)
+        if isinstance(val, CondChain):
+            val.lpath = self
+            val.lcond = Cond(self, '>=', val.lval)
+            return val()
+        else:
+            return Cond(self, '>=', val)
 
     def __le__(self, val):
-        """Create a less than or equal condition for stream event variables.
+        """Create less than or equal to conditions for event variable.
 
         Arguments:
-            val -- the value to compare stream attributes to.
+            val -- The value to compare the stream variable to.
         """
-        return Cond(self, '<=', val)
+        if isinstance(val, CondChain):
+            val.lpath = self
+            val.lcond = Cond(self, '<=', val.lval)
+            return val()
+        else:
+            return Cond(self, '<=', val)
 
     def __lt__(self, val):
-        """Create a less than condition for stream event variables.
+        """Create less than conditions for event variable.
 
         Arguments:
-            val -- the value to compare stream attributes to.
+            val -- The value to compare the stream variable to.
         """
-        return Cond(self, '<', val)
+        if isinstance(val, CondChain):
+            val.lpath = self
+            val.lcond = Cond(self, '<', val.lval)
+            return val()
+        else:
+            return Cond(self, '<', val)
+
+    def __repr__(self):
+        """Generate an unambiguous representation of the EventPath."""
+        return str(self)
+
+    def __rand__(self, other):
+        return CondChain(And, lval=other, rpath=self)
+
+    def __ror__(self, other):
+        return CondChain(Or, lval=other, rpath=self)
+
 
     def __repr__(self):
         """Generate an unambiguous representation of the StreamPath."""
