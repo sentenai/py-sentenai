@@ -1,5 +1,5 @@
 from __future__ import print_function
-import json
+import json as JSON
 import pytz
 import re, sys, time
 import requests
@@ -40,7 +40,7 @@ class Event(object):
     def __init__(self, client, stream, id=None, ts=None, event=None, saved=False):
         self.stream = stream
         self.id = id
-        self.ts = ts
+        self.ts = cts(ts)
         self.event = event
         self._saved = saved
 
@@ -52,8 +52,11 @@ class Event(object):
     def __repr__(self):
         return "Event({}, {}, saved={})".format(self.stream.name, self.id, self.exists)
 
-    def json(self):
-        return {'ts': self.ts, 'event': self.event}
+    def json(self, include_id=False):
+        if include_id:
+            return {'ts': self.ts, 'event': self.event, 'id': self.id}
+        else:
+            return {'ts': self.ts, 'event': self.event}
 
     def create(self):
         loc = self.stream.put(self.event, self.id, self.ts)
@@ -324,7 +327,11 @@ class StreamRange(object):
 
     @property
     def df(self):
-        return json_normalize([x.json() for x in self._events])
+        f = json_normalize([x.json() for x in self._events])
+        return f.set_index('ts')
+
+    def json(self):
+        return JSON.dumps([x.json(include_id=True) for x in self._events], default=dts, indent=4)
 
 
     def _repr_html_(self):
