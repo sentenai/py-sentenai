@@ -405,7 +405,7 @@ class Sentenai(object):
         else:
             raise SentenaiException("Must be called on stream")
 
-    def values(self, stream, field):
+    def unique(self, stream, field):
         r = self.session.get('{host}/streams/{stream}/fields/event.{field}/values'.format(host=self.host, stream=stream.name, field=field))
         return r.json()
 

@@ -293,7 +293,7 @@ class Stream(BaseStream):
            start  -- Optional argument indicating start time in stream for calculations.
            end    -- Optional argument indicating end time in stream for calculations.
         """
-        return self._client.values(self, field)
+        return self._client.unique(self, field)
     _unique = unique
 
     def put(self, event, id=None, timestamp=None):
