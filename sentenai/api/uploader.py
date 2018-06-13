@@ -117,7 +117,7 @@ class Uploader(object):
         if isinstance(sid, Stream):
             strm = sid
         elif sid:
-            strm = self.client.stream(sid)
+            strm = self.client.Stream(sid)
         else:
             return (data, "missing stream")
 

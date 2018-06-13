@@ -506,6 +506,38 @@ class Cond(HistoriQL):
 
 class CondChain(HistoriQL):
     def __init__(self, op, lpath=None, lval=None, lcond=None, rpath=None, rval=None, rcond=None):
+        self.op = op
+        self.lpath = lpath
+        self.rpath = rpath
+        self.lcond = lcond
+        self.rcond = rcond
+        self.lval  = lval
+        self.rval  = rval
+        self.arr = [lpath, lcond, lval, op, rpath, rcond, rval]
+
+    def __eq__(self, val):
+        self.arr.append('==')
+        if isinstance(val, CondChain):
+            print("XXXXXXXXXX")#, self.arr, val.arr)
+            self.arr.extend(val.arr)
+        else:
+            print("YYYYYYYYYY")#, self.arr, val)
+            print(val)
+            self.arr.append(val)
+        print("CONDCHAIN ==", self.arr)
+        return self
+
+    def __and__(self, val):
+        self.arr.append(And)
+        if isinstance(val, CondChain):
+            self.arr.extend(val.arr)
+        else:
+            self.arr.append(val)
+        return self
+
+
+class CondChain2(HistoriQL):
+    def __init__(self, op, lpath=None, lval=None, lcond=None, rpath=None, rval=None, rcond=None):
         print("foo!")
         self.op = op
         self.lpath = lpath
@@ -514,6 +546,7 @@ class CondChain(HistoriQL):
         self.rcond = rcond
         self.lval  = lval
         self.rval  = rval
+        self.arr = [lpath, lcond, lval, op, rpath, rcond, rval]
 
 
     def __call__(self):
@@ -1014,9 +1047,12 @@ class StreamPath(Projection):
             val -- The value to compare the stream variable to.
         """
         if isinstance(val, CondChain):
-            val.lcond = Cond(self, 'in' if type(val.lval) is list else '==', val.lval)
-            return val()
+            #val.lcond = Cond(self, 'in' if type(val.lval) is list else '==', val.lval)
+            val.arr = [self, '=='] + val.arr
+            print("SPATH ==", val.arr)
+            return val
         else:
+            print("NANI?!")
             return Cond(self, 'in' if type(val) is list else '==', val)
 
     def __ne__(self, val):
@@ -1091,9 +1127,11 @@ class StreamPath(Projection):
         return str(self)
 
     def __rand__(self, other):
+        print("rand", self, other.__class__)
         return CondChain(And, lval=other, rpath=self)
 
     def __ror__(self, other):
+        print("ror", self, other.__class__)
         return CondChain(Or, lval=other, rpath=self)
 
 
@@ -1112,6 +1150,8 @@ class StreamPath(Projection):
             return self._stream.__getattr__("_"+self._attrlist[0])(*args, **kwargs)
         elif self._attrlist[-1] == 'describe':
             return self._stream.__getattr__("_describe")(".".join(self._attrlist[:-1]), *args, **kwargs)
+        elif self._attrlist[-1] == 'stats':
+            return self._stream.__getattr__("_fstats")(".".join(self._attrlist[:-1]), *args, **kwargs)
         elif self._attrlist[-1] == 'unique':
             return self._stream.__getattr__("_unique")(".".join(self._attrlist[:-1]), *args, **kwargs)
         else:

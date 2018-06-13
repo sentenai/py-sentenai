@@ -40,7 +40,7 @@ class Event(object):
     def __init__(self, client, stream, id=None, ts=None, event=None, saved=False):
         self.stream = stream
         self.id = id
-        self.ts = cts(ts)
+        self.ts = ts if isinstance(ts, datetime) or ts is None else cts(ts)
         self.event = event
         self._saved = saved
 
@@ -121,7 +121,7 @@ class Values(object):
 
 class Fields(object):
     def __init__(self, fields):
-        self._fields = fields
+        self._fields = [f for f in fields if f['path']]
 
     def __getitem__(self, path):
         xs = []
@@ -136,6 +136,18 @@ class Fields(object):
     def __iter__(self):
         return iter(self._fields)
 
+    def _repr_html_(self):
+        df = pd.DataFrame(sorted(self._fields, key=lambda x: (x['start'], ".".join(x['path']))))
+        df['path'] = df['path'].apply(lambda x: ".".join(x))
+        df['start'] = df['start'].apply(cts)
+        df = df[['path', 'start']]
+        return df.rename(
+                index=str,
+                columns={
+                    'path': 'Field',
+                    'start': 'Added At'
+                    }
+            )._repr_html_()
 
 
 class Stream(BaseStream):
@@ -165,13 +177,7 @@ class Stream(BaseStream):
     _newest = newest
 
     def fields(self):
-        fs = []
-        for f in self._client.fields(self):
-            x = self
-            for segment in f:
-                x = x[segment]
-            fs.append(x)
-        return Fields(fs)
+        return Fields(self._client.fields(self))
     _fields = fields
 
     def values(self, at=None):
@@ -251,7 +257,7 @@ class Stream(BaseStream):
         return Event(self._client, self, event=k['event'], id=k['id'], ts=cts(k['ts']), saved=True)
     _read = read
 
-    def describe(self, field, start=None, end=None):
+    def fstats(self, field, start=None, end=None):
         """Get stats for a given numeric field.
 
            Arguments:
@@ -259,8 +265,24 @@ class Stream(BaseStream):
            start  -- Optional argument indicating start time in stream for calculations.
            end    -- Optional argument indicating end time in stream for calculations.
         """
-        raise NotImplementedError
         return self._client.stats(self, field, start, end)
+    _fstats = fstats
+
+    def describe(self, field, start=None, end=None):
+        """Describe a given numeric field.
+
+           Arguments:
+           field  -- A dotted field name for a numeric field in the stream.
+           start  -- Optional argument indicating start time in stream for calculations.
+           end    -- Optional argument indicating end time in stream for calculations.
+        """
+        x = self._client.stats(self, field, start, end)
+        if x.get('categorical'):
+            print("count\t{count}\nunique\t{unique}\ntop\t{top}\nfreq\t{freq}".format(**x['categorical']))
+        else:
+            p = x['numerical']
+            print("count\t{}\nmean\t{:.2f}\nstd\t{:.2f}\nmin\t{}\n25%\t{}\n50%\t{}\n75%\t{}\nmax\t{}".format(
+                p['count'], p['mean'], p['std'], p['min'], p['25%'], p['50%'], p['75%'], p['max']))
     _describe = describe
 
     def unique(self, field):
@@ -271,7 +293,7 @@ class Stream(BaseStream):
            start  -- Optional argument indicating start time in stream for calculations.
            end    -- Optional argument indicating end time in stream for calculations.
         """
-        raise NotImplementedError
+        return self._client.values(self, field)
     _unique = unique
 
     def put(self, event, id=None, timestamp=None):

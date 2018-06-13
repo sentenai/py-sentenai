@@ -104,7 +104,7 @@ class Sentenai(object):
             return Stream(self, name, kwargs.get('meta', {}), None, tz, *args)
         elif resp.status_code == 200:
             data = resp.json()
-            return Stream(self, name, data.get('meta', {}), data.get('size', None), tz, *args)
+            return Stream(self, name, data.get('meta', {}), data.get('events', None), tz, *args)
         else:
             handle(resp)
 
@@ -206,7 +206,7 @@ class Sentenai(object):
         if start: args['start'] = start.isoformat() + ("Z" if not start.tzinfo else "")
         if end: args['end'] = end.isoformat() + ("Z" if not end.tzinfo else "")
 
-        url = "/".join([self.host, "streams", stream()['name'], "fields", field, "stats"])
+        url = "/".join([self.host, "streams", stream()['name'], "fields", "event." + field, "stats"])
 
         resp = self.session.get(url, params=args)
 
@@ -284,7 +284,7 @@ class Sentenai(object):
 
         try:
             return sorted(
-                    [Stream(self, v['name'], v.get('meta', {}), v.get('info', {}), v.get('tz', None))
+                    [Stream(self, v['name'], v.get('meta', {}), v.get('events', 0), v.get('tz', None))
                         for v in resp.json() if filtered(v)],
                     key=lambda k: k.name
                     )
@@ -367,7 +367,6 @@ class Sentenai(object):
             headers = {}
             params = {}
             if timestamp:
-                headers['timestamp'] = iso8601(timestamp)
                 params['at'] = iso8601(timestamp)
             resp = self.session.get(url, params=params, headers=headers)
             status_codes(resp)
@@ -406,10 +405,9 @@ class Sentenai(object):
         else:
             raise SentenaiException("Must be called on stream")
 
-    def uniques(self, streamPath):
-        return self.query(Returning(streamPath['stream'] % {
-            'field': streamPath['path']
-        })).dataframe(drop_stream_names=True).field.unique()
+    def values(self, stream, field):
+        r = self.session.get('{host}/streams/{stream}/fields/event.{field}/values'.format(host=self.host, stream=stream.name, field=field))
+        return r.json()
 
 
 class Cursor(object):
