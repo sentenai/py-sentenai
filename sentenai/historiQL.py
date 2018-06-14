@@ -504,41 +504,9 @@ class Cond(HistoriQL):
         """Define the `&` operator for conditions."""
         return And(self, q)
 
+
 class CondChain(HistoriQL):
     def __init__(self, op, lpath=None, lval=None, lcond=None, rpath=None, rval=None, rcond=None):
-        self.op = op
-        self.lpath = lpath
-        self.rpath = rpath
-        self.lcond = lcond
-        self.rcond = rcond
-        self.lval  = lval
-        self.rval  = rval
-        self.arr = [lpath, lcond, lval, op, rpath, rcond, rval]
-
-    def __eq__(self, val):
-        self.arr.append('==')
-        if isinstance(val, CondChain):
-            print("XXXXXXXXXX")#, self.arr, val.arr)
-            self.arr.extend(val.arr)
-        else:
-            print("YYYYYYYYYY")#, self.arr, val)
-            print(val)
-            self.arr.append(val)
-        print("CONDCHAIN ==", self.arr)
-        return self
-
-    def __and__(self, val):
-        self.arr.append(And)
-        if isinstance(val, CondChain):
-            self.arr.extend(val.arr)
-        else:
-            self.arr.append(val)
-        return self
-
-
-class CondChain2(HistoriQL):
-    def __init__(self, op, lpath=None, lval=None, lcond=None, rpath=None, rval=None, rcond=None):
-        print("foo!")
         self.op = op
         self.lpath = lpath
         self.rpath = rpath
@@ -552,7 +520,6 @@ class CondChain2(HistoriQL):
     def __call__(self):
         if self.lcond and self.rcond:
             if self.op is Switch:
-                print "asdfasdfas"
                 return self.op(self.lcond) >> self.op(self.rcond)
             else:
                 return self.op(self.lcond, self.rcond)
@@ -560,7 +527,6 @@ class CondChain2(HistoriQL):
             return self
 
     def __lt__(self, val):
-        print self, val
         if not self.rpath:
             raise Exception("missing rpath")
         elif isinstance(val, CondChain):
@@ -577,7 +543,6 @@ class CondChain2(HistoriQL):
             return self()
 
     def __le__(self, val):
-        print self, val
         if not self.rpath:
             raise Exception("missing rpath")
         elif isinstance(val, CondChain):
@@ -594,7 +559,6 @@ class CondChain2(HistoriQL):
             return self()
 
     def __eq__(self, val):
-        print self, val
         if not self.rpath:
             raise Exception("missing rpath")
         elif isinstance(val, CondChain):
@@ -611,7 +575,6 @@ class CondChain2(HistoriQL):
             return self()
 
     def __ne__(self, val):
-        print self, val
         if not self.rpath:
             raise Exception("missing rpath")
         elif isinstance(val, CondChain):
@@ -628,7 +591,6 @@ class CondChain2(HistoriQL):
             return self()
 
     def __gt__(self, val):
-        print self, val
         if not self.rpath:
             raise Exception("missing rpath")
         elif isinstance(val, CondChain):
@@ -645,7 +607,6 @@ class CondChain2(HistoriQL):
             return self()
 
     def __ge__(self, val):
-        print self, val
         if not self.rpath:
             raise Exception("missing rpath")
         elif isinstance(val, CondChain):
@@ -1049,7 +1010,6 @@ class StreamPath(Projection):
         if isinstance(val, CondChain):
             #val.lcond = Cond(self, 'in' if type(val.lval) is list else '==', val.lval)
             val.arr = [self, '=='] + val.arr
-            print("SPATH ==", val.arr)
             return val
         else:
             return Cond(self, 'in' if type(val) is list else '==', val)
@@ -1126,11 +1086,9 @@ class StreamPath(Projection):
         return str(self)
 
     def __rand__(self, other):
-        print("rand", self, other.__class__)
         return CondChain(And, lval=other, rpath=self)
 
     def __ror__(self, other):
-        print("ror", self, other.__class__)
         return CondChain(Or, lval=other, rpath=self)
 
 
