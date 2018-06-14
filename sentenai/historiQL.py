@@ -1052,7 +1052,6 @@ class StreamPath(Projection):
             print("SPATH ==", val.arr)
             return val
         else:
-            print("NANI?!")
             return Cond(self, 'in' if type(val) is list else '==', val)
 
     def __ne__(self, val):

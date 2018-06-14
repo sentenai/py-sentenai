@@ -325,6 +325,21 @@ class Stream(BaseStream):
         return StreamRange(self, start, end, self._client.range(self, start, end))
     _range = range
 
+    def head(self, n=20):
+        """Get all of a stream's events between start (inclusive) and end (exclusive).
+
+        Arguments:
+           n      -- A max number of events to return
+
+           Result:
+           A time ordered list of all events in a stream from `start` to `end`
+        """
+        x = self._client.head(self, n)
+        if not x:
+            return StreamRange(self, datetime.min, datetime.max, [])
+        else:
+            return StreamRange(self, x[0].ts, x[-1].ts, x)
+
     def newest(self):
         """Get the most recent event in the stream."""
         return self._client.newest(self)
