@@ -357,6 +357,33 @@ class Sentenai(object):
              "end",
              iso8601(datetime.max)]
         )
+        resp = self.session.get(url, params={'limit': str(n), 'sort': 'desc'})
+        status_codes(resp)
+        return [Event(self, stream, **json.loads(line)) for line in resp.text.splitlines()]
+
+
+    def tail(self, stream, n):
+        """Get all stream events between start (inclusive) and end (exclusive).
+
+        Arguments:
+           stream -- A stream object corresponding to a stream stored
+                     in Sentenai.
+           start  -- A datetime object representing the start of the requested
+                     time range.
+           end    -- A datetime object representing the end of the requested
+                     time range.
+
+           Result:
+           A time ordered list of all events in a stream from `start` to `end`
+        """
+        url = "/".join(
+            [self.host, "streams",
+             stream()['name'],
+             "start",
+             iso8601(datetime.min),
+             "end",
+             iso8601(datetime.max)]
+        )
         resp = self.session.get(url, params={'limit': str(n)})
         status_codes(resp)
         return [Event(self, stream, **json.loads(line)) for line in resp.text.splitlines()]
