@@ -357,7 +357,7 @@ class Sentenai(object):
              "end",
              iso8601(datetime.max)]
         )
-        resp = self.session.get(url, params={'limit': str(n), 'sort': 'desc'})
+        resp = self.session.get(url, params={'limit': str(n), 'sort': 'asc'})
         status_codes(resp)
         return [Event(self, stream, **json.loads(line)) for line in resp.text.splitlines()]
 
@@ -384,7 +384,7 @@ class Sentenai(object):
              "end",
              iso8601(datetime.max)]
         )
-        resp = self.session.get(url, params={'limit': str(n)})
+        resp = self.session.get(url, params={'limit': str(n), 'sort': 'desc'})
         status_codes(resp)
         return [Event(self, stream, **json.loads(line)) for line in resp.text.splitlines()]
 

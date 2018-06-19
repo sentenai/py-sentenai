@@ -375,7 +375,7 @@ class StreamRange(object):
 
 
     def __iter__(self):
-        return self._events
+        return iter(self._events)
 
     @property
     def df(self):
