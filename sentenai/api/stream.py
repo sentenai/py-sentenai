@@ -37,11 +37,11 @@ except:
 
 
 class Event(object):
-    def __init__(self, client, stream, id=None, ts=None, event=None, saved=False):
+    def __init__(self, client, stream, id=None, ts=None, data=None, saved=False):
         self.stream = stream
         self.id = id
         self.ts = ts if isinstance(ts, datetime) or ts is None else cts(ts)
-        self.event = event
+        self.data = data
         self._saved = saved
 
     @property
@@ -50,16 +50,16 @@ class Event(object):
 
 
     def __repr__(self):
-        return "Event({}, {}, saved={})".format(self.stream.name, self.id, self.exists)
+        return "Event({}, {}, exists={})".format(self.stream.name, self.id, self.exists)
 
     def json(self, include_id=False):
         if include_id:
-            return {'ts': self.ts, 'event': self.event, 'id': self.id}
+            return {'ts': self.ts, 'event': self.data, 'id': self.id}
         else:
-            return {'ts': self.ts, 'event': self.event}
+            return {'ts': self.ts, 'event': self.data}
 
     def create(self):
-        loc = self.stream.put(self.event, self.id, self.ts)
+        loc = self.stream.put(self.data, self.id, self.ts)
         self.id = loc
         self._saved = True
         return self
@@ -67,14 +67,14 @@ class Event(object):
     def read(self):
         x = self.stream.read(self.id)
         self.ts = x.ts
-        self.event = x.event
+        self.data = x.event
         self._saved = True
         return self
 
     def update(self):
         if not self.id:
             raise Exception("Not found")
-        loc = self.stream.put(self.event, self.id, self.ts)
+        loc = self.stream.put(self.data, self.id, self.ts)
         self.id = loc
         self._saved = True
         return self
@@ -150,6 +150,9 @@ class Fields(object):
             )._repr_html_()
 
 
+
+
+
 class Stream(BaseStream):
     def __init__(self, client, name, meta, events, tz, *filters):
         self._client = client
@@ -167,6 +170,12 @@ class Stream(BaseStream):
             return 0
         else:
             return int(self._events)
+
+    def __getattribute__(self, name):
+        if hasattr(Stream, name) and hasattr(Stream, "_" + name):
+            raise AttributeError("Cannot call this method.")
+        else:
+            return BaseStream.__getattribute__(self, name)
 
     def oldest(self):
         return self._client.oldest(self)
@@ -325,7 +334,7 @@ class Stream(BaseStream):
         return StreamRange(self, start, end, self._client.range(self, start, end))
     _range = range
 
-    def tail(self, n=20):
+    def tail(self, n=5):
         """Get all of a stream's events between start (inclusive) and end (exclusive).
 
         Arguments:
@@ -340,7 +349,7 @@ class Stream(BaseStream):
         else:
             return StreamRange(self, x[0].ts, x[-1].ts, reversed(x))
 
-    def head(self, n=20):
+    def head(self, n=5):
         """Get all of a stream's events between start (inclusive) and end (exclusive).
 
         Arguments:
@@ -366,6 +375,33 @@ class Stream(BaseStream):
     _oldest = oldest
 
 
+
+class ProjectedStream(object):
+    def __init__(self, stream, *projections):
+        self.stream = stream
+        self.projections = projections
+
+class ProjectedEvent(Event):
+    def __init__(self, client, stream, id=None, ts=None, data=None, saved=False):
+        self.stream = stream
+        self.id = id
+        self.ts = ts if isinstance(ts, datetime) or ts is None else cts(ts)
+        self.data = data
+        self._saved = False
+
+    def create(self):
+        raise Exception()
+
+    def update(self):
+        raise Exception()
+
+    def delete(self):
+        raise Exception()
+
+    def update(self):
+        raise Exception()
+
+
 class StreamRange(object):
     def __init__(self, stream, start, end, events):
         self.stream = stream
@@ -388,3 +424,38 @@ class StreamRange(object):
 
     def _repr_html_(self):
         return self.df._repr_html_()
+
+
+class StreamsView(object):
+    def __init__(self, streams):
+        self.streams = streams
+
+    def _repr_html_(self):
+        return pd.DataFrame([{ 'name': s.name, 'length': len(s), 'healthy': True} for s in self.streams])[['name', 'length', 'healthy']]._repr_html_()
+
+    def __iter__(self):
+        return self.streams
+
+    def __getitem__(self, i):
+        return self.streams[i]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

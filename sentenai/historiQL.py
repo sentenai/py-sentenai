@@ -1,4 +1,4 @@
-import inspect, json
+import inspect, json, base64
 from copy import copy
 import numpy as np
 
@@ -491,7 +491,9 @@ class Cond(HistoriQL):
         if stream:
             stream = copy(stream)
             stream.tz = tz
-            d.update({'path': ('event',) + self.path._attrlist, 'stream': self.path._stream()})
+            d.update({'path': ('event',) + self.path._attrlist, 'stream': stream.name})
+        elif isinstance(self.path, EventPath):
+            d.update({'path': ('event',) + self.path._attrlist})
         else:
             d.update({'path': ('event',) + self.path._attrlist, 'stream': self.path._stream()})
         return d
@@ -650,6 +652,13 @@ class Stream(HistoriQL):
         self._meta = meta
         self._filters = filters
         self.tz = tz
+
+    def _serialized_filters(self):
+        x = self().get('filter')
+        if x:
+            return {'filters': base64.urlsafe_b64encode(json.dumps(x))}
+        else:
+            return {}
 
     def __pos__(self):
         return Proj(self, True)

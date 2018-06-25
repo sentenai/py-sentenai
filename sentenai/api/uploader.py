@@ -1,17 +1,18 @@
 from __future__ import print_function
 
+import pytz
+import re, sys, time, json
+import requests
+
 from datetime import timedelta
 from multiprocessing.pool import ThreadPool
+from threading import Lock
+
 from sentenai.api.stream import Stream, Event
 from sentenai.historiQL import EventPath, Returning, delta, Delta, Query
 from sentenai.utils import *
 from sentenai.exceptions import *
 from sentenai.exceptions import handle
-from threading import Lock
-import json
-import pytz
-import re, sys, time
-import requests
 
 if PY3:
     string_types = str

@@ -176,9 +176,6 @@ class ResultSet(object):
         return pd.concat(dfs, keys=range(0,len(dfs)))
 
 
-
-
-
     def all(self):
         while self.cursors[-1]:
             if self.cursors[-1] not in self.spans:
@@ -235,7 +232,7 @@ class Result(object):
         df = pd.DataFrame([
             { 'Start': self.start,
               'End': self.end,
-              'Duration': u"{}".format(r.duration if r.duration else 0),
+              'Duration': u"{}".format(self.duration if self.duration else 0),
             }])
         if df.empty:
             return "_"
