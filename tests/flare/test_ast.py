@@ -1,13 +1,18 @@
 # coding=utf-8
 import pytest
-from sentenai import *
-from sentenai.flare import ast_dict
+from sentenai import Sentenai, hql, V
+from sentenai.historiQL import ast_dict, Select
+from sentenai.api.stream import Stream
+
+def stream(name, *filters):
+    return Stream(None, name, {}, None, None, True, *filters)
+
+def ast(*args):
+    return ast_dict(Select(*args))
 
 def test_basic_select_span():
     s = stream("S")
-    real = ast_dict(
-        select().span(s.x == True)
-    )
+    real = ast(s.x == True)
     expected = {
         "select": {
             "type": "span",
@@ -23,13 +28,11 @@ def test_basic_select_span():
 # TODO: figure out date/time/datetime types
 def test_any_of_comparisons():
     s = stream("moose")
-    real = ast_dict(
-        select().span(any_of(
-            span(s.x < 0),
-            span(s.x >= 3.141592653589793),
-            span(s.b != False)
-        ))
-    )
+    real = ast(hql.Any(
+        s.x < 0,
+        s.x >= 3.141592653589793,
+        s.b != False
+    ))
 
     expected = {
         "select": {
@@ -64,15 +67,14 @@ def test_any_of_comparisons():
 
 def test_stream_access():
     s = stream("S")
-    real = ast_dict(
-        select()
-            .span(s.even == True)
-            .then(s.event == True)
-            .then(s.event.event == True)
-            .then(s.id == True)
-            .then(s._('.id') == True)
-            .then(s._('.id')._('') == True)
-            .then(s._('true')._('真实') == True)
+    real = ast(
+        s.even == True,
+        s.event == True,
+        s.event.event == True,
+        s.id == True,
+        s['.id'] == True,
+        s['.id'][''] == True,
+        s['true']['真实'] == True
     )
     expected = {
         "select": {
@@ -86,7 +88,6 @@ def test_stream_access():
                     "stream": { "name": "S" }
                 },
                 {
-                    "within": { "seconds": 0 },
                     "type": "span",
                     "op": "==",
                     "arg": { "type": "bool", "val": True },
@@ -94,7 +95,6 @@ def test_stream_access():
                     "stream": { "name": "S" }
                 },
                 {
-                    "within": { "seconds": 0 },
                     "type": "span",
                     "op": "==",
                     "arg": { "type": "bool", "val": True },
@@ -102,7 +102,6 @@ def test_stream_access():
                     "stream": { "name": "S" }
                 },
                 {
-                    "within": { "seconds": 0 },
                     "type": "span",
                     "op": "==",
                     "arg": { "type": "bool", "val": True },
@@ -110,7 +109,6 @@ def test_stream_access():
                     "stream": { "name": "S" }
                 },
                 {
-                    "within": { "seconds": 0 },
                     "type": "span",
                     "op": "==",
                     "arg": { "type": "bool", "val": True },
@@ -118,7 +116,6 @@ def test_stream_access():
                     "stream": { "name": "S" }
                 },
                 {
-                    "within": { "seconds": 0 },
                     "type": "span",
                     "op": "==",
                     "arg": { "type": "bool", "val": True },
@@ -126,7 +123,6 @@ def test_stream_access():
                     "stream": { "name": "S" }
                 },
                 {
-                    "within": { "seconds": 0 },
                     "type": "span",
                     "op": "==",
                     "arg": { "type": "bool", "val": True },
@@ -146,11 +142,10 @@ def test_all_any_serial():
     qux = stream("qux")
     quux = stream("quux")
 
-    real = ast_dict(
-        select()
-            .span(any_of(foo.x == True, bar.y == True))
-            .then(baz.z == True)
-            .then(all_of(qux._("α") == True, quux._("β") == True))
+    real = ast(
+        hql.Any(foo.x == True, bar.y == True),
+        baz.z == True,
+        hql.All(qux['α'] == True, quux['β'] == True)
     )
     expected = {
         "select": {
@@ -164,11 +159,9 @@ def test_all_any_serial():
                     ]
                 },
                 {
-                    "within": {"seconds": 0},
                     "op":"==", "stream": {"name": "baz"}, "path":("event","z"), "type":"span", "arg":{"type":"bool", "val":True}
                 },
                 {
-                    "within": {"seconds": 0},
                     "type": "all",
                     "conds": [
                         {"op":"==", "stream": {"name": "qux"},  "path":("event","α"), "type":"span", "arg":{"type":"bool", "val":True}},
@@ -183,7 +176,7 @@ def test_all_any_serial():
 def test_or():
     s = stream('s')
     t = stream('t')
-    real = ast_dict(select().span((s.x == True) | (t.x == True)))
+    real = ast(s.x == True | t.x == True)
     expected = {
         "select": {
             "expr": "||",
@@ -279,9 +272,7 @@ def test_nested_relative_spans():
 
 def test_stream_filters():
     s = stream('S', V.season == "summer")
-    real = ast_dict(
-        select().span(span(s.temperature >= 77) & span(s.sunny == True))
-    )
+    real = ast(s.temperature >= 77 & s.sunny == True)
     expected = {
         "select": {
             "expr": "&&",
@@ -301,9 +292,7 @@ def test_stream_filters():
 
 def test_or_stream_filters():
     s = stream('S', (V.season == "summer") | (V.season == "winter"))
-    real = ast_dict(
-        select().span(s.sunny == True)
-    )
+    real = ast(s.sunny == True)
     expected = {
         'select': {
             'type': 'span',
@@ -414,11 +403,11 @@ def test_returning_excluding():
 
 def test_during():
     s = stream('S')
-    real = ast_dict(
-        select().span(during(
+    real = ast(
+        hql.During(
             s.foo == 'bar',
             s.baz > 1.5
-        ))
+        )
     )
     expected = {
         "select": {
