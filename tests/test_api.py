@@ -1,7 +1,7 @@
 from hypothesis import given, example, assume
 from hypothesis.strategies import text, tuples, uuids, one_of, none, integers, floats, datetimes
 
-from sentenai import Sentenai, stream
+from sentenai import Sentenai #, stream
 import string, unittest, requests_mock, requests, pytest
 
 try:
