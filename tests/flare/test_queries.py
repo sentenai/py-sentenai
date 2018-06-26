@@ -5,9 +5,9 @@ from datetime import timedelta, datetime
 
 from hypothesis            import given, assume, example, settings
 from hypothesis.strategies import text, dictionaries, booleans, integers, floats, lists, dates, datetimes, times, one_of
-from sentenai              import hql
+from sentenai              import hql, V
 from sentenai.api.stream   import Stream
-from sentenai.historiQL    import StreamPath, Cond, Serial, Switch, Or, Select, Par, ast
+from sentenai.historiQL    import StreamPath, Cond, Serial, Switch, And, Or, Select, Par, ast
 from shapely.geometry      import Point, Polygon
 # Hypothesis Strategies
 # ========================
@@ -109,24 +109,24 @@ def test_inpoly():
 with settings(max_examples=1000, min_satisfying_examples=500):
 
     @given(all_types())
-    def test_simple_spans(query):
+    def test_simple_conds(query):
         s1 = stream("1")
         s2 = stream("2")
 
-        sp1 = span(s1.foo == query, s2.foo == query)
-        sp2 = span(s1.foo == query, s2.foo == query, within=delta(days=2))
+        cond1 = s1.foo == query
+        cond2 = s2.bar == query
 
-        assume(type(sp1) is Span)
-        assume(type(sp2) is Span)
+        assume(type(cond1) is Cond)
+        assume(type(cond2) is Cond)
 
 
-    @given(all_types(), all_types())
-    def test_switch_construction(query1, query2):
-        spike = event(V.foo == query1) >> event(V.bar < query2) >> event(V.baz != query1)
-        assume(isinstance(spike, Switch))
+    # @given(all_types(), all_types())
+    # def test_switch_construction(query1, query2):
+    #     spike = event(V.foo == query1) >> event(V.bar < query2) >> event(V.baz != query1)
+    #     assume(isinstance(spike, Switch))
 
-        s = stream("1")
-        assume(isinstance(s(spike), Switch))
+    #     s = stream("1")
+    #     assume(isinstance(s(spike), Switch))
 
 
     @given(all_types())
@@ -134,99 +134,95 @@ with settings(max_examples=1000, min_satisfying_examples=500):
         s1 = stream("1")
         s2 = stream("2")
 
-        span1 = span(s2.foo == query)
-        span2 = span(s1.foo == query)
+        cond1 = s2.foo == query
+        cond2 = s1.foo == query
 
-        assume(type(span1) == Span and type(span2) == Span)
-
-        assume(type(span1 & span2) == Span)
-        assume(type(span1 | span2) == Or)
-        assume(type(span1 >>span2) == Serial)
+        assume(type(cond1 & cond2) == And)
+        assume(type(cond1 | cond2) == Or)
+        # assume(type(span1 >> span2) == Serial)
 
 
-    @given(all_types(), all_types())
-    def test_serial_construction(query1, query2):
-        s1 = stream("1")
-        s2 = stream("2")
-        evt1 = event(V.foo == query1)
-        evt2 = event(V.foo == query2)
+    # @given(all_types(), all_types())
+    # def test_serial_construction(query1, query2):
+    #     s1 = stream("1")
+    #     s2 = stream("2")
+    #     evt1 = event(V.foo == query1)
+    #     evt2 = event(V.foo == query2)
 
-        srl = span(s1(evt1)) \
-             .then(s2(evt2), within=delta(days=5))
+    #     srl = span(s1(evt1)) \
+    #          .then(s2(evt2), within=delta(days=5))
 
-        assume(type(srl) is Serial)
+    #     assume(type(srl) is Serial)
 
 
     @given(all_types(), all_types())
     def test_par_construction(query1, query2):
         s1 = stream("1")
         s2 = stream("2")
-        evt1 = event(V.foo == query1)
-        evt2 = event(V.foo == query2)
 
-        assume( isinstance(any_of(s1(evt1), s2(evt2)), Par) )
-        assume( isinstance(all_of(s1(evt1), s2(evt2)), Par) )
+        assume( isinstance(hql.Any(s1.foo == query1, s2.foo == query2), Par) )
+        assume( isinstance(hql.All(s1.foo == query1, s2.foo == query2), Par) )
 
         # FIXME: this is not working as expected
         #assume(type(all_of(s1(evt1), s2(evt2))()) == dict)
 
 
-    @given(all_types(), all_types())
-    def test_select_construction(query1, query2):
-        s1 = stream("1")
-        s2 = stream("2")
-        evt1 = event(V.foo == query1)
-        evt2 = event(V.foo == query2)
+    # @given(all_types(), all_types())
+    # def test_select_construction(query1, query2):
+    #     s1 = stream("1")
+    #     s2 = stream("2")
+    #     evt1 = event(V.foo == query1)
+    #     evt2 = event(V.foo == query2)
 
-        sel0 = select() \
-            .span(s1(evt1))
-        assume(isinstance(sel0, Select))
+    #     sel0 = select() \
+    #         .span(s1(evt1))
+    #     assume(isinstance(sel0, Select))
 
-        sel1 = select() \
-            .span(s1(evt1) >> s2(evt2))
-        assume(isinstance(sel1, Select))
+    #     sel1 = select() \
+    #         .span(s1(evt1) >> s2(evt2))
+    #     assume(isinstance(sel1, Select))
 
-        sel3 = select() \
-            .span(all_of(s1(evt1), s2(evt2)))
-        assume(isinstance(sel3, Select))
+    #     sel3 = select() \
+    #         .span(all_of(s1(evt1), s2(evt2)))
+    #     assume(isinstance(sel3, Select))
 
-        sel4 = select() \
-            .span((s1(evt1), s2(evt2))) \
-            .then(s2(evt1))
+    #     sel4 = select() \
+    #         .span((s1(evt1), s2(evt2))) \
+    #         .then(s2(evt1))
 
-        assume(isinstance(sel4, Select))
+    #     assume(isinstance(sel4, Select))
 
 
-def test_select_with_bounds():
-    s = stream("1")
-    # FIXME: using this as a span returns a TypeError
-    evt = event(V.foo == 1)
+# def test_select_with_bounds():
+#     s = stream("1")
+#     # FIXME: using this as a span returns a TypeError
+#     evt = event(V.foo == 1)
 
-    sel = select(start=datetime.now(), end=datetime.now()) \
-            .span(s.evt == 1) \
-            .then(s.evt == 2)
-            #.span(s(evt) >> s(evt)) \
-            #.then(s(evt))
+#     sel = select(start=datetime.now(), end=datetime.now()) \
+#             .span(s.evt == 1) \
+#             .then(s.evt == 2)
+#             #.span(s(evt) >> s(evt)) \
+#             #.then(s(evt))
 
-    assume(isinstance(sel, Select))
-    assume(type(sel()) == dict)
+#     assume(isinstance(sel, Select))
+#     assume(type(sel()) == dict)
 
-    sel = select(end=datetime.now()) \
-            .span(s.evt == 1) \
-            .then(s.evt == 2)
-            #.span(s(evt) >> s(evt)) \
-            #.then(s(evt))
+#     sel = select(end=datetime.now()) \
+#             .span(s.evt == 1) \
+#             .then(s.evt == 2)
+#             #.span(s(evt) >> s(evt)) \
+#             #.then(s(evt))
 
-    assume(isinstance(sel, Select))
-    assume(type(sel()) == dict)
+#     assume(isinstance(sel, Select))
+#     assume(type(sel()) == dict)
 
-    sel = select(start=datetime.now()) \
-            .span(s.evt == 1) \
-            .then(s.evt == 2)
-            #.span(s(evt) >> s(evt)) \
-            #.then(s(evt))
+#     sel = select(start=datetime.now()) \
+#             .span(s.evt == 1) \
+#             .then(s.evt == 2)
+#             #.span(s(evt) >> s(evt)) \
+#             #.then(s(evt))
 
-    assume(isinstance(sel, Select))
-    assume(type(sel()) == dict)
+#     assume(isinstance(sel, Select))
+#     assume(type(sel()) == dict)
 
 
