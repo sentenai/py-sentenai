@@ -1847,7 +1847,7 @@ class Query(HistoriQL):
 
 # Needed for testing
 def ast_dict(*statements):
-    return Query(*statements)()
+    return Query(Select(*statements))()
 
 def ast(*statements):
     """Print the query as an Abstract Syntax Tree JSON string"""

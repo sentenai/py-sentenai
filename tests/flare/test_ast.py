@@ -1,18 +1,15 @@
 # coding=utf-8
 import pytest
 from sentenai import Sentenai, hql, V
-from sentenai.historiQL import ast_dict, Select
+from sentenai.historiQL import ast_dict
 from sentenai.api.stream import Stream
 
 def stream(name, *filters):
     return Stream(None, name, {}, None, None, True, *filters)
 
-def ast(*args):
-    return ast_dict(Select(*args))
-
 def test_basic_select_span():
     s = stream("S")
-    real = ast(s.x == True)
+    real = ast_dict(s.x == True)
     expected = {
         "select": {
             "type": "span",
@@ -28,7 +25,7 @@ def test_basic_select_span():
 # TODO: figure out date/time/datetime types
 def test_any_of_comparisons():
     s = stream("moose")
-    real = ast(hql.Any(
+    real = ast_dict(hql.Any(
         s.x < 0,
         s.x >= 3.141592653589793,
         s.b != False
@@ -67,7 +64,7 @@ def test_any_of_comparisons():
 
 def test_stream_access():
     s = stream("S")
-    real = ast(
+    real = ast_dict(
         s.even == True,
         s.event == True,
         s.event.event == True,
@@ -142,7 +139,7 @@ def test_all_any_serial():
     qux = stream("qux")
     quux = stream("quux")
 
-    real = ast(
+    real = ast_dict(
         hql.Any(foo.x == True, bar.y == True),
         baz.z == True,
         hql.All(qux['α'] == True, quux['β'] == True)
@@ -176,7 +173,7 @@ def test_all_any_serial():
 def test_or():
     s = stream('s')
     t = stream('t')
-    real = ast(s.x == True | t.x == True)
+    real = ast_dict(s.x == True | t.x == True)
     expected = {
         "select": {
             "expr": "||",
@@ -272,7 +269,7 @@ def test_nested_relative_spans():
 
 def test_stream_filters():
     s = stream('S', V.season == "summer")
-    real = ast(s.temperature >= 77 & s.sunny == True)
+    real = ast_dict(s.temperature >= 77 & s.sunny == True)
     expected = {
         "select": {
             "expr": "&&",
@@ -292,7 +289,7 @@ def test_stream_filters():
 
 def test_or_stream_filters():
     s = stream('S', (V.season == "summer") | (V.season == "winter"))
-    real = ast(s.sunny == True)
+    real = ast_dict(s.sunny == True)
     expected = {
         'select': {
             'type': 'span',
@@ -403,7 +400,7 @@ def test_returning_excluding():
 
 def test_during():
     s = stream('S')
-    real = ast(
+    real = ast_dict(
         hql.During(
             s.foo == 'bar',
             s.baz > 1.5
