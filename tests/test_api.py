@@ -1,7 +1,8 @@
 from hypothesis import given, example, assume
 from hypothesis.strategies import text, tuples, uuids, one_of, none, integers, floats, datetimes
 
-from sentenai import Sentenai #, stream
+from sentenai import Sentenai
+from sentenai.api.stream import Stream
 import string, unittest, requests_mock, requests, pytest
 
 try:
@@ -9,7 +10,8 @@ try:
 except:
     from urllib import quote
 
-
+def stream(name, *filters):
+    return Stream(None, name, {}, None, None, True, *filters)
 
 URL = "https://api.sentenai.com/"
 URL_STREAMS   = URL + "streams"
@@ -23,13 +25,7 @@ def test_streams_call():
     with requests_mock.mock() as m:
         m.get(URL_STREAMS, json=[])
         resp = test_client.streams()
-        assume(resp == [])
-
-def test_query_call():
-    with requests_mock.mock() as m:
-        m.get(URL_STREAMS, json=[])
-        resp = test_client.streams()
-        assume(resp == [])
+        assume(list(resp) == [])
 
 
 @given(text())
@@ -44,7 +40,7 @@ def test_delete_with_eid(eid):
 
     def mock_encodings(m, quoter):
         try:
-            m.delete(URL_EVENTS_ID.format(s['name'], quoter(eid)))
+            m.delete(URL_EVENTS_ID.format(s.name, quoter(eid)))
         except:
             pass
 
