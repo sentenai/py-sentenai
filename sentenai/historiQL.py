@@ -1151,6 +1151,11 @@ class Par(HistoriQL):
         if len(q) < 1:
             raise QuerySyntaxError
         self.query = q
+        for i in q:
+            if isinstance(i, tuple):
+                self.query.append(Serial(*i))
+            else:
+                self.query.append(i)
 
     def __str__(self):
         """Generate a string representation of the par."""
@@ -1187,10 +1192,15 @@ class Or(HistoriQL):
         Arguments:
             q -- queries to join with an or.
         """
-        self.query = q
         self._within = None
         self._after = None
         self._width = None
+        self.query = []
+        for i in q:
+            if isinstance(i, tuple):
+                self.query.append(Serial(*i))
+            else:
+                self.query.append(i)
 
 
     def __call__(self):
@@ -1322,10 +1332,16 @@ class And(HistoriQL):
         if len(q) < 1:
             raise QuerySyntaxError
 
-        self.query = q
         self._within = None
         self._after = None
         self._width = None
+
+        self.query = []
+        for i in q:
+            if isinstance(i, tuple):
+                self.query.append(Serial(*i))
+            else:
+                self.query.append(i)
 
     def __and__(self, q):
         """Define the `and` operator for spans.
