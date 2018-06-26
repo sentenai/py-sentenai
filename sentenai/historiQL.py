@@ -1150,7 +1150,7 @@ class Par(HistoriQL):
         self._f = f
         if len(q) < 1:
             raise QuerySyntaxError
-        self.query = q
+        self.query = []
         for i in q:
             if isinstance(i, tuple):
                 self.query.append(Serial(*i))
