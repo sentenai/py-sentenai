@@ -272,9 +272,7 @@ def test_nested_relative_spans():
 
 def test_stream_filters():
     s = stream('S', V.season == "summer")
-    real = ast_dict(
-        select().span(span(s.temperature >= 77) & span(s.sunny == True))
-    )
+    real = ast(s.temperature >= 77 & s.sunny == True)
     expected = {
         "select": {
             "expr": "&&",
@@ -294,9 +292,7 @@ def test_stream_filters():
 
 def test_or_stream_filters():
     s = stream('S', (V.season == "summer") | (V.season == "winter"))
-    real = ast_dict(
-        select().span(s.sunny == True)
-    )
+    real = ast(s.sunny == True)
     expected = {
         'select': {
             'type': 'span',
@@ -407,11 +403,11 @@ def test_returning_excluding():
 
 def test_during():
     s = stream('S')
-    real = ast_dict(
-        select().span(during(
+    real = ast(
+        hql.During(
             s.foo == 'bar',
             s.baz > 1.5
-        ))
+        )
     )
     expected = {
         "select": {
