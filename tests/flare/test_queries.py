@@ -5,8 +5,9 @@ from datetime import timedelta, datetime
 
 from hypothesis            import given, assume, example, settings
 from hypothesis.strategies import text, dictionaries, booleans, integers, floats, lists, dates, datetimes, times, one_of
-from sentenai              import stream, ast, span, select, delta, event, V, all_of, any_of, within_distance, inside_region, merge
-from sentenai.flare        import StreamPath, Cond, Span, Serial, Switch, Or, Select, Par
+from sentenai              import hql
+from sentenai.api.stream   import Stream
+from sentenai.historiQL    import StreamPath, Cond, Serial, Switch, Or, Select, Par, ast
 from shapely.geometry      import Point, Polygon
 # Hypothesis Strategies
 # ========================
@@ -32,13 +33,16 @@ def all_multitypes():
 # Conditional Checks
 # ========================
 
+def stream(name, *filters):
+    return Stream(None, name, {}, None, None, True, *filters)
+
 def assume_parsable(query):
     assume(type(query) == Cond)
-    assume(type(ast(span(query))) == str)
+    assume(type(ast(query)) == str)
 
 def assert_parsable(query):
     assert (type(query) == Cond)
-    assert (type(ast(span(query))) == str)
+    assert (type(ast(query)) == str)
 
 
 def check_syntax_with_type(query, is_multitype=False):
@@ -90,12 +94,12 @@ with settings(max_examples=1000, min_satisfying_examples=500):
     @given(numeric(), numeric(), numeric())
     def test_incircle(kmx, kmy, rad):
         s = stream("")
-        incircle = within_distance(rad, Point(kmx, kmy))
+        incircle = hql.within_distance(rad, Point(kmx, kmy))
         assume_parsable(s.foo == incircle)
 
 def test_inpoly():
     s = stream("")
-    inpoly = inside_region(Polygon([(0, 0), (1, 1), (1, 0)]))
+    inpoly = hql.inside_region(Polygon([(0, 0), (1, 1), (1, 0)]))
     assert_parsable(s.foo == inpoly)
 
 
