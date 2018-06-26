@@ -290,11 +290,12 @@ class Sentenai(BaseClient):
 
         try:
             return StreamsView(sorted(
-                    [Stream(self, v['name'], v.get('meta', {}), v.get('events', 0), v.get('tz', None))
+                    [Stream(self, v['name'], v.get('meta', {}), v.get('events', 0), v.get('tz', None), True)
                         for v in resp.json() if filtered(v)],
                     key=lambda k: k.name
                     ))
         except:
+            raise
             raise SentenaiException("Something went wrong")
 
 
