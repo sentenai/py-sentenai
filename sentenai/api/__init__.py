@@ -182,7 +182,7 @@ class Sentenai(BaseClient):
                 raise NotFound('The stream "{}" does not exist'.format(stream()['name']))
             else:
                 status_codes(resp)
-            return resp.json().get('stats')
+            return resp.json()
 
 
 
