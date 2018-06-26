@@ -50,7 +50,11 @@ class Event(object):
 
 
     def __repr__(self):
-        return "Event({}, {}, exists={})".format(self.stream.name, self.id, self.exists)
+        return "Event(stream={}, id={}, ts={}, exists={})".format(self.stream.name, self.id, self.ts, self.exists)
+
+    def _repr_html_(self):
+        return '<pre>Event(\n  stream = "{}",\n  id = "{}",\n  ts = {},\n  exists = {},\n  data = {})</pre>'.format(self.stream.name, self.id, repr(self.ts), self.exists, JSON.dumps(self.data, indent=4, default=dts))
+
 
     def json(self, include_id=False):
         if include_id:
@@ -154,22 +158,20 @@ class Fields(object):
 
 
 class Stream(BaseStream):
-    def __init__(self, client, name, meta, events, tz, *filters):
+    def __init__(self, client, name, meta, events, tz, exists, *filters):
         self._client = client
         self._events = events
+        self._exists = exists
         BaseStream.__init__(self, name, meta, tz, *filters)
 
+
     def __len__(self):
-        return self._info.get('size', 0)
+        return self.stats().get('events')
 
     def __bool__(self):
-        return self._events is not None
+        return self._exists
+    __nonzero__ = __bool__
 
-    def __len__(self):
-        if self._events is None:
-            return 0
-        else:
-            return int(self._events)
 
     def __getattribute__(self, name):
         if hasattr(Stream, name) and hasattr(Stream, "_" + name):
@@ -188,6 +190,10 @@ class Stream(BaseStream):
     def fields(self):
         return Fields(self._client.fields(self))
     _fields = fields
+
+    def stats(self):
+        return self._client.stats(self)
+    _stats = stats
 
     def values(self, at=None):
         at = at or datetime.utcnow()

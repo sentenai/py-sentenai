@@ -22,6 +22,7 @@ from sentenai.api.uploader import Uploader
 from sentenai.api.stream import Stream, Event, StreamsView
 from sentenai.api.search import Search
 
+BoundStream = Stream
 
 if PY3:
     string_types = str
@@ -104,10 +105,10 @@ class Sentenai(BaseClient):
         tz = kwargs.get('tz')
         resp = self.session.get("/".join([self.host, "streams", name]), params={})
         if resp.status_code == 404:
-            return Stream(self, name, kwargs.get('meta', {}), None, tz, *args)
+            return BoundStream(self, name, kwargs.get('meta', {}), None, tz, False, *args)
         elif resp.status_code == 200:
             data = resp.json()
-            return Stream(self, name, data.get('meta', {}), data.get('events', None), tz, *args)
+            return BoundStream(self, name, data.get('meta', {}), data.get('events', None), tz, True, *args)
         else:
             handle(resp)
 
@@ -148,8 +149,8 @@ class Sentenai(BaseClient):
         status_codes(resp)
 
 
-    def stats(self, stream, field, start=None, end=None):
-        """Get stats for a given field in a stream.
+    def stats(self, stream, field=None, start=None, end=None):
+        """Get stats for a given stream or field in that stream.
 
        Arguments:
            stream -- A stream object corresponding to a stream stored in Sentenai.
@@ -157,20 +158,32 @@ class Sentenai(BaseClient):
            start  -- Optional argument indicating start time in stream for calculations.
            end    -- Optional argument indicating end time in stream for calculations.
         """
-        args = stream._serialized_filters()
-        if start: args['start'] = start.isoformat() + ("Z" if not start.tzinfo else "")
-        if end: args['end'] = end.isoformat() + ("Z" if not end.tzinfo else "")
+        if field:
+            args = stream._serialized_filters()
+            if start: args['start'] = start.isoformat() + ("Z" if not start.tzinfo else "")
+            if end: args['end'] = end.isoformat() + ("Z" if not end.tzinfo else "")
 
-        url = "/".join([self.host, "streams", stream()['name'], "fields", "event." + field, "stats"])
+            url = "/".join([self.host, "streams", stream()['name'], "fields", "event." + field, "stats"])
 
-        resp = self.session.get(url, params=args)
+            resp = self.session.get(url, params=args)
 
-        if resp.status_code == 404:
-            raise NotFound('The field at "/streams/{}/fields/{}" does not exist'.format(stream()['name'], field))
+            if resp.status_code == 404:
+                raise NotFound('The field at "/streams/{}/fields/{}" does not exist'.format(stream()['name'], field))
+            else:
+                status_codes(resp)
+
+            return resp.json()
         else:
-            status_codes(resp)
+            args = stream._serialized_filters()
+            args['stats'] = "true"
+            url = "/".join([self.host, "streams", stream()['name']])
+            resp = self.session.get(url, params=args)
+            if resp.status_code == 404:
+                raise NotFound('The stream "{}" does not exist'.format(stream()['name']))
+            else:
+                status_codes(resp)
+            return resp.json().get('stats')
 
-        return resp.json()
 
 
     def get(self, stream, eid=None):
@@ -264,7 +277,7 @@ class Sentenai(BaseClient):
                    metadata
         """
         url = "/".join([self.host, "streams"])
-        resp = self.session.get(url)
+        resp = self.session.get(url, params={'stats': 'true'})
         status_codes(resp)
 
         def filtered(s):
