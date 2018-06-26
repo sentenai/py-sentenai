@@ -2,8 +2,11 @@ import pytest
 
 from hypothesis            import given, assume, example
 from hypothesis.strategies import text, dictionaries
-from sentenai              import stream
-from sentenai.flare        import StreamPath
+from sentenai.api.stream   import Stream
+from sentenai.historiQL    import StreamPath
+
+def stream(name, *filters):
+    return Stream(None, name, {}, None, None, True, *filters)
 
 @given(text())
 def test_named_streams(name):
@@ -39,14 +42,8 @@ def test_stream_properties(name, meta):
 @given(text(min_size=1), dictionaries(text(min_size=1), text()))
 def test_happy_stream_getitems(name, meta):
     s = stream(name, meta)
-    assume(s["meta"] == meta)
-    assume(s["name"] == name)
-
-@given(text(min_size=1).filter(lambda x: not (x == 'name' or x == 'meta')))
-def test_sad_stream_getitems(extra):
-    s = stream("")
-    with pytest.raises(KeyError):
-        s[extra]
+    assume(s.meta == meta)
+    assume(s.name == name)
 
 @given(text(min_size=1))
 def test_stream_to_string(name):
@@ -59,8 +56,7 @@ def test_stream_to_string(name):
 @example(path="meta")
 def test_stream_path_conversions(path):
     s = stream("")
-    assume(type(s._(path)) == StreamPath)
-    assume(type(s.__getattr__(path)) == StreamPath)
+    assume(type(s[path]) == StreamPath)
 
 @given(text())
 def test_stream_calls(path):
