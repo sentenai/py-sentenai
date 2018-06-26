@@ -71,7 +71,7 @@ class Event(object):
     def read(self):
         x = self.stream.read(self.id)
         self.ts = x.ts
-        self.data = x.event
+        self.data = x.data
         self._saved = True
         return self
 
@@ -269,7 +269,7 @@ class Stream(BaseStream):
                      the stream.
         """
         k = self._client.get(self, id)
-        return Event(self._client, self, event=k['event'], id=k['id'], ts=cts(k['ts']), saved=True)
+        return Event(self._client, self, data=k['event'], id=k['id'], ts=cts(k['ts']), saved=True)
     _read = read
 
     def fstats(self, field, start=None, end=None):
