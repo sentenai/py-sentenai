@@ -33,7 +33,7 @@ class Any(object):
 
 class All(object):
     def __new__(self, *q):
-        return Par("any", q)
+        return Par("all", q)
 
 
 class During(object):
