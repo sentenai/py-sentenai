@@ -1,5 +1,5 @@
 from sentenai.api import Sentenai
-import hql
+import sentenai.hql
 
 __all__ = ['Sentenai', 'hql', 'V']
 
