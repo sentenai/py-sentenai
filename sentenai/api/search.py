@@ -217,6 +217,7 @@ class Result(object):
         self.search = search
         self.start = cts(start) if start else None
         self.end = cts(end) if end else None
+        self.events = 0
         self.cursor = cursor
 
 
@@ -239,6 +240,27 @@ class Result(object):
         else:
             return df[['Start', 'End', 'Duration']]._repr_html_()
 
+    def _count(self, max_retries=1):
+        if max_retries < 0:
+            raise SentenaiException("Max Retries Exceeded.")
+        streams = {}
+        url = '{host}/query/{cursor}/events'.format(host=self.search.client.host, cursor=self.cursor)
+        try:
+            r = self.search.client.session.get(url, params={'limit': '0'})
+            if not r.ok:
+                if max_retries > 0:
+                    return self._events(max_retries - 1)
+                else:
+                    raise SentenaiException(r.status_code)
+        except:
+            if max_retries > 0:
+                return self._events(max_retries - 1)
+            else:
+                raise
+        else:
+            self._json = r.json()
+            print(self._json)
+            return 0
 
     def _events(self, max_retries=3):
         if max_retries < 0:
@@ -279,7 +301,7 @@ class Result(object):
         if not data:
             return []
         else:
-            return [Stream(self.search.client, s['name'], {}, {}, None)
+            return [Stream(self.search.client, s['name'], {}, {}, None, True)
                     for s in data.get('streams', []).values()]
 
 

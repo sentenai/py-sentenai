@@ -786,7 +786,7 @@ class Stream(HistoriQL):
         Arguments:
             name -- The name of the variable to get
         """
-        if not name.startswith('_') and name not in ['name']:
+        if not name.startswith('_') and name not in ['name', 'tz']:
             return StreamPath((name,), self)
         elif name == 'name':
             return self.__getattribute__("_name")
@@ -838,10 +838,13 @@ class EventPath(Projection):
         Arguments:
             name -- the name of the variable to get.
         """
+        print(self, name)
+        if type(name) is int:
+            return "asdfasdfasd"
         if hasattr(name, "isalnum"):
             return EventPath(self._attrlist + (name,))
         else:
-            raise KeyError
+            raise KeyError(name)
 
     def __eq__(self, val):
         """Create equality conditions for event variables.
@@ -862,8 +865,8 @@ class EventPath(Projection):
         return joiner.join(self._attrlist) in joiner.join(self._attrlist)
 
 
-    def __iter__(self):
-        return iter(self._attrlist)
+#    def __iter__(self):
+#        return iter(self._attrlist)
 
     def __ne__(self, val):
         """Create inequality conditions for event variable.

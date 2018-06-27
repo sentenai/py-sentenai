@@ -1,6 +1,7 @@
 from __future__ import print_function
 import json as JSON
 import pytz
+from copy import copy
 import re, sys, time
 import requests
 
@@ -37,11 +38,11 @@ except:
 
 
 class Event(object):
-    def __init__(self, client, stream, id=None, ts=None, data=None, saved=False):
+    def __init__(self, client, stream, id=None, ts=None, data=None, event=None, saved=False):
         self.stream = stream
         self.id = id
         self.ts = ts if isinstance(ts, datetime) or ts is None else cts(ts)
-        self.data = data
+        self.data = data or event
         self._saved = saved
 
     @property
@@ -56,8 +57,12 @@ class Event(object):
         return '<pre>Event(\n  stream = "{}",\n  id = "{}",\n  ts = {},\n  exists = {},\n  data = {})</pre>'.format(self.stream.name, self.id, repr(self.ts), self.exists, JSON.dumps(self.data, indent=4, default=dts))
 
 
-    def json(self, include_id=False):
-        if include_id:
+    def json(self, include_id=False, df=False):
+        if df:
+            d = copy(self.data)
+            d['ts'] = self.ts
+            return d
+        elif include_id:
             return {'ts': self.ts, 'event': self.data, 'id': self.id}
         else:
             return {'ts': self.ts, 'event': self.data}
@@ -164,13 +169,24 @@ class Stream(BaseStream):
         self._exists = exists
         BaseStream.__init__(self, name, meta, tz, *filters)
 
-
     def __len__(self):
         return self.stats().get('events')
 
     def __bool__(self):
         return self._exists
     __nonzero__ = __bool__
+
+
+    def filtered(self, *filters, **kwargs):
+        """Return copy of stream with additional filters.
+
+        Keyword Argument:
+            replace -- when True, copy stream while replacing filters instead of adding them.
+        """
+        if kwargs.get("replace", False):
+            return Stream(self._client, self.name, {}, 0, self.tz, self._exists, filters)
+        else:
+            return Stream(self._client, self.name, {}, 0, self.tz, self._exists, tuple(self._filters) + filters)
 
 
     def __getattribute__(self, name):
@@ -180,22 +196,35 @@ class Stream(BaseStream):
             return BaseStream.__getattribute__(self, name)
 
     def oldest(self):
+        """Get the oldest event by timestamp in this stream.
+        """
         return self._client.oldest(self)
     _oldest = oldest
 
     def newest(self):
+        """Get the newest event by timestamp in this stream.
+        """
         return self._client.newest(self)
     _newest = newest
 
     def fields(self):
+        """Get a view of all fields in this stream."""
         return Fields(self._client.fields(self))
     _fields = fields
 
     def stats(self):
+        """Get a dictionary of stream statistics."""
         return self._client.stats(self)
     _stats = stats
 
     def values(self, at=None):
+        """Get current values for every field in a stream.
+
+        Keyword Arguments:
+            at -- If given a datetime for `at`, return the values at that point in
+                  time instead
+        """
+
         at = at or datetime.utcnow()
         values = self._client.values(self, at)
         values_rendered = []
@@ -218,8 +247,9 @@ class Stream(BaseStream):
         return Event(self.client, self, *args, **kwargs)
     _Event = Event
 
-
     def healthy(self):
+        """Did the last `create` or `update` of an event on
+        this stream succeed. For debugging purposes."""
         resp = self.session.get("/".join([self.client.host, "streams", self.name]))
         if resp.status_code == 200:
             return resp.json().get('healthy', False)
@@ -229,8 +259,6 @@ class Stream(BaseStream):
             handle(resp)
 
     _healthy = healthy
-
-
 
     def destroy(self, **kwargs):
         """Delete stream.
@@ -382,31 +410,6 @@ class Stream(BaseStream):
 
 
 
-class ProjectedStream(object):
-    def __init__(self, stream, *projections):
-        self.stream = stream
-        self.projections = projections
-
-class ProjectedEvent(Event):
-    def __init__(self, client, stream, id=None, ts=None, data=None, saved=False):
-        self.stream = stream
-        self.id = id
-        self.ts = ts if isinstance(ts, datetime) or ts is None else cts(ts)
-        self.data = data
-        self._saved = False
-
-    def create(self):
-        raise Exception()
-
-    def update(self):
-        raise Exception()
-
-    def delete(self):
-        raise Exception()
-
-    def update(self):
-        raise Exception()
-
 
 class StreamRange(object):
     def __init__(self, stream, start, end, events):
@@ -421,12 +424,11 @@ class StreamRange(object):
 
     @property
     def df(self):
-        f = json_normalize([x.json() for x in self._events])
+        f = json_normalize([x.json(df=True) for x in self._events])
         return f.set_index('ts')
 
     def json(self):
         return JSON.dumps([x.json(include_id=True) for x in self._events], default=dts, indent=4)
-
 
     def _repr_html_(self):
         return self.df._repr_html_()
@@ -440,7 +442,7 @@ class StreamsView(object):
         return pd.DataFrame([{ 'name': s.name, 'length': len(s), 'healthy': True} for s in self.streams])[['name', 'length', 'healthy']]._repr_html_()
 
     def __iter__(self):
-        return iter(self.streams)
+        return self.streams
 
     def __getitem__(self, i):
         return self.streams[i]
