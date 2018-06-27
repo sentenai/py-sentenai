@@ -307,7 +307,7 @@ class Result(object):
 
     def __iter__(self):
         data = self.json()
-        streams = {k: Stream(self.search.client, s['name'], {}, {}, None)
+        streams = {k: Stream(self.search.client, s['name'], {}, {}, None, True)
                    for k, s in data.get('streams', {}).items()}
         return iter([Event(self.search.client, streams[e['stream']], e['id'], e['ts'], e['event'])
                      for e in data['events']])
@@ -333,7 +333,7 @@ class RView(object):
     def _view(self):
         data = self.result.json()
         rdict = {k: [] for k in self.streams}
-        sdict = {k: Stream(self.result.search.client, s['name'], {}, {}, None)
+        sdict = {k: Stream(self.result.search.client, s['name'], {}, {}, None, True)
                    for k, s in data.get('streams', {}).items()}
         for e in data['events']:
             st = sdict.get(e['stream'])
