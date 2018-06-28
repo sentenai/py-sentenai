@@ -94,7 +94,7 @@ class ProjMath(Projection):
             elif isinstance(p, int):
                 return {'lit': {'val': p, 'type': 'int'}}
             elif isinstance(p, EventPath):
-                return {'var': p()['path']}
+                return {'var': ('event',) + p._attrlist}
             elif isinstance(p, ProjMath):
                 return p()
             else:
@@ -838,7 +838,6 @@ class EventPath(Projection):
         Arguments:
             name -- the name of the variable to get.
         """
-        print(self, name)
         if type(name) is int:
             return "asdfasdfasd"
         if hasattr(name, "isalnum"):
@@ -865,8 +864,8 @@ class EventPath(Projection):
         return joiner.join(self._attrlist) in joiner.join(self._attrlist)
 
 
-#    def __iter__(self):
-#        return iter(self._attrlist)
+    def __iter__(self):
+        return iter(self._attrlist)
 
     def __ne__(self, val):
         """Create inequality conditions for event variable.

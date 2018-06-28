@@ -1,6 +1,7 @@
 from __future__ import print_function
 import json
 import pytz
+import base64
 import re, sys, time
 import requests
 
@@ -315,7 +316,7 @@ class Sentenai(BaseClient):
             return None
 
 
-    def range(self, stream, start, end):
+    def range(self, stream, start, end, limit=None, proj=None):
         """Get all stream events between start (inclusive) and end (exclusive).
 
         Arguments:
@@ -329,6 +330,11 @@ class Sentenai(BaseClient):
            Result:
            A time ordered list of all events in a stream from `start` to `end`
         """
+        params = stream._serialized_filters()
+        if proj is not None:
+            params['projection']  = base64.urlsafe_b64encode(json.dumps(proj))
+        if limit is not None:
+            params['limit'] = limit
         url = "/".join(
             [self.host, "streams",
              stream()['name'],
@@ -337,7 +343,7 @@ class Sentenai(BaseClient):
              "end",
              iso8601(end)]
         )
-        resp = self.session.get(url, params=stream._serialized_filters())
+        resp = self.session.get(url, params=params)
 
         status_codes(resp)
         return [Event(self, stream, **json.loads(line)) for line in resp.text.splitlines()]

@@ -2,7 +2,7 @@ from __future__ import print_function
 import json as JSON
 import pytz
 from copy import copy
-import re, sys, time
+import re, sys, time, base64
 import requests
 
 import numpy as np
@@ -17,7 +17,7 @@ from threading import Lock
 from sentenai.exceptions import *
 from sentenai.exceptions import handle
 from sentenai.utils import *
-from sentenai.historiQL import EventPath, Stream, StreamPath
+from sentenai.historiQL import EventPath, Stream, StreamPath, Proj
 
 BaseStream = Stream
 
@@ -365,7 +365,7 @@ class Stream(BaseStream):
            Result:
            A time ordered list of all events in a stream from `start` to `end`
         """
-        return StreamRange(self, start, end, self._client.range(self, start, end))
+        return StreamRange(self, start, end)
     _range = range
 
     def tail(self, n=5):
@@ -412,22 +412,48 @@ class Stream(BaseStream):
 
 
 class StreamRange(object):
-    def __init__(self, stream, start, end, events):
+    def __init__(self, stream, start, end):
         self.stream = stream
-        self._events = events
+        self._events = None
         self.start = start
         self.end = end
 
 
     def __iter__(self):
+        if not self._events:
+            self._events = self.stream._client.range(self.stream, self.start, self.end)
         return iter(self._events)
 
-    @property
-    def df(self):
+    def df(self, *args, **kwargs):
+        for arg in args:
+            # field renames
+            if isinstance(arg, dict):
+                for k, v in arg.items():
+                    kwargs[k] = v
+                continue
+
+            base = kwargs
+            segments = list(arg)
+            for a in segments[:-1]:
+                x = kwargs.get(a)
+                if isinstance(x, dict):
+                    base = x
+                else:
+                    base = base[a] = {}
+            else:
+                base[segments[-1]] = arg
+
+        p = Proj(self.stream, kwargs)()['projection']
+
+        self._events = self.stream._client.range(self.stream, self.start, self.end, proj=p)
         f = json_normalize([x.json(df=True) for x in self._events])
         return f.set_index('ts')
 
-    def json(self):
+    def json(self, *args):
+        if len(args) == 1 and isinstance(args[0], dict):
+            p = Proj(self, args[0])()['projection']
+        else:
+            p = None
         return JSON.dumps([x.json(include_id=True) for x in self._events], default=dts, indent=4)
 
     def _repr_html_(self):

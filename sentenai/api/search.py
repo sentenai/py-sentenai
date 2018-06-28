@@ -291,7 +291,7 @@ class Result(object):
 
     @property
     def df(self):
-        x = json_normalize([evt.json() for evt in list(self)])
+        x = json_normalize([evt.json(df=True) for evt in list(self)])
         return x
 
 
@@ -346,7 +346,7 @@ class RView(object):
         rd = self._view()
         vs = []
         for k, v in rd.items():
-            vs.append("<div><b>{}</b></div>".format(k.name) + json_normalize([x.json() for x in v])._repr_html_())
+            vs.append("<div><b>{}</b></div>".format(k.name) + json_normalize([x.json(df=True) for x in v])._repr_html_())
 
         return "<hr/>".join(vs)
 
@@ -355,7 +355,7 @@ class RView(object):
 
     @property
     def df(self):
-        return json_normalize([x.json() for x in v])
+        return json_normalize([x.json(df=True) for x in v])
 
 
 
