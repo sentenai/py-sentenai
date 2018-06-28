@@ -353,7 +353,7 @@ class Stream(BaseStream):
         return self._client.put(self, event, id, timestamp)
     _put = put
 
-    def range(self, start, end):
+    def range(self, start, end, limit=None):
         """Get all of a stream's events between start (inclusive) and end (exclusive).
 
         Arguments:
@@ -365,7 +365,7 @@ class Stream(BaseStream):
            Result:
            A time ordered list of all events in a stream from `start` to `end`
         """
-        return StreamRange(self, start, end)
+        return StreamRange(self, start, end, limit=limit)
     _range = range
 
     def tail(self, n=5):
@@ -412,16 +412,17 @@ class Stream(BaseStream):
 
 
 class StreamRange(object):
-    def __init__(self, stream, start, end):
+    def __init__(self, stream, start, end, limit=None):
         self.stream = stream
         self._events = None
+        self.limit = limit
         self.start = start
         self.end = end
 
 
     def __iter__(self):
         if not self._events:
-            self._events = self.stream._client.range(self.stream, self.start, self.end)
+            self._events = self.stream._client.range(self.stream, self.start, self.end, limit=self.limit)
         return iter(self._events)
 
     def df(self, *args, **kwargs):
@@ -445,7 +446,7 @@ class StreamRange(object):
 
         p = Proj(self.stream, kwargs)()['projection']
 
-        self._events = self.stream._client.range(self.stream, self.start, self.end, proj=p)
+        self._events = self.stream._client.range(self.stream, self.start, self.end, limit=self.limit, proj=p)
         f = json_normalize([x.json(df=True) for x in self._events])
         return f.set_index('ts')
 
@@ -457,7 +458,7 @@ class StreamRange(object):
         return JSON.dumps([x.json(include_id=True) for x in self._events], default=dts, indent=4)
 
     def _repr_html_(self):
-        return self.df._repr_html_()
+        return self.df()._repr_html_()
 
 
 class StreamsView(object):
