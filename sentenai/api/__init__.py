@@ -316,7 +316,7 @@ class Sentenai(BaseClient):
             return None
 
 
-    def range(self, stream, start, end, limit=None, proj=None):
+    def range(self, stream, start, end, limit=None, proj=None, sorting=None):
         """Get all stream events between start (inclusive) and end (exclusive).
 
         Arguments:
@@ -335,6 +335,8 @@ class Sentenai(BaseClient):
             params['projection']  = base64.urlsafe_b64encode(json.dumps(proj))
         if limit is not None:
             params['limit'] = limit
+        if sorting is not None:
+            params['sort'] = sorting
         url = "/".join(
             [self.host, "streams",
              stream()['name'],

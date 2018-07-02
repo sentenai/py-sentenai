@@ -377,11 +377,7 @@ class Stream(BaseStream):
            Result:
            A time ordered list of all events in a stream from `start` to `end`
         """
-        x = self._client.tail(self, n)
-        if not x:
-            return StreamRange(self, datetime.min, datetime.max, [])
-        else:
-            return StreamRange(self, x[0].ts, x[-1].ts, reversed(x))
+        return StreamRange(self, datetime.min, datetime.max, limit=n, sorting='desc')
 
     def head(self, n=5):
         """Get all of a stream's events between start (inclusive) and end (exclusive).
@@ -392,11 +388,7 @@ class Stream(BaseStream):
            Result:
            A time ordered list of all events in a stream from `start` to `end`
         """
-        x = self._client.head(self, n)
-        if not x:
-            return StreamRange(self, datetime.min, datetime.max, [])
-        else:
-            return StreamRange(self, x[0].ts, x[-1].ts, x)
+        return StreamRange(self, datetime.min, datetime.max, limit=n, sorting='asc')
 
     def newest(self):
         """Get the most recent event in the stream."""
@@ -412,9 +404,10 @@ class Stream(BaseStream):
 
 
 class StreamRange(object):
-    def __init__(self, stream, start, end, limit=None):
+    def __init__(self, stream, start, end, limit=None, sorting="asc"):
         self.stream = stream
         self._events = None
+        self.sort = sorting
         self.limit = limit
         self.start = start
         self.end = end
@@ -422,8 +415,10 @@ class StreamRange(object):
 
     def __iter__(self):
         if not self._events:
-            self._events = self.stream._client.range(self.stream, self.start, self.end, limit=self.limit)
-        return iter(self._events)
+            self._events = self.stream._client.range(self.stream, self.start, self.end, limit=self.limit, sorting=self.sort)
+            if self.sort == "desc":
+                self._events = reversed(self.events)
+            return iter(self._events)
 
     def df(self, *args, **kwargs):
         for arg in args:
@@ -446,7 +441,9 @@ class StreamRange(object):
 
         p = Proj(self.stream, kwargs)()['projection']
 
-        self._events = self.stream._client.range(self.stream, self.start, self.end, limit=self.limit, proj=p)
+        self._events = self.stream._client.range(self.stream, self.start, self.end, limit=self.limit, proj=p, sorting=self.sort)
+        if self.sort == "desc":
+            self._events = reversed(self._events)
         f = json_normalize([x.json(df=True) for x in self._events])
         return f.set_index('ts')
 

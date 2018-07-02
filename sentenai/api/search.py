@@ -50,7 +50,7 @@ class Search(object):
     def ast(self):
         return self.query()
 
-    def df(self):
+    def df(self, *args):
         return ResultSet(self).df
 
 
