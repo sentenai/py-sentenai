@@ -60,7 +60,7 @@ class Event(object):
     def json(self, include_id=False, df=False):
         if df:
             d = copy(self.data)
-            d['ts'] = self.ts
+            d['ts'] = dts(self.ts)
             return d
         elif include_id:
             return {'ts': self.ts, 'event': self.data, 'id': self.id}
