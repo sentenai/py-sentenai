@@ -1,4 +1,4 @@
-import json, re, sys, time
+import json, re, sys, time, base64
 import pytz
 import requests
 
@@ -51,7 +51,7 @@ class Search(object):
         return self.query()
 
     def df(self, *args):
-        return ResultSet(self).df
+        return ResultSet(self).df(*args)
 
 
 
@@ -168,11 +168,10 @@ class ResultSet(object):
         self.cursors[-1] is None
 
 
-    @property
-    def df(self):
+    def df(self, *args):
         dfs = []
         for x in self[:]:
-            dfs.append(x.df)
+            dfs.append(x.df(*args))
         return pd.concat(dfs, keys=range(0,len(dfs)))
 
 
@@ -219,6 +218,7 @@ class Result(object):
         self.end = cts(end) if end else None
         self.events = 0
         self.cursor = cursor
+        self.projection = None
 
 
     @property
@@ -267,8 +267,12 @@ class Result(object):
             raise SentenaiException("Max Retries Exceeded.")
         streams = {}
         url = '{host}/query/{cursor}/events'.format(host=self.search.client.host, cursor=self.cursor)
+        if self.projection:
+            params = {'projections': base64.urlsafe_b64encode(json.dumps(self.projection()))}
+        else:
+            params = {}
         try:
-            r = self.search.client.session.get(url)
+            r = self.search.client.session.get(url, params=params)
             if not r.ok:
                 if max_retries > 0:
                     return self._events(max_retries - 1)
@@ -283,14 +287,27 @@ class Result(object):
             self._json = r.json()
             return self._json
 
-    def json(self):
-        try:
-            return self._json
-        except:
+    def json(self, *attrs):
+        if attrs and self.projection:
+            self.projection = Returning(*args)
+            return self._events()
+        elif not attrs and not self.projection:
+            try:
+                return self._json
+            except:
+                return self._events()
+        else:
+            self.projection = Returning(*attrs) if attrs else None
             return self._events()
 
-    @property
-    def df(self):
+    def df(self, *attrs):
+        if not attrs:
+            if self.projection:
+                self._json = None
+            self.projection = None
+        else:
+            self._json = None
+            self.projection = Returning(*attrs)
         x = json_normalize([evt.json(df=True) for evt in list(self)])
         return x
 
@@ -306,7 +323,7 @@ class Result(object):
 
 
     def __iter__(self):
-        data = self.json()
+        data = self._events()
         streams = {k: Stream(self.search.client, s['name'], {}, {}, None, True)
                    for k, s in data.get('streams', {}).items()}
         return iter([Event(self.search.client, streams[e['stream']], e['id'], e['ts'], e['event'])
