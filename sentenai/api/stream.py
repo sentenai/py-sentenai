@@ -325,7 +325,7 @@ class Stream(BaseStream):
         else:
             p = x['numerical']
             print("count\t{}\nmean\t{:.2f}\nstd\t{:.2f}\nmin\t{}\n25%\t{}\n50%\t{}\n75%\t{}\nmax\t{}".format(
-                p['count'], p['mean'], p['std'], p['min'], p['25%'], p['50%'], p['75%'], p['max']))
+                p['count'], p['mean'], p['std'], p['min'], p.get('25%'), p.get('50%'), p.get('75%'), p['max']))
     _describe = describe
 
     def unique(self, field):
