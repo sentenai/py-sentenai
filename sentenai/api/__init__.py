@@ -332,7 +332,7 @@ class Sentenai(BaseClient):
         """
         params = stream._serialized_filters()
         if proj is not None:
-            params['projection']  = base64.urlsafe_b64encode(json.dumps(proj))
+            params['projection']  = base64.urlsafe_b64encode(bytes(json.dumps(proj), 'UTF-8'))
         if limit is not None:
             params['limit'] = limit
         if sorting is not None:

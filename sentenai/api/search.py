@@ -268,7 +268,7 @@ class Result(object):
         streams = {}
         url = '{host}/query/{cursor}/events'.format(host=self.search.client.host, cursor=self.cursor)
         if self.projection:
-            params = {'projections': base64.urlsafe_b64encode(json.dumps(self.projection()))}
+            params = {'projections': base64.urlsafe_b64encode(bytes(json.dumps(self.projection()), 'UTF-8'))}
         else:
             params = {}
         try:

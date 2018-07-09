@@ -656,7 +656,7 @@ class Stream(HistoriQL):
     def _serialized_filters(self):
         x = self().get('filter')
         if x:
-            return {'filters': base64.urlsafe_b64encode(json.dumps(x))}
+            return {'filters': base64.urlsafe_b64encode(bytes(json.dumps(x), 'UTF-8'))}
         else:
             return {}
 
