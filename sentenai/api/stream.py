@@ -466,7 +466,7 @@ class StreamsView(object):
         return pd.DataFrame([{ 'name': s.name, 'length': len(s), 'healthy': True} for s in self.streams])[['name', 'length', 'healthy']]._repr_html_()
 
     def __iter__(self):
-        return self.streams
+        return iter(self.streams)
 
     def __getitem__(self, i):
         return self.streams[i]
