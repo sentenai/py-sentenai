@@ -42,7 +42,7 @@ class Event(object):
         self.stream = stream
         self.id = id
         self.ts = ts if isinstance(ts, datetime) or ts is None else cts(ts)
-        self.data = data or event
+        self.data = data or event or {}
         self._saved = saved
 
     @property
@@ -60,7 +60,7 @@ class Event(object):
     def json(self, include_id=False, df=False):
         if df:
             d = copy(self.data)
-            d['ts'] = dts(self.ts)
+            d['ts'] = pd.to_datetime(dts(self.ts))
             return d
         elif include_id:
             return {'ts': self.ts, 'event': self.data, 'id': self.id}

@@ -259,7 +259,6 @@ class Result(object):
                 raise
         else:
             self._json = r.json()
-            print(self._json)
             return 0
 
     def _events(self, max_retries=3):
@@ -268,7 +267,7 @@ class Result(object):
         streams = {}
         url = '{host}/query/{cursor}/events'.format(host=self.search.client.host, cursor=self.cursor)
         if self.projection:
-            params = {'projections': base64.urlsafe_b64encode(bytes(json.dumps(self.projection()), 'UTF-8'))}
+            params = {'returning': base64.urlsafe_b64encode(bytes(json.dumps(self.projection()), 'UTF-8'))}
         else:
             params = {}
         try:
@@ -308,8 +307,8 @@ class Result(object):
         else:
             self._json = None
             self.projection = Returning(*attrs)
-        x = json_normalize([evt.json(df=True) for evt in list(self)])
-        return x
+        x = json_normalize([evt.json(df=True) for evt in iter(self)])
+        return x.set_index('ts')
 
 
     @property
@@ -326,7 +325,7 @@ class Result(object):
         data = self._events()
         streams = {k: Stream(self.search.client, s['name'], {}, {}, None, True)
                    for k, s in data.get('streams', {}).items()}
-        return iter([Event(self.search.client, streams[e['stream']], e['id'], e['ts'], e['event'])
+        return iter([Event(self.search.client, streams[e['stream']], e['id'], e['ts'], e['event'] or {})
                      for e in data['events']])
 
     def __getitem__(self, i):

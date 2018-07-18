@@ -1609,8 +1609,6 @@ class LastingExactly(Lasting):
 
 
 class LastingMax(Lasting):
-    def __new__(cls, *args, **kwargs):
-        return super(Modifier, cls).__new__(LastingMax, *args, **kwargs)
 
     def __str__(self):
         """Generate a string representation of the delta."""
