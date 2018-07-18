@@ -50,8 +50,8 @@ class Search(object):
     def ast(self):
         return self.query()
 
-    def df(self, *args):
-        return ResultSet(self).df(*args)
+    def df(self, *args, **kwargs):
+        return ResultSet(self).df(*args, **kwargs)
 
 
 
@@ -168,10 +168,10 @@ class ResultSet(object):
         self.cursors[-1] is None
 
 
-    def df(self, *args):
+    def df(self, *args, **kwargs):
         dfs = []
         for x in self[:]:
-            dfs.append(x.df(*args))
+            dfs.append(x.df(*args, **kwargs))
         return pd.concat(dfs, keys=range(0,len(dfs)))
 
 
@@ -299,14 +299,16 @@ class Result(object):
             self.projection = Returning(*attrs) if attrs else None
             return self._events()
 
-    def df(self, *attrs):
+    def df(self, *attrs, **kwargs):
         if not attrs:
             if self.projection:
                 self._json = None
             self.projection = None
         else:
             self._json = None
-            self.projection = Returning(*attrs)
+            if len(attrs) > 0:
+                kwargs['default'] = kwargs.get('default', False)
+            self.projection = Returning(*attrs, **kwargs)
         x = json_normalize([evt.json(df=True) for evt in iter(self)])
         return x.set_index('ts')
 
