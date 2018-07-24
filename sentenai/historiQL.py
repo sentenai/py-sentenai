@@ -1560,8 +1560,6 @@ class Within(Modifier): pass
 class After(Modifier): pass
 
 class Lasting(Modifier):
-    def __new__(cls, *args, **kwargs):
-        return super(Modifier, cls).__new__(LastingExactly, *args, **kwargs)
 
     def __call__(self):
         """Generate an AST representation of the Delta."""
@@ -1581,6 +1579,10 @@ class Lasting(Modifier):
             return x
 
     @staticmethod
+    def exactly(**kwargs):
+        return LastingExactly(**kwargs)
+
+    @staticmethod
     def min(**kwargs):
         return LastingMin(**kwargs)
 
@@ -1589,8 +1591,6 @@ class Lasting(Modifier):
         return LastingMax(**kwargs)
 
 class LastingExactly(Lasting):
-    def __new__(cls, *args, **kwargs):
-        return super(Modifier, cls).__new__(LastingExactly, *args, **kwargs)
 
     def __str__(self):
         """Generate a string representation of the delta."""
@@ -1629,8 +1629,6 @@ class LastingMax(Lasting):
 
 
 class LastingMin(Lasting):
-    def __new__(cls, *args, **kwargs):
-        return super(Modifier, cls).__new__(LastingMin, *args, **kwargs)
 
     def __str__(self):
         """Generate a string representation of the delta."""
