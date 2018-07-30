@@ -149,7 +149,7 @@ class Proj(object):
                         z = ('event',) + val._attrlist
                         new[key] = [{'var': z}]
                     elif isinstance(val, ProjMath):
-                        new[key] = [val()]
+                        new[key] = [val.reify()]
                     elif isinstance(val, float):
                         new[key] = [{'lit': {'val': val, 'type': 'double'}}]
                     elif isinstance(val, int):
@@ -466,11 +466,11 @@ class Cond(HistoriQL):
         elif isinstance(self.val, InPolygon):
             vt = "polygon"
             op = "in"
-            val = self.val()
+            val = self.val.reify()
         elif isinstance(self.val, InCircle):
             vt = "circle"
             op = "in"
-            val = self.val()
+            val = self.val.reify()
         elif isinstance(self.val, date):
             vt = "date"
             val = "{}-{}-{}".format(
@@ -519,17 +519,7 @@ class CondChain(HistoriQL):
         self.arr = [lpath, lcond, lval, op, rpath, rcond, rval]
 
 
-    def __call__(self):
-        if self.lcond and self.rcond:
-            if self.op is Switch:
-                return self.op(self.lcond) >> self.op(self.rcond)
-            else:
-                return self.op(self.lcond, self.rcond)
-        else:
-            return self
-
-
-    def call(self):
+    def reify(self):
         if self.lcond and self.rcond:
             if self.op is Switch:
                 return self.op(self.lcond) >> self.op(self.rcond)
@@ -544,15 +534,15 @@ class CondChain(HistoriQL):
         elif isinstance(val, CondChain):
             self.rval = val.lval
             self.rcond = Cond(self.rpath, '<', self.rval)
-            val.lcond = self.call()
+            val.lcond = self.reify()
             return val
         elif isinstance(self.rcond, CondChain):
             self.rcond = self.rcond < val
-            return self.call()
+            return self.reify()
         else:
             self.rval = val
             self.rcond = Cond(self.rpath, '<', val)
-            return self.call()
+            return self.reify()
 
     def __le__(self, val):
         if not self.rpath:
@@ -560,15 +550,15 @@ class CondChain(HistoriQL):
         elif isinstance(val, CondChain):
             self.rval = val.lval
             self.rcond = Cond(self.rpath, '<=', self.rval)
-            val.lcond = self.call()
+            val.lcond = self.reify()
             return val
         elif isinstance(self.rcond, CondChain):
             self.rcond = self.rcond <= val
-            return self.call()
+            return self.reify()
         else:
             self.rval = val
             self.rcond = Cond(self.rpath, '<=', val)
-            return self.call()
+            return self.reify()
 
     def __eq__(self, val):
         if not self.rpath:
@@ -576,15 +566,15 @@ class CondChain(HistoriQL):
         elif isinstance(val, CondChain):
             self.rval = val.lval
             self.rcond = Cond(self.rpath, '==', self.rval)
-            val.lcond = self.call()
+            val.lcond = self.reify()
             return val
         elif isinstance(self.rcond, CondChain):
             self.rcond = self.rcond == val
-            return self.call()
+            return self.reify()
         else:
             self.rval = val
             self.rcond = Cond(self.rpath, '==', val)
-            return self.call()
+            return self.reify()
 
     def __ne__(self, val):
         if not self.rpath:
@@ -592,15 +582,15 @@ class CondChain(HistoriQL):
         elif isinstance(val, CondChain):
             self.rval = val.lval
             self.rcond = Cond(self.rpath, '!=', self.rval)
-            val.lcond = self.call()
+            val.lcond = self.reify()
             return val
         elif isinstance(self.rcond, CondChain):
             self.rcond = self.rcond != val
-            return self.call()
+            return self.reify()
         else:
             self.rval = val
             self.rcond = Cond(self.rpath, '!=', val)
-            return self.call()
+            return self.reify()
 
     def __gt__(self, val):
         if not self.rpath:
@@ -608,15 +598,15 @@ class CondChain(HistoriQL):
         elif isinstance(val, CondChain):
             self.rval = val.lval
             self.rcond = Cond(self.rpath, '>', self.rval)
-            val.lcond = self.call()
+            val.lcond = self.reify()
             return val
         elif isinstance(self.rcond, CondChain):
             self.rcond = self.rcond > val
-            return self.call()
+            return self.reify()
         else:
             self.rval = val
             self.rcond = Cond(self.rpath, '>', val)
-            return self.call()
+            return self.reify()
 
     def __ge__(self, val):
         if not self.rpath:
@@ -624,15 +614,15 @@ class CondChain(HistoriQL):
         elif isinstance(val, CondChain):
             self.rval = val.lval
             self.rcond = Cond(self.rpath, '>=', self.rval)
-            val.lcond = self.call()
+            val.lcond = self.reify()
             return val
         elif isinstance(self.rcond, CondChain):
             self.rcond = self.rcond >= val
-            return self.call()
+            return self.reify()
         else:
             self.rval = val
             self.rcond = Cond(self.rpath, '>=', val)
-            return self.call()
+            return self.reify()
 
     def __str__(self):
         return "({},{},{},{},{},{})".format(self.lpath, self.lval, self.rpath, self.rval, self.lcond, self.rcond)
@@ -865,7 +855,8 @@ class EventPath(Projection):
         """
         if isinstance(val, CondChain):
             val.lcond = Cond(self, 'in' if type(val.lval) is list else '==', val.lval)
-            return val()
+            val.lpath = self
+            return val.reify()
         else:
             return Cond(self, 'in' if type(val) is list else '==', val)
 
@@ -888,7 +879,7 @@ class EventPath(Projection):
         if isinstance(val, CondChain):
             val.lpath = self
             val.lcond = Cond(self, '!=', val.lval)
-            return val()
+            return val.reify()
         else:
             return Cond(self, '!=', val)
 
@@ -901,7 +892,7 @@ class EventPath(Projection):
         if isinstance(val, CondChain):
             val.lpath = self
             val.lcond = Cond(self, '>', val.lval)
-            return val()
+            return val.reify()
         else:
             return Cond(self, '>', val)
 
@@ -914,7 +905,7 @@ class EventPath(Projection):
         if isinstance(val, CondChain):
             val.lpath = self
             val.lcond = Cond(self, '>=', val.lval)
-            return val()
+            return val.reify()
         else:
             return Cond(self, '>=', val)
 
@@ -927,7 +918,7 @@ class EventPath(Projection):
         if isinstance(val, CondChain):
             val.lpath = self
             val.lcond = Cond(self, '<=', val.lval)
-            return val()
+            return val.reify()
         else:
             return Cond(self, '<=', val)
 
@@ -940,7 +931,7 @@ class EventPath(Projection):
         if isinstance(val, CondChain):
             val.lpath = self
             val.lcond = Cond(self, '<', val.lval)
-            return val()
+            return val.reify()
         else:
             return Cond(self, '<', val)
 
@@ -1046,7 +1037,7 @@ class StreamPath(Projection):
         if isinstance(val, CondChain):
             val.lpath = self
             val.lcond = Cond(self, '!=', val.lval)
-            return val()
+            return val.reify()
         else:
             return Cond(self, '!=', val)
 
@@ -1059,7 +1050,7 @@ class StreamPath(Projection):
         if isinstance(val, CondChain):
             val.lpath = self
             val.lcond = Cond(self, '>', val.lval)
-            return val()
+            return val.reify()
         else:
             return Cond(self, '>', val)
 
@@ -1072,7 +1063,7 @@ class StreamPath(Projection):
         if isinstance(val, CondChain):
             val.lpath = self
             val.lcond = Cond(self, '>=', val.lval)
-            return val()
+            return val.reify()
         else:
             return Cond(self, '>=', val)
 
@@ -1085,7 +1076,7 @@ class StreamPath(Projection):
         if isinstance(val, CondChain):
             val.lpath = self
             val.lcond = Cond(self, '<=', val.lval)
-            return val()
+            return val.reify()
         else:
             return Cond(self, '<=', val)
 
@@ -1098,7 +1089,7 @@ class StreamPath(Projection):
         if isinstance(val, CondChain):
             val.lpath = self
             val.lcond = Cond(self, '<', val.lval)
-            return val()
+            return val.reify()
         else:
             return Cond(self, '<', val)
 
