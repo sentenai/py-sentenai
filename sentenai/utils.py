@@ -1,6 +1,6 @@
 import dateutil
 import dateutil.tz
-import sys
+import sys, base64
 from datetime import datetime, timedelta, tzinfo
 
 # Constants
@@ -10,6 +10,13 @@ LEFT, CENTER, RIGHT = range(-1, 2)
 DEFAULT = None
 
 if not PY3: import virtualtime
+
+
+def b64json(x):
+    if PY3:
+        return base64.urlsafe_b64encode(bytes(json.dumps(x), 'UTF-8'))
+    else:
+        return base64.urlsafe_b64encode(json.dumps(x))
 
 def py2str(cls):
     """Encode strings to utf-8 if the major version is not 3."""

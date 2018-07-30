@@ -528,21 +528,31 @@ class CondChain(HistoriQL):
         else:
             return self
 
+
+    def call(self):
+        if self.lcond and self.rcond:
+            if self.op is Switch:
+                return self.op(self.lcond) >> self.op(self.rcond)
+            else:
+                return self.op(self.lcond, self.rcond)
+        else:
+            return self
+
     def __lt__(self, val):
         if not self.rpath:
             raise Exception("missing rpath")
         elif isinstance(val, CondChain):
             self.rval = val.lval
             self.rcond = Cond(self.rpath, '<', self.rval)
-            val.lcond = self()
+            val.lcond = self.call()
             return val
         elif isinstance(self.rcond, CondChain):
             self.rcond = self.rcond < val
-            return self()
+            return self.call()
         else:
             self.rval = val
             self.rcond = Cond(self.rpath, '<', val)
-            return self()
+            return self.call()
 
     def __le__(self, val):
         if not self.rpath:
@@ -550,15 +560,15 @@ class CondChain(HistoriQL):
         elif isinstance(val, CondChain):
             self.rval = val.lval
             self.rcond = Cond(self.rpath, '<=', self.rval)
-            val.lcond = self()
+            val.lcond = self.call()
             return val
         elif isinstance(self.rcond, CondChain):
             self.rcond = self.rcond <= val
-            return self()
+            return self.call()
         else:
             self.rval = val
             self.rcond = Cond(self.rpath, '<=', val)
-            return self()
+            return self.call()
 
     def __eq__(self, val):
         if not self.rpath:
@@ -566,15 +576,15 @@ class CondChain(HistoriQL):
         elif isinstance(val, CondChain):
             self.rval = val.lval
             self.rcond = Cond(self.rpath, '==', self.rval)
-            val.lcond = self()
+            val.lcond = self.call()
             return val
         elif isinstance(self.rcond, CondChain):
             self.rcond = self.rcond == val
-            return self()
+            return self.call()
         else:
             self.rval = val
             self.rcond = Cond(self.rpath, '==', val)
-            return self()
+            return self.call()
 
     def __ne__(self, val):
         if not self.rpath:
@@ -582,15 +592,15 @@ class CondChain(HistoriQL):
         elif isinstance(val, CondChain):
             self.rval = val.lval
             self.rcond = Cond(self.rpath, '!=', self.rval)
-            val.lcond = self()
+            val.lcond = self.call()
             return val
         elif isinstance(self.rcond, CondChain):
             self.rcond = self.rcond != val
-            return self()
+            return self.call()
         else:
             self.rval = val
             self.rcond = Cond(self.rpath, '!=', val)
-            return self()
+            return self.call()
 
     def __gt__(self, val):
         if not self.rpath:
@@ -598,15 +608,15 @@ class CondChain(HistoriQL):
         elif isinstance(val, CondChain):
             self.rval = val.lval
             self.rcond = Cond(self.rpath, '>', self.rval)
-            val.lcond = self()
+            val.lcond = self.call()
             return val
         elif isinstance(self.rcond, CondChain):
             self.rcond = self.rcond > val
-            return self()
+            return self.call()
         else:
             self.rval = val
             self.rcond = Cond(self.rpath, '>', val)
-            return self()
+            return self.call()
 
     def __ge__(self, val):
         if not self.rpath:
@@ -614,15 +624,15 @@ class CondChain(HistoriQL):
         elif isinstance(val, CondChain):
             self.rval = val.lval
             self.rcond = Cond(self.rpath, '>=', self.rval)
-            val.lcond = self()
+            val.lcond = self.call()
             return val
         elif isinstance(self.rcond, CondChain):
             self.rcond = self.rcond >= val
-            return self()
+            return self.call()
         else:
             self.rval = val
             self.rcond = Cond(self.rpath, '>=', val)
-            return self()
+            return self.call()
 
     def __str__(self):
         return "({},{},{},{},{},{})".format(self.lpath, self.lval, self.rpath, self.rval, self.lcond, self.rcond)
