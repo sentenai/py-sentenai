@@ -1020,9 +1020,9 @@ class StreamPath(Projection):
             val -- The value to compare the stream variable to.
         """
         if isinstance(val, CondChain):
-            #val.lcond = Cond(self, 'in' if type(val.lval) is list else '==', val.lval)
+            val.lcond = Cond(self, 'in' if type(val.lval) is list else '==', val.lval)
             val.arr = [self, '=='] + val.arr
-            return val
+            return val.reify()
         else:
             return Cond(self, 'in' if type(val) is list else '==', val)
 
