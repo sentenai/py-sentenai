@@ -12,7 +12,7 @@ DEFAULT = None
 if not PY3: import virtualtime
 
 
-def b64json(x):
+def base64json(x):
     if PY3:
         return base64.urlsafe_b64encode(bytes(json.dumps(x), 'UTF-8'))
     else:
