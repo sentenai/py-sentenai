@@ -185,6 +185,82 @@ def test_or():
     }
     assert real == expected
 
+def test_order_of_operations():
+    s = stream('s')
+    real = ast_dict(s.x == 1 | s.y > 2 & s.z <= 3)
+    expected = {
+        "select": {
+            "expr": "||",
+            "args": [
+                {
+                    "type": "span",
+                    "op": "==",
+                    "stream": {"name": "s"},
+                    "path":("event","x"),
+                    "arg": {"type":"double", "val":1}
+                },
+                {
+                    "expr": "&&",
+                    "args": [
+                        {
+                            "type": "span",
+                            "op": ">",
+                            "stream": {"name": "s"},
+                            "path":("event","y"),
+                            "arg": {"type":"double", "val":2}
+                        },
+                        {
+                            "type": "span",
+                            "op": "<=",
+                            "stream": {"name": "s"},
+                            "path":("event","z"),
+                            "arg": {"type":"double", "val":3}
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+    assert real == expected
+
+def test_parens():
+    s = stream('s')
+    real = ast_dict((s.x == 1 | s.y > 2) & s.z <= 3)
+    expected = {
+        'select': {
+            'expr': '&&',
+            'args': [
+                {
+                    'expr': '||',
+                    'args': [
+                        {
+                            'path': ('event', 'x'),
+                            'arg': {'type': 'double', 'val': 1},
+                            'type': 'span',
+                            'stream': {'name': 's'},
+                            'op': '=='
+                        },
+                        {
+                            'path': ('event', 'y'),
+                            'arg': {'type': 'double', 'val': 2},
+                            'type': 'span',
+                            'stream': {'name': 's'},
+                            'op': '>'
+                        }
+                    ]
+                },
+                {
+                    'path': ('event', 'z'),
+                    'arg': {'type': 'double', 'val': 3},
+                    'type': 'span',
+                    'stream': {'name': 's'},
+                    'op': '<='
+                }
+            ]
+        }
+    }
+    assert real == expected
+
 # def test_relative_span():
 #     s = stream('s')
 #     t = stream('t')
