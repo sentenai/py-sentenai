@@ -625,7 +625,11 @@ class CondChain(HistoriQL):
             return self.reify()
 
     def __str__(self):
-        return "({},{},{},{},{},{})".format(self.lpath, self.lval, self.rpath, self.rval, self.lcond, self.rcond)
+        return "(({}) {} ({}))".format(
+            (self.lcond if self.lcond else "{} {}".format(self.lpath, self.lval)),
+            self.op,
+            (self.rcond if self.rcond else "{} {}".format(self.rpath, self.rval))
+        )
 
 @py2str
 class Stream(HistoriQL):
