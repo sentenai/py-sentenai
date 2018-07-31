@@ -466,11 +466,11 @@ class Cond(HistoriQL):
         elif isinstance(self.val, InPolygon):
             vt = "polygon"
             op = "in"
-            val = self.val.reify()
+            val = self.val()
         elif isinstance(self.val, InCircle):
             vt = "circle"
             op = "in"
-            val = self.val.reify()
+            val = self.val()
         elif isinstance(self.val, date):
             vt = "date"
             val = "{}-{}-{}".format(
