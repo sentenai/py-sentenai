@@ -149,7 +149,7 @@ class Proj(object):
                         z = ('event',) + val._attrlist
                         new[key] = [{'var': z}]
                     elif isinstance(val, ProjMath):
-                        new[key] = [val.reify()]
+                        new[key] = [val()]
                     elif isinstance(val, float):
                         new[key] = [{'lit': {'val': val, 'type': 'double'}}]
                     elif isinstance(val, int):
