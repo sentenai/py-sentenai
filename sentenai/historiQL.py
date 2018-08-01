@@ -466,11 +466,11 @@ class Cond(HistoriQL):
         elif isinstance(self.val, InPolygon):
             vt = "polygon"
             op = "in"
-            val = self.val.reify()
+            val = self.val()
         elif isinstance(self.val, InCircle):
             vt = "circle"
             op = "in"
-            val = self.val.reify()
+            val = self.val()
         elif isinstance(self.val, date):
             vt = "date"
             val = "{}-{}-{}".format(
@@ -625,7 +625,11 @@ class CondChain(HistoriQL):
             return self.reify()
 
     def __str__(self):
-        return "({},{},{},{},{},{})".format(self.lpath, self.lval, self.rpath, self.rval, self.lcond, self.rcond)
+        return "(({}) {} ({}))".format(
+            (self.lcond if self.lcond else "{} {}".format(self.lpath, self.lval)),
+            self.op,
+            (self.rcond if self.rcond else "{} {}".format(self.rpath, self.rval))
+        )
 
 @py2str
 class Stream(HistoriQL):
@@ -1020,9 +1024,9 @@ class StreamPath(Projection):
             val -- The value to compare the stream variable to.
         """
         if isinstance(val, CondChain):
-            #val.lcond = Cond(self, 'in' if type(val.lval) is list else '==', val.lval)
+            val.lcond = Cond(self, 'in' if type(val.lval) is list else '==', val.lval)
             val.arr = [self, '=='] + val.arr
-            return val
+            return val.reify()
         else:
             return Cond(self, 'in' if type(val) is list else '==', val)
 
