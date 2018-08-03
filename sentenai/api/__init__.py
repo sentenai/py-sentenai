@@ -104,14 +104,7 @@ class Sentenai(BaseClient):
 
     def Stream(self, name, *args, **kwargs):
         tz = kwargs.get('tz')
-        resp = self.session.get("/".join([self.host, "streams", name]), params={})
-        if resp.status_code == 404:
-            return BoundStream(self, name, kwargs.get('meta', {}), None, tz, False, *args)
-        elif resp.status_code == 200:
-            data = resp.json()
-            return BoundStream(self, name, data.get('meta', {}), data.get('events', None), tz, True, *args)
-        else:
-            handle(resp)
+        return BoundStream(self, name, kwargs.get('meta', {}), None, tz, False, *args)
 
 
     def upload(self, iterable, processes=4, progress=False):

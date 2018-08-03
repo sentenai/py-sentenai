@@ -38,11 +38,12 @@ except:
 
 
 class Event(object):
-    def __init__(self, client, stream, id=None, ts=None, data=None, event=None, saved=False):
+    def __init__(self, client, stream, id=None, ts=None, data=None, event=None, duration=None, saved=False):
         self.stream = stream
         self.id = id
         self.ts = ts if isinstance(ts, datetime) or ts is None else cts(ts)
         self.data = data or event or {}
+        self.duration = duration
         self._saved = saved
 
     @property
@@ -83,7 +84,7 @@ class Event(object):
     def update(self):
         if not self.id:
             raise Exception("Not found")
-        loc = self.stream.put(self.data, self.id, self.ts)
+        loc = self.stream.put(self.data, self.id, self.ts, self.duration)
         self.id = loc
         self._saved = True
         return self
@@ -173,7 +174,15 @@ class Stream(BaseStream):
         return self.stats().get('events')
 
     def __bool__(self):
+        resp = self._client.session.get("/".join([self._client.host, "streams", self._name]), params={})
+        if resp.status_code == 404:
+            self._exists = False
+        elif resp.status_code == 200:
+            self._exists = True
+        else:
+            handle(resp)
         return self._exists
+
     __nonzero__ = __bool__
 
 
@@ -186,7 +195,7 @@ class Stream(BaseStream):
         if kwargs.get("replace", False):
             return Stream(self._client, self.name, {}, 0, self.tz, self._exists, filters)
         else:
-            return Stream(self._client, self.name, {}, 0, self.tz, self._exists, tuple(self._filters) + filters)
+            return Stream(self._client, self.name, {}, 0, self.tz, self._exists, *(tuple(self._filters) + filters))
 
 
     def __getattribute__(self, name):
@@ -339,7 +348,7 @@ class Stream(BaseStream):
         return self._client.unique(self, field)
     _unique = unique
 
-    def put(self, event, id=None, timestamp=None):
+    def put(self, event, id=None, timestamp=None, duration=None):
         """Put a new event into this stream.
 
         Arguments:
