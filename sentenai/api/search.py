@@ -35,13 +35,15 @@ class Search(object):
     def _spans(self, cursor):
         url = '{0}/query/{1}/spans'.format(self.client.host, cursor)
         retries = 0
-        while retries < 3:
+        while True:
             try:
                 return handle(self.client.session.get(url, params={'optimize': 'true'})).json()
-            except:
+            except Exception as e:
                 retries += 1
-        else:
-            raise SentenaiException("Server failed.")
+                if retries < 3:
+                    continue
+                else:
+                    raise e
 
     def _repr_html_(self):
         return "<pre>%s</pre>" % str(self.query)
