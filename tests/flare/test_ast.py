@@ -440,7 +440,6 @@ def test_returning():
             'constant': 3
         }
     }))()
-    print('real', real)
     expected = {
         'projections': {
             'explicit': [{
