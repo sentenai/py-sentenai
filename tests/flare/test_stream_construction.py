@@ -6,7 +6,7 @@ from sentenai.api.stream   import Stream
 from sentenai.historiQL    import StreamPath
 
 def stream(name, *filters):
-    return Stream(None, name, {}, None, None, True, *filters)
+    return Stream(None, name, {}, None, True, *filters)
 
 @given(text())
 def test_named_streams(name):

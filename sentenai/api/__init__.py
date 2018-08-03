@@ -104,7 +104,7 @@ class Sentenai(BaseClient):
 
     def Stream(self, name, *args, **kwargs):
         tz = kwargs.get('tz')
-        return BoundStream(self, name, kwargs.get('meta', {}), None, tz, False, *args)
+        return BoundStream(self, name, kwargs.get('meta', {}), tz, False, *args)
 
 
     def upload(self, iterable, processes=4, progress=False):
@@ -284,7 +284,7 @@ class Sentenai(BaseClient):
 
         try:
             return StreamsView(sorted(
-                    [Stream(self, v['name'], v.get('meta', {}), v.get('events', 0), v.get('tz', None), True)
+                    [Stream(self, v['name'], v.get('meta', {}), v.get('tz', None), True)
                         for v in resp.json() if filtered(v)],
                     key=lambda k: k.name
                     ))

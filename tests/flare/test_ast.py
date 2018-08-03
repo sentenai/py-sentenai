@@ -5,7 +5,7 @@ from sentenai.historiQL import ast_dict
 from sentenai.api.stream import Stream
 
 def stream(name, *filters):
-    return Stream(None, name, {}, None, None, True, *filters)
+    return Stream(None, name, {}, None, True, *filters)
 
 def test_basic_select_span():
     s = stream("S")

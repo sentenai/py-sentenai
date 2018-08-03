@@ -5,7 +5,7 @@ from sentenai.api.stream import Stream
 from sentenai.historiQL import merge
 
 def stream(name, *filters):
-    return Stream(None, name, {}, None, None, True, *filters)
+    return Stream(None, name, {}, None, True, *filters)
 
 def test_merge_construction():
     s = stream("1")
