@@ -321,13 +321,13 @@ class Result(object):
         if not data:
             return []
         else:
-            return [Stream(self.search.client, s['name'], {}, {}, None, True)
+            return [Stream(self.search.client, s['name'], {}, None, True)
                     for s in data.get('streams', []).values()]
 
 
     def __iter__(self):
         data = self._events()
-        streams = {k: Stream(self.search.client, s['name'], {}, {}, None, True)
+        streams = {k: Stream(self.search.client, s['name'], {}, None, True)
                    for k, s in data.get('streams', {}).items()}
         return iter([Event(self.search.client, streams[e['stream']], e['id'], e['ts'], e['event'] or {})
                      for e in data['events']])

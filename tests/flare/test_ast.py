@@ -1,11 +1,11 @@
 # coding=utf-8
 import pytest
 from sentenai import Sentenai, hql, V
-from sentenai.historiQL import ast_dict
+from sentenai.historiQL import ast_dict, Returning
 from sentenai.api.stream import Stream
 
 def stream(name, *filters):
-    return Stream(None, name, {}, None, None, True, *filters)
+    return Stream(None, name, {}, None, True, *filters)
 
 def test_basic_select_span():
     s = stream("S")
@@ -432,47 +432,43 @@ def test_or_stream_filters():
 #     }
 #     assert real == expected
 
-# def test_returning():
-#     s = stream('weather')
-#     real = ast_dict(
-#         returning(s % {
-#             'value': V.maxTemp,
-#             'other': {
-#                 'constant': 3
-#             }
-#         })
-#     )
-#     expected = {
-#         'select': {'expr': True},
-#         'projections': {
-#             'explicit': [{
-#                 'stream': {'name': 'weather'},
-#                 'projection': {
-#                     'value': [{'var': ('event', 'maxTemp')}],
-#                     'other': {'constant': [{'lit': {'val': 3, 'type': 'int'}}]}
-#                 }
-#             }],
-#             '...': True
-#         }
-#     }
-#     assert real == expected
+def test_returning():
+    s = stream('weather')
+    real = (Returning(s % {
+        'value': V.maxTemp,
+        'other': {
+            'constant': 3
+        }
+    }))()
+    expected = {
+        'projections': {
+            'explicit': [{
+                'stream': {'name': 'weather'},
+                'projection': {
+                    'value': [{'var': ('event', 'maxTemp')}],
+                    'other': {'constant': [{'lit': {'val': 3, 'type': 'int'}}]}
+                }
+            }],
+            '...': True
+        }
+    }
+    assert real == expected
 
-# def test_returning_excluding():
-#     s = stream('weather')
-#     real = ast_dict(
-#         returning(-s)
-#     )
-#     expected = {
-#         'select': {'expr': True},
-#         'projections': {
-#             'explicit': [{
-#                 'stream': {'name': 'weather'},
-#                 'projection': False
-#             }],
-#             '...': True
-#         }
-#     }
-#     assert real == expected
+def test_returning_excluding():
+    s = stream('weather')
+    real = (
+        Returning(-s)
+    )()
+    expected = {
+        'projections': {
+            'explicit': [{
+                'stream': {'name': 'weather'},
+                'projection': False
+            }],
+            '...': True
+        }
+    }
+    assert real == expected
 
 def test_during():
     s = stream('S')

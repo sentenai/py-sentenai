@@ -104,7 +104,7 @@ class Sentenai(BaseClient):
 
     def Stream(self, name, *args, **kwargs):
         tz = kwargs.get('tz')
-        return BoundStream(self, name, kwargs.get('meta', {}), None, tz, False, *args)
+        return BoundStream(self, name, kwargs.get('meta', {}), tz, False, *args)
 
 
     def upload(self, iterable, processes=4, progress=False):

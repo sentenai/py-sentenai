@@ -164,9 +164,8 @@ class Fields(object):
 
 
 class Stream(BaseStream):
-    def __init__(self, client, name, meta, events, tz, exists, *filters):
+    def __init__(self, client, name, meta, tz, exists, *filters):
         self._client = client
-        self._events = events
         self._exists = exists
         BaseStream.__init__(self, name, meta, tz, *filters)
 
@@ -193,9 +192,9 @@ class Stream(BaseStream):
             replace -- when True, copy stream while replacing filters instead of adding them.
         """
         if kwargs.get("replace", False):
-            return Stream(self._client, self.name, {}, 0, self.tz, self._exists, filters)
+            return Stream(self._client, self.name, {}, self.tz, self._exists, filters)
         else:
-            return Stream(self._client, self.name, {}, 0, self.tz, self._exists, *(tuple(self._filters) + filters))
+            return Stream(self._client, self.name, {}, self.tz, self._exists, *(tuple(self._filters) + filters))
 
 
     def __getattribute__(self, name):

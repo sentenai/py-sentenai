@@ -34,7 +34,7 @@ def all_multitypes():
 # ========================
 
 def stream(name, *filters):
-    return Stream(None, name, {}, None, None, True, *filters)
+    return Stream(None, name, {}, None, True, *filters)
 
 def assume_parsable(query):
     assume(type(query) == Cond)
