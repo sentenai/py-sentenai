@@ -468,17 +468,26 @@ class StreamRange(object):
 
 
 class StreamsView(object):
-    def __init__(self, streams):
-        self.streams = streams
+    def __init__(self, client, streams):
+        self._client = client
+        self._streams = streams
 
     def _repr_html_(self):
-        return pd.DataFrame([{ 'name': s.name, 'length': len(s), 'healthy': True} for s in self.streams])[['name', 'length', 'healthy']]._repr_html_()
+        return pd.DataFrame(self._streams)[['name', 'events', 'healthy']]._repr_html_()
 
     def __iter__(self):
-        return iter(self.streams)
+        return iter([Stream(
+            self._client,
+            v['name'],
+            v.get('meta', {}),
+            v.get('events', 0),
+            v.get('tz', None),
+            True
+         ) for v in self._streams])
 
     def __getitem__(self, i):
-        return self.streams[i]
+        v = self._streams[i]
+        return Stream(self._client, v['name'], v.get('meta', {}), v.get('events', 0), v.get('tz', None), True) 
 
 
 
