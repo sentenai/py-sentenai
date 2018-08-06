@@ -55,6 +55,19 @@ def test_stream_stats():
         m.get(URL_STREAM_ID_META.format(s.name), json=payload)
         assume(s.stats() == payload)
 
+def test_stream_healthy():
+    with requests_mock.mock() as m:
+        s = test_client.Stream('weather')
+        m.get(URL_STREAM_ID_META.format(s.name), json={ 'healthy': True })
+        assume(s.healthy() == True)
+
+def test_stream_healthy_404():
+    with requests_mock.mock() as m:
+        s = test_client.Stream('weather')
+        m.get(URL_STREAM_ID_META.format(s.name), status_code=404)
+        assume(s.healthy() == None)
+
+
 @given(text())
 @example(None)
 def test_delete_sid_typechecks(sid):
