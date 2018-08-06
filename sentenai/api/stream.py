@@ -222,7 +222,7 @@ class Stream(BaseStream):
 
     def stats(self):
         """Get a dictionary of stream statistics."""
-        return self._client.stats(self)
+        return self._client.stream_stats(self)
     _stats = stats
 
     def values(self, at=None):
@@ -316,7 +316,7 @@ class Stream(BaseStream):
            start  -- Optional argument indicating start time in stream for calculations.
            end    -- Optional argument indicating end time in stream for calculations.
         """
-        return self._client.stats(self, field, start, end)
+        return self._client.field_stats(self, field, start, end)
     _fstats = fstats
 
     def describe(self, field, start=None, end=None):
@@ -327,7 +327,7 @@ class Stream(BaseStream):
            start  -- Optional argument indicating start time in stream for calculations.
            end    -- Optional argument indicating end time in stream for calculations.
         """
-        x = self._client.stats(self, field, start, end)
+        x = self._client.field_stats(self, field, start, end)
         if x.get('categorical'):
             print("count\t{count}\nunique\t{unique}\ntop\t{top}\nfreq\t{freq}".format(**x['categorical']))
         else:
@@ -486,7 +486,7 @@ class StreamsView(object):
 
     def __getitem__(self, i):
         v = self._streams[i]
-        return Stream(self._client, v['name'], v.get('meta', {}), v.get('events', 0), v.get('tz', None), True) 
+        return Stream(self._client, v['name'], v.get('meta', {}), v.get('events', 0), v.get('tz', None), True)
 
 
 

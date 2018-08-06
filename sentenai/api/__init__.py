@@ -143,8 +143,8 @@ class Sentenai(BaseClient):
         status_codes(resp)
 
 
-    def stats(self, stream, field=None, start=None, end=None):
-        """Get stats for a given stream or field in that stream.
+    def field_stats(self, stream, field, start=None, end=None):
+        """Get stats for a given field in a stream.
 
        Arguments:
            stream -- A stream object corresponding to a stream stored in Sentenai.
@@ -152,31 +152,37 @@ class Sentenai(BaseClient):
            start  -- Optional argument indicating start time in stream for calculations.
            end    -- Optional argument indicating end time in stream for calculations.
         """
-        if field:
-            args = stream._serialized_filters()
-            if start: args['start'] = start.isoformat() + ("Z" if not start.tzinfo else "")
-            if end: args['end'] = end.isoformat() + ("Z" if not end.tzinfo else "")
+        args = stream._serialized_filters()
+        if start: args['start'] = start.isoformat() + ("Z" if not start.tzinfo else "")
+        if end: args['end'] = end.isoformat() + ("Z" if not end.tzinfo else "")
 
-            url = "/".join([self.host, "streams", stream.name, "fields", "event." + field, "stats"])
+        url = "/".join([self.host, "streams", stream.name, "fields", "event." + field, "stats"])
 
-            resp = self.session.get(url, params=args)
+        resp = self.session.get(url, params=args)
 
-            if resp.status_code == 404:
-                raise NotFound('The field at "/streams/{}/fields/{}" does not exist'.format(stream.name, field))
-            else:
-                status_codes(resp)
-
-            return resp.json()
+        if resp.status_code == 404:
+            raise NotFound('The field at "/streams/{}/fields/{}" does not exist'.format(stream.name, field))
         else:
-            args = stream._serialized_filters()
-            args['stats'] = "true"
-            url = "/".join([self.host, "streams", stream.name])
-            resp = self.session.get(url, params=args)
-            if resp.status_code == 404:
-                raise NotFound('The stream "{}" does not exist'.format(stream.name))
-            else:
-                status_codes(resp)
-            return resp.json()
+            status_codes(resp)
+
+        return resp.json()
+
+
+    def stream_stats(self, stream):
+        """Get stats for a stream.
+
+       Arguments:
+           stream -- A stream object corresponding to a stream stored in Sentenai.
+        """
+        args = stream._serialized_filters()
+        args['stats'] = "true"
+        url = "/".join([self.host, "streams", stream.name])
+        resp = self.session.get(url, params=args)
+        if resp.status_code == 404:
+            raise NotFound('The stream "{}" does not exist'.format(stream.name))
+        else:
+            status_codes(resp)
+        return resp.json()
 
 
 
