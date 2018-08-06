@@ -27,6 +27,17 @@ def test_streams_call():
         resp = test_client.streams()
         assume(list(resp) == [])
 
+def test_stream_existence():
+    with requests_mock.mock() as m:
+        s = test_client.Stream('real-stream')
+        m.get(URL_STREAM_ID.format(s.name), status_code=200)
+        assume(bool(s) == True)
+
+def test_stream_nonexistence():
+    with requests_mock.mock() as m:
+        s = test_client.Stream('fake-stream')
+        m.get(URL_STREAM_ID.format(s.name), status_code=404)
+        assume(bool(s) == False)
 
 @given(text())
 @example(None)
