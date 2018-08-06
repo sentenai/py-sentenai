@@ -18,6 +18,8 @@ URL_STREAMS   = URL + "streams"
 URL_STREAM_ID = URL + "streams/{}"
 URL_EVENTS    = URL + "streams/{}/events"
 URL_EVENTS_ID = URL + "streams/{}/events/{}"
+# TODO: this is changing
+URL_STREAM_ID_META = URL + "streams/{}"
 
 test_client = Sentenai(auth_key = "")
 
@@ -43,8 +45,15 @@ def test_stream_len():
     with requests_mock.mock() as m:
         s = test_client.Stream('weather')
         count = 8675309
-        m.get(URL_STREAM_ID.format(s.name), json={ 'events': count })
+        m.get(URL_STREAM_ID_META.format(s.name), json={ 'events': count })
         assume(len(s) == count)
+
+def test_stream_stats():
+    with requests_mock.mock() as m:
+        s = test_client.Stream('weather')
+        payload = { 'events': 3, 'fields': [['some'], ['fields']], 'healthy': True, 'meta': {} }
+        m.get(URL_STREAM_ID_META.format(s.name), json=payload)
+        assume(s.stats() == payload)
 
 @given(text())
 @example(None)
