@@ -558,13 +558,15 @@ class Cursor(object):
                          },
                           ...]
         """
+        return json.dumps(self.events(), default=dts, indent=4)
+
+    def list(self):
         self.spans()
         pool = self.pool
         if not pool:
             return json.dumps([])
         try:
-            data = pool.map(lambda s: self._slice(s['cursor'], s.get('start') or DTMIN, s.get('end') or DTMAX), self._spans)
-            return json.dumps(data, default=dts, indent=4)
+            return pool.map(lambda s: self._slice(s['cursor'], s.get('start') or DTMIN, s.get('end') or DTMAX), self._spans)
         finally:
             pool.close()
 
