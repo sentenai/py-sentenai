@@ -448,10 +448,14 @@ class StreamRange(object):
         p = Proj(self.stream, kwargs)()['projection']
 
         self._events = self.stream._client.range(self.stream, self.start, self.end, limit=self.limit, proj=p, sorting=self.sort)
-        if self.sort == "desc":
-            self._events = reversed(self._events)
-        f = json_normalize([x.json(df=True) for x in self._events])
-        return f.set_index('ts')
+
+        if len(self._events):
+            if self.sort == "desc":
+                self._events = reversed(self._events)
+            f = json_normalize([x.json(df=True) for x in self._events])
+            return f.set_index('ts')
+        else:
+            return pd.DataFrame()
 
     def json(self, *args):
         if len(args) == 1 and isinstance(args[0], dict):
