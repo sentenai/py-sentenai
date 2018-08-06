@@ -39,6 +39,13 @@ def test_stream_nonexistence():
         m.get(URL_STREAM_ID.format(s.name), status_code=404)
         assume(bool(s) == False)
 
+def test_stream_len():
+    with requests_mock.mock() as m:
+        s = test_client.Stream('weather')
+        count = 8675309
+        m.get(URL_STREAM_ID.format(s.name), json={ 'events': count })
+        assume(len(s) == count)
+
 @given(text())
 @example(None)
 def test_delete_sid_typechecks(sid):
