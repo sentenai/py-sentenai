@@ -258,13 +258,11 @@ class Stream(BaseStream):
     def healthy(self):
         """Did the last `create` or `update` of an event on
         this stream succeed. For debugging purposes."""
-        resp = self._client.session.get("/".join([self._client.host, "streams", self.name]))
-        if resp.status_code == 200:
-            return resp.json().get('healthy', False)
-        elif resp.status_code == 404:
+        try:
+            stats = self._client.stream_stats(self)
+            return stats['healthy']
+        except NotFound:
             return None
-        else:
-            handle(resp)
 
     _healthy = healthy
 
