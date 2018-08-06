@@ -11,7 +11,7 @@ def stream(name, *filters):
 @given(text())
 def test_named_streams(name):
     s = stream(name)
-    assume(s._name == name)
+    assume(s.name == name)
 
 
 @given(text())
