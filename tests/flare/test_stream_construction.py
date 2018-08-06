@@ -4,6 +4,7 @@ from hypothesis            import given, assume, example
 from hypothesis.strategies import text, dictionaries
 from sentenai.api.stream   import Stream
 from sentenai.historiQL    import StreamPath
+from sentenai.hql          import V
 
 def stream(name, *filters):
     return Stream(None, name, {}, None, True, *filters)
@@ -16,19 +17,17 @@ def test_named_streams(name):
 
 @given(text())
 def test_stream_equality(name):
-    class StreamStub:
-        _name = name
-        def __init__(self):
-            pass
-
     s1 = stream(name)
     s2 = stream(name)
     s3 = stream(name + " lies")
 
-    assume(stream(name) == StreamStub())
     assume(s1 == s2)
     assume(not s1 is s2)
     assume(not (s1 == s3))
+
+    assume(s1.filtered(V.temp > 32) == stream(name, V.temp > 32))
+    assume(s1.filtered(V.temp > 100) != stream(name, V.temp < 0))
+    assume(s3.filtered(V.temp > 32) != stream(name, V.temp > 32))
 
 
 @given(text(min_size=1), dictionaries(text(min_size=1), text()))
