@@ -170,6 +170,21 @@ def test_all_any_serial():
     }
     assert real == expected
 
+def test_and():
+    s = stream('s')
+    t = stream('t')
+    real = ast_dict(s.x == True & t.x == True)
+    expected = {
+        "select": {
+            "expr": "&&",
+            "args": [
+               { "type": "span", "op": "==", "stream": {"name": "s"}, "path":("event","x"), "arg": {"type":"bool", "val":True} },
+               { "type": "span", "op": "==", "stream": {"name": "t"}, "path":("event","x"), "arg": {"type":"bool", "val":True} }
+            ]
+        }
+    }
+    assert real == expected
+
 def test_or():
     s = stream('s')
     t = stream('t')
