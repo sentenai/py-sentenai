@@ -72,5 +72,5 @@ def divtime(l, r):
     return int( numerator / divisor )
 
 
-DTMIN = datetime.min.replace(tzinfo=dateutil.tz.tzutc())
-DTMAX = datetime.max.replace(tzinfo=dateutil.tz.tzutc())
+DTMIN = datetime.fromtimestamp((-2**62 + 1)/10**9).replace(tzinfo=dateutil.tz.tzutc())
+DTMAX = datetime.fromtimestamp((2**62 - 1)/10**9).replace(tzinfo=dateutil.tz.tzutc())

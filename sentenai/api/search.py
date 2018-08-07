@@ -192,11 +192,12 @@ class ResultSet(object):
         data = []
         for cursor in self.cursors:
             data.extend(self.spans.get(cursor, []))
+        print([x.duration for x in data])
         if data:
-            maxd = max([
-                float(r.duration.total_seconds())
-                for r in data
-                if r.duration < timedelta.max])
+            d = [ float(r.duration.total_seconds())
+                  for r in data
+                  if r.duration < timedelta.max]
+            maxd = max(d) if d else timedelta.max.total_seconds()
 
         x = lambda r: int(round(r.duration.total_seconds() / maxd * 10)) * u"\u2588"
         df = pd.DataFrame([

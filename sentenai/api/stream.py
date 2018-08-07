@@ -385,7 +385,7 @@ class Stream(BaseStream):
            Result:
            A time ordered list of all events in a stream from `start` to `end`
         """
-        return StreamRange(self, datetime.min, datetime.max, limit=n, sorting='desc')
+        return StreamRange(self, DTMIN, DTMAX, limit=n, sorting='desc')
 
     def head(self, n=5):
         """Get all of a stream's events between start (inclusive) and end (exclusive).
@@ -396,7 +396,7 @@ class Stream(BaseStream):
            Result:
            A time ordered list of all events in a stream from `start` to `end`
         """
-        return StreamRange(self, datetime.min, datetime.max, limit=n, sorting='asc')
+        return StreamRange(self, DTMIN, DTMAX, limit=n, sorting='asc')
 
     def newest(self):
         """Get the most recent event in the stream."""
