@@ -326,6 +326,7 @@ class Sentenai(BaseClient):
            A time ordered list of all events in a stream from `start` to `end`
         """
         params = stream._serialized_filters()
+        params['streaming'] = True
         if proj is not None:
             params['projection'] = base64json(proj)
         if limit is not None:
