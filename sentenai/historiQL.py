@@ -683,7 +683,8 @@ class Stream(HistoriQL):
             other -- the stream to compare with
         """
         try:
-            return self._name == other._name
+            return self._name == other._name \
+                and self._serialized_filters() == other._serialized_filters()
         except AttributeError:
             return False
 

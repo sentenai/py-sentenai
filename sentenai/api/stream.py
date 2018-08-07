@@ -222,7 +222,7 @@ class Stream(BaseStream):
 
     def stats(self):
         """Get a dictionary of stream statistics."""
-        return self._client.stats(self)
+        return self._client.stream_stats(self)
     _stats = stats
 
     def values(self, at=None):
@@ -258,13 +258,11 @@ class Stream(BaseStream):
     def healthy(self):
         """Did the last `create` or `update` of an event on
         this stream succeed. For debugging purposes."""
-        resp = self.session.get("/".join([self.client.host, "streams", self.name]))
-        if resp.status_code == 200:
-            return resp.json().get('healthy', False)
-        elif resp.status_code == 404:
+        try:
+            stats = self._client.stream_stats(self)
+            return stats['healthy']
+        except NotFound:
             return None
-        else:
-            handle(resp)
 
     _healthy = healthy
 
@@ -316,7 +314,7 @@ class Stream(BaseStream):
            start  -- Optional argument indicating start time in stream for calculations.
            end    -- Optional argument indicating end time in stream for calculations.
         """
-        return self._client.stats(self, field, start, end)
+        return self._client.field_stats(self, field, start, end)
     _fstats = fstats
 
     def describe(self, field, start=None, end=None):
@@ -327,7 +325,7 @@ class Stream(BaseStream):
            start  -- Optional argument indicating start time in stream for calculations.
            end    -- Optional argument indicating end time in stream for calculations.
         """
-        x = self._client.stats(self, field, start, end)
+        x = self._client.field_stats(self, field, start, end)
         if x.get('categorical'):
             print("count\t{count}\nunique\t{unique}\ntop\t{top}\nfreq\t{freq}".format(**x['categorical']))
         else:
@@ -450,10 +448,14 @@ class StreamRange(object):
         p = Proj(self.stream, kwargs)()['projection']
 
         self._events = self.stream._client.range(self.stream, self.start, self.end, limit=self.limit, proj=p, sorting=self.sort)
-        if self.sort == "desc":
-            self._events = reversed(self._events)
-        f = json_normalize([x.json(df=True) for x in self._events])
-        return f.set_index('ts')
+
+        if len(self._events):
+            if self.sort == "desc":
+                self._events = reversed(self._events)
+            f = json_normalize([x.json(df=True) for x in self._events])
+            return f.set_index('ts')
+        else:
+            return pd.DataFrame()
 
     def json(self, *args):
         if len(args) == 1 and isinstance(args[0], dict):
@@ -486,7 +488,7 @@ class StreamsView(object):
 
     def __getitem__(self, i):
         v = self._streams[i]
-        return Stream(self._client, v['name'], v.get('meta', {}), v.get('events', 0), v.get('tz', None), True) 
+        return Stream(self._client, v['name'], v.get('meta', {}), v.get('events', 0), v.get('tz', None), True)
 
 
 

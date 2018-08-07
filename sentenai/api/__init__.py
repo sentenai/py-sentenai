@@ -143,8 +143,8 @@ class Sentenai(BaseClient):
         status_codes(resp)
 
 
-    def stats(self, stream, field=None, start=None, end=None):
-        """Get stats for a given stream or field in that stream.
+    def field_stats(self, stream, field, start=None, end=None):
+        """Get stats for a given field in a stream.
 
        Arguments:
            stream -- A stream object corresponding to a stream stored in Sentenai.
@@ -152,31 +152,37 @@ class Sentenai(BaseClient):
            start  -- Optional argument indicating start time in stream for calculations.
            end    -- Optional argument indicating end time in stream for calculations.
         """
-        if field:
-            args = stream._serialized_filters()
-            if start: args['start'] = start.isoformat() + ("Z" if not start.tzinfo else "")
-            if end: args['end'] = end.isoformat() + ("Z" if not end.tzinfo else "")
+        args = stream._serialized_filters()
+        if start: args['start'] = start.isoformat() + ("Z" if not start.tzinfo else "")
+        if end: args['end'] = end.isoformat() + ("Z" if not end.tzinfo else "")
 
-            url = "/".join([self.host, "streams", stream()['name'], "fields", "event." + field, "stats"])
+        url = "/".join([self.host, "streams", stream.name, "fields", "event." + field, "stats"])
 
-            resp = self.session.get(url, params=args)
+        resp = self.session.get(url, params=args)
 
-            if resp.status_code == 404:
-                raise NotFound('The field at "/streams/{}/fields/{}" does not exist'.format(stream()['name'], field))
-            else:
-                status_codes(resp)
-
-            return resp.json()
+        if resp.status_code == 404:
+            raise NotFound('The field at "/streams/{}/fields/{}" does not exist'.format(stream.name, field))
         else:
-            args = stream._serialized_filters()
-            args['stats'] = "true"
-            url = "/".join([self.host, "streams", stream()['name']])
-            resp = self.session.get(url, params=args)
-            if resp.status_code == 404:
-                raise NotFound('The stream "{}" does not exist'.format(stream()['name']))
-            else:
-                status_codes(resp)
-            return resp.json()
+            status_codes(resp)
+
+        return resp.json()
+
+
+    def stream_stats(self, stream):
+        """Get stats for a stream.
+
+       Arguments:
+           stream -- A stream object corresponding to a stream stored in Sentenai.
+        """
+        args = stream._serialized_filters()
+        args['stats'] = "true"
+        url = "/".join([self.host, "streams", stream.name])
+        resp = self.session.get(url, params=args)
+        if resp.status_code == 404:
+            raise NotFound('The stream "{}" does not exist'.format(stream.name))
+        else:
+            status_codes(resp)
+        return resp.json()
 
 
 
@@ -197,15 +203,14 @@ class Sentenai(BaseClient):
             url = "/".join([self.host, "streams", stream()['name']])
             resp = self.session.get(url, params={'stats': True})
 
-
         if resp.status_code == 404 and eid is not None:
             raise NotFound(
                 'The event at "/streams/{}/events/{}" '
-                'does not exist'.format(stream()['name'], eid))
+                'does not exist'.format(stream.name, eid))
         elif resp.status_code == 404:
             raise NotFound(
                 'The stream at "/streams/{}" '
-                'does not exist'.format(stream()['name'], eid))
+                'does not exist'.format(stream.name, eid))
         else:
             status_codes(resp)
 
@@ -241,7 +246,7 @@ class Sentenai(BaseClient):
 
         if id:
             url = '{host}/streams/{sid}/events/{eid}'.format(
-                sid=stream()['name'], host=self.host, eid=id
+                sid=stream.name, host=self.host, eid=id
             )
             resp = self.session.put(url, json=jd, headers=headers)
             if resp.status_code not in [200, 201]:
@@ -329,7 +334,7 @@ class Sentenai(BaseClient):
             params['sort'] = sorting
         url = "/".join(
             [self.host, "streams",
-             stream()['name'],
+             stream.name,
              "start",
              iso8601(start),
              "end",
@@ -357,7 +362,7 @@ class Sentenai(BaseClient):
         """
         url = "/".join(
             [self.host, "streams",
-             stream()['name'],
+             stream.name,
              "start",
              iso8601(datetime.min),
              "end",
@@ -387,7 +392,7 @@ class Sentenai(BaseClient):
         """
         url = "/".join(
             [self.host, "streams",
-             stream()['name'],
+             stream.name,
              "start",
              iso8601(datetime.min),
              "end",
@@ -503,6 +508,6 @@ def build_url(host, stream, eid=None):
         except:
             return quote(s.encode('utf-8', 'ignore'))
 
-    url = [host, "streams", with_quoter(stream()['name'])]
+    url = [host, "streams", with_quoter(stream.name)]
     events = [] if eid is None else ["events", with_quoter(eid)]
     return "/".join(url + events)
