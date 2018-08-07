@@ -84,6 +84,17 @@ def test_empty_range():
         results = s.range(start, end).df()
         assume(len(results) == 0)
 
+def test_empty_select():
+    with requests_mock.mock() as m:
+        s = test_client.Stream('weather')
+        loc = '1234'
+
+        m.post("/query", headers={ 'location': loc })
+        m.get("/query/" + loc + "/spans", json={ 'spans': [] })
+
+        results = test_client.select(s.temp > 1000).df()
+        assume(len(results) == 0)
+
 @given(text())
 @example(None)
 def test_delete_sid_typechecks(sid):

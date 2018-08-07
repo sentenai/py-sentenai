@@ -174,7 +174,10 @@ class ResultSet(object):
         dfs = []
         for x in self[:]:
             dfs.append(x.df(*args, **kwargs))
-        return pd.concat(dfs, keys=range(0,len(dfs)))
+        if len(dfs):
+            return pd.concat(dfs, keys=range(0,len(dfs)))
+        else:
+            return pd.DataFrame()
 
 
     def all(self):
