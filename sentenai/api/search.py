@@ -255,12 +255,12 @@ class Result(object):
             r = self.search.client.session.get(url, params={'limit': '0'})
             if not r.ok:
                 if max_retries > 0:
-                    return self._events(max_retries - 1)
+                    return self._count(max_retries - 1)
                 else:
                     raise SentenaiException(r.status_code)
         except:
             if max_retries > 0:
-                return self._events(max_retries - 1)
+                return self._count(max_retries - 1)
             else:
                 raise
         else:
