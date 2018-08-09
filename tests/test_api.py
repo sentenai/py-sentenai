@@ -95,6 +95,17 @@ def test_empty_select():
         results = test_client.select(s.temp > 1000).df()
         assume(len(results) == 0)
 
+def test_create_event():
+    with requests_mock.mock() as m:
+        s = test_client.Stream('weather')
+
+        evt = s.Event(id='55', data={ 'temp': 32 }, ts=datetime(2018,1,1,3,55))
+        assume(evt.exists == False)
+
+        m.put(URL_EVENTS_ID.format(s.name, evt.id))
+        evt.create()
+        assume(evt.exists == True)
+
 @given(text())
 @example(None)
 def test_delete_sid_typechecks(sid):
