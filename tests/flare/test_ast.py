@@ -1,7 +1,7 @@
 # coding=utf-8
 import pytest
 from sentenai import Sentenai, hql, V
-from sentenai.historiQL import ast_dict, Returning
+from sentenai.historiQL import ast_dict, Returning, Or, Lasting, Within, After, Select
 from sentenai.api.stream import Stream
 
 def stream(name, *filters):
@@ -276,40 +276,42 @@ def test_parens():
     }
     assert real == expected
 
-# def test_relative_span():
-#     s = stream('s')
-#     t = stream('t')
-#     real = ast_dict(
-#         select()
-#             .span(span(s.x == True, min=delta(years=1, months=1)) | span(t.x == True, after=delta(minutes=11), within=delta(seconds=13))
-#             , max=delta(weeks=1))
-#     )
-#     expected = {
-#         "select": {
-#             "expr": "||",
-#             "args": [
-#                 {
-#                     "type": "span",
-#                     "op": "==",
-#                     "stream": {"name": "s"},
-#                     "path": ("event","x"),
-#                     "arg": {"type":"bool", "val":True},
-#                     "for": { "at-least": { "years": 1, "months": 1 } }
-#                 },
-#                 {
-#                     "type": "span",
-#                     "op": "==",
-#                     "stream": {"name": "t"},
-#                     "path": ("event","x"),
-#                     "arg": {"type":"bool", "val":True},
-#                     "after": {"minutes": 11},
-#                     "within": {"seconds": 13}
-#                 }
-#             ],
-#             "for": { "at-most": { "weeks": 1 } }
-#         }
-#     }
-#     assert real == expected
+def test_relative_span():
+    s = stream('s')
+    t = stream('t')
+    real = Select(
+        Or(
+            (s.x == True, Lasting.min(years=1, months=1) ),
+            (t.x == True, Within(seconds=13), After(minutes=11))
+        ),
+        Lasting.max(days=7)
+    )()
+    expected = {
+        "select": {
+            "expr": "||",
+            "args": [
+                {
+                    "type": "span",
+                    "op": "==",
+                    "stream": {"name": "s"},
+                    "path": ("event","x"),
+                    "arg": {"type":"bool", "val":True},
+                    "for": { "at-least": { "years": 1, "months": 1 } }
+                },
+                {
+                    "type": "span",
+                    "op": "==",
+                    "stream": {"name": "t"},
+                    "path": ("event","x"),
+                    "arg": {"type":"bool", "val":True},
+                    "after": {"minutes": 11},
+                    "within": {"seconds": 13}
+                }
+            ],
+            "for": { "at-most": { "days": 7 } }
+        }
+    }
+    assert real == expected
 
 # def test_nested_relative_spans():
 #     s = stream('S')
