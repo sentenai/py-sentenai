@@ -192,7 +192,7 @@ class Stream(BaseStream):
             replace -- when True, copy stream while replacing filters instead of adding them.
         """
         if kwargs.get("replace", False):
-            return Stream(self._client, self.name, {}, self.tz, self._exists, filters)
+            return Stream(self._client, self.name, {}, self.tz, self._exists, *filters)
         else:
             return Stream(self._client, self.name, {}, self.tz, self._exists, *(tuple(self._filters) + filters))
 
