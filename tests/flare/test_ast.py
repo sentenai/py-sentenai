@@ -279,13 +279,13 @@ def test_parens():
 def test_relative_span():
     s = stream('s')
     t = stream('t')
-    real = Select(
+    real = ast_dict(
         Or(
             (s.x == True, Lasting.min(years=1, months=1) ),
             (t.x == True, Within(seconds=13), After(minutes=11))
         ),
         Lasting.max(days=7)
-    )()
+    )
     expected = {
         "select": {
             "expr": "||",
@@ -313,52 +313,50 @@ def test_relative_span():
     }
     assert real == expected
 
-# def test_nested_relative_spans():
-#     s = stream('S')
-#     real = ast_dict(
-#         select()
-#             .span(s.x < 0)
-#             .then(
-#                 span(s.x == 0).then(s.x > 0, within=delta(seconds=1)),
-#                 within=delta(seconds=2)
-#             )
-#     )
-#     expected = {
-#         "select": {
-#             "type": "serial",
-#             "conds": [
-#                 {
-#                     "type":"span",
-#                     "op":"<",
-#                     "stream":{"name":"S"},
-#                     "path":("event","x"),
-#                     "arg":{"type":"double", "val":0}
-#                 },
-#                 {
-#                     "type": "serial",
-#                     "conds": [
-#                         {
-#                             "type":"span",
-#                             "op":"==",
-#                             "stream":{"name":"S"},
-#                             "path":("event","x"),
-#                             "arg":{"type":"double", "val":0}
-#                         },
-#                         {
-#                             "type":"span",
-#                             "op":">",
-#                             "stream":{"name":"S"},
-#                             "path":("event","x"),
-#                             "arg":{"type":"double", "val":0},
-#                             "within": {"seconds":1}
-#                         }
-#                     ],
-#                     "within": {"seconds":2}
-#                 }
-#             ]
-#         }
-#     }
-#     assert real == expected
+def test_nested_relative_spans():
+    s = stream('S')
+    real = ast_dict(
+        (s.x < 0) >> (
+            ((s.x == 0) >> (s.x > 0, Within(seconds=1))),
+            Within(seconds=2)
+        )
+    )
+    expected = {
+        "select": {
+            "type": "serial",
+            "conds": [
+                {
+                    "type":"span",
+                    "op":"<",
+                    "stream":{"name":"S"},
+                    "path":("event","x"),
+                    "arg":{"type":"double", "val":0}
+                },
+                {
+                    "type": "serial",
+                    "conds": [
+                        {
+                            "type":"span",
+                            "op":"==",
+                            "stream":{"name":"S"},
+                            "path":("event","x"),
+                            "arg":{"type":"double", "val":0}
+                        },
+                        {
+                            "type":"span",
+                            "op":">",
+                            "stream":{"name":"S"},
+                            "path":("event","x"),
+                            "arg":{"type":"double", "val":0},
+                            "within": {"seconds":1}
+                        }
+                    ],
+                    "within": {"seconds":2}
+                }
+            ]
+        }
+    }
+    assert real == expected
 
 def test_stream_filters():
     s = stream('S', V.season == "summer")

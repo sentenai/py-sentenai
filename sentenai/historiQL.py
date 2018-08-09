@@ -506,6 +506,16 @@ class Cond(HistoriQL):
         """Define the `&` operator for conditions."""
         return And(self, q)
 
+    def __rshift__(self, q):
+        """Define the `>>` operator for spans.
+
+        This operator is used chain spans together as a Serial object.
+
+        Arguments:
+            q -- a span to chain with this one.
+        """
+        return Serial(self, q)
+
 
 class CondChain(HistoriQL):
     def __init__(self, op, lpath=None, lval=None, lcond=None, rpath=None, rval=None, rcond=None):
