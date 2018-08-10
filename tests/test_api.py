@@ -106,6 +106,25 @@ def test_create_event():
         evt.create()
         assume(evt.exists == True)
 
+def test_read_event():
+    with requests_mock.mock() as m:
+        s = test_client.Stream('weather')
+
+        evt = s.Event(id='55')
+
+        m.get(URL_EVENTS_ID.format(s.name, evt.id),
+            headers={
+                'location': evt.id,
+                'timestamp': '2011-07-21 18:00:00'
+                },
+            json={
+                'temp': 32
+            }
+            )
+        evt.read()
+        assume(evt.exists == True)
+        assume(evt.json()['event']['temp'] == 32)
+
 @given(text())
 @example(None)
 def test_delete_sid_typechecks(sid):
