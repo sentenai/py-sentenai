@@ -125,6 +125,15 @@ def test_read_event():
         assume(evt.exists == True)
         assume(evt.json()['event']['temp'] == 32)
 
+def test_delete_event():
+    with requests_mock.mock() as m:
+        s = test_client.Stream('weather')
+        evt = s.Event(id='55', data={ 'temp': 32 }, ts=datetime(2018,1,1,3,55), saved=True)
+
+        m.delete(URL_EVENTS_ID.format(s.name, evt.id))
+        evt.delete()
+        assume(evt.exists == False)
+
 @given(text())
 @example(None)
 def test_delete_sid_typechecks(sid):
