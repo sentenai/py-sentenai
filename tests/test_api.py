@@ -20,6 +20,7 @@ URL_STREAMS   = URL + "streams"
 URL_STREAM_ID = URL + "streams/{}"
 URL_EVENTS    = URL + "streams/{}/events"
 URL_EVENTS_ID = URL + "streams/{}/events/{}"
+URL_VALUES    = URL + "streams/{}/values"
 # TODO: this is changing
 URL_STREAM_ID_META = URL + "streams/{}"
 URL_STREAM_RANGE = URL + "streams/{}/start/{}/end/{}"
@@ -94,6 +95,66 @@ def test_empty_select():
 
         results = test_client.select(s.temp > 1000).df()
         assume(len(results) == 0)
+
+def test_stream_values():
+    with requests_mock.mock() as m:
+        s = test_client.Stream('weather')
+
+        when = datetime(2018,1,1,3,55)
+        url_when = "2018-01-01T03%3A55%3A00%2B00%3A00"
+
+        m.get(URL_VALUES.format(s.name) + '?at=' + url_when,
+            json=[
+                {'ts': '2017-12-04T04:00:00Z', 'path': ['temp'], 'value': 37.47, 'id': '123'},
+                {'ts': '2017-12-05T04:00:00Z', 'path': ['nested', 'humidity'], 'value': 0.75, 'id': 'abc'},
+            ]
+            )
+        items = s.values(at=when).items()
+
+        assert len(items) == 2
+        assert str(items[0][0]) == '(stream "weather"):temp'
+        assert str(items[1][0]) == '(stream "weather"):nested.humidity'
+        assert items[0][1] == 37.47
+        assert items[1][1] == 0.75
+
+def test_create_event():
+    with requests_mock.mock() as m:
+        s = test_client.Stream('weather')
+
+        evt = s.Event(id='55', data={ 'temp': 32 }, ts=datetime(2018,1,1,3,55))
+        assume(evt.exists == False)
+
+        m.put(URL_EVENTS_ID.format(s.name, evt.id))
+        evt.create()
+        assume(evt.exists == True)
+
+def test_read_event():
+    with requests_mock.mock() as m:
+        s = test_client.Stream('weather')
+
+        evt = s.Event(id='55')
+
+        m.get(URL_EVENTS_ID.format(s.name, evt.id),
+            headers={
+                'location': evt.id,
+                'timestamp': '2011-07-21 18:00:00'
+                },
+            json={
+                'temp': 32
+            }
+            )
+        evt.read()
+        assume(evt.exists == True)
+        assume(evt.json()['event']['temp'] == 32)
+
+def test_delete_event():
+    with requests_mock.mock() as m:
+        s = test_client.Stream('weather')
+        evt = s.Event(id='55', data={ 'temp': 32 }, ts=datetime(2018,1,1,3,55), saved=True)
+
+        m.delete(URL_EVENTS_ID.format(s.name, evt.id))
+        evt.delete()
+        assume(evt.exists == False)
 
 @given(text())
 @example(None)

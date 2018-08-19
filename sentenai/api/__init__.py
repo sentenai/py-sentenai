@@ -197,10 +197,10 @@ class Sentenai(BaseClient):
         """
         if eid:
             url = "/".join(
-                [self.host, "streams", stream()['name'], "events", eid])
+                [self.host, "streams", stream.name, "events", eid])
             resp = self.session.get(url)
         else:
-            url = "/".join([self.host, "streams", stream()['name']])
+            url = "/".join([self.host, "streams", stream.name])
             resp = self.session.get(url, params={'stats': True})
 
         if resp.status_code == 404 and eid is not None:

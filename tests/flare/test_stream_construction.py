@@ -25,10 +25,18 @@ def test_stream_equality(name):
     assume(not s1 is s2)
     assume(not (s1 == s3))
 
+@given(text())
+def test_filtered_streams(name):
+    s1 = stream(name)
+    s2 = stream(name)
+    s3 = stream(name + " lies")
+
     assume(s1.filtered(V.temp > 32) == stream(name, V.temp > 32))
     assume(s1.filtered(V.temp > 100) != stream(name, V.temp < 0))
     assume(s3.filtered(V.temp > 32) != stream(name, V.temp > 32))
 
+    s4 = s1.filtered(V.temp > 1000)
+    assume(s4.filtered(V.temp > 32, replace=True) == stream(name, V.temp > 32))
 
 @given(text(min_size=1), dictionaries(text(min_size=1), text()))
 def test_stream_properties(name, meta):
