@@ -479,16 +479,15 @@ class StreamsView(object):
     def __iter__(self):
         return iter([Stream(
             self._client,
-            v['name'],
-            v.get('meta', {}),
-            v.get('events', 0),
-            v.get('tz', None),
-            True
+            name=v['name'],
+            meta=v.get('meta', {}),
+            tz=v.get('tz', None),
+            exists=True
          ) for v in self._streams])
 
     def __getitem__(self, i):
         v = self._streams[i]
-        return Stream(self._client, v['name'], v.get('meta', {}), v.get('events', 0), v.get('tz', None), True)
+        return Stream(self._client, name=v['name'], meta=v.get('meta', {}), tz=v.get('tz', None), exists=True)
 
 
 

@@ -167,7 +167,7 @@ class ResultSet(object):
 
     @property
     def complete(self):
-        self.cursors[-1] is None
+        return self.cursors[-1] is None
 
 
     def df(self, *args, **kwargs):

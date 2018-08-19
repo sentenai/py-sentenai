@@ -223,7 +223,7 @@ class Sentenai(BaseClient):
             return resp.json()
 
 
-    def put(self, stream, event, id=None, timestamp=None):
+    def put(self, stream, event, id=None, timestamp=None, duration=None):
         """Put a new event into a stream.
 
         Arguments:
@@ -241,8 +241,11 @@ class Sentenai(BaseClient):
         }
         jd = event
 
-        if timestamp:
+        if timestamp and not duration:
             headers['timestamp'] = iso8601(timestamp)
+        elif duration:
+            headers['start'] = iso8601(timestamp)
+            headers['end'] = iso8601(timestamp + duration)
 
         if id:
             url = '{host}/streams/{sid}/events/{eid}'.format(
@@ -326,7 +329,7 @@ class Sentenai(BaseClient):
            A time ordered list of all events in a stream from `start` to `end`
         """
         params = stream._serialized_filters()
-        params['streaming'] = True
+        params['stream'] = True
         if proj is not None:
             params['projection'] = base64json(proj)
         if limit is not None:

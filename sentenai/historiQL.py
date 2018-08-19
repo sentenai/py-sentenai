@@ -659,6 +659,7 @@ class Stream(HistoriQL):
 
     def _serialized_filters(self):
         x = self().get('filter')
+        print(x)
         if x:
             return {'filters': base64.urlsafe_b64encode(bytes(json.dumps(x), 'UTF-8'))}
         else:
@@ -1654,8 +1655,6 @@ class LastingMin(Lasting):
         return LastingRange(self._min, Delta(**kwargs))
 
 class LastingRange(Lasting):
-    def __new__(cls, *args, **kwargs):
-        return super(Modifier, cls).__new__(LastingRange, *args, **kwargs)
 
     def __str__(self):
         """Generate a string representation of the delta."""
