@@ -18,6 +18,7 @@ class Search(object):
     def __init__(self, client, select):
         self.client = client
         self.query = select
+        self.optimize = True
 
     def returning(self, *args):
         self.query.statements += (Returning(*args), )
@@ -37,7 +38,7 @@ class Search(object):
         retries = 0
         while True:
             try:
-                return handle(self.client.session.get(url, params={'optimize': 'true'})).json()
+                return handle(self.client.session.get(url, params={'optimize': str(self.optimize).lower()})).json()
             except Exception as e:
                 retries += 1
                 if retries < 3:
@@ -98,6 +99,7 @@ class ResultSet(object):
         r = handle(self.search.client.session.post(
                 '{0}/query'.format(search.client.host),
                 json = self.search.query(),
+                params = {} if search.optimize else {"optimize": "false"}
             ))
         self.cursors = [r.headers['location']]
         self.spans = {}
@@ -195,7 +197,6 @@ class ResultSet(object):
         data = []
         for cursor in self.cursors:
             data.extend(self.spans.get(cursor, []))
-        print([x.duration for x in data])
         if data:
             d = [ float(r.duration.total_seconds())
                   for r in data
