@@ -474,7 +474,10 @@ class StreamsView(object):
         self._streams = streams
 
     def _repr_html_(self):
-        return pd.DataFrame(self._streams)[['name', 'events', 'healthy']]._repr_html_()
+        if self._streams:
+            return pd.DataFrame(self._streams)[['name', 'events', 'healthy']].rename(columns={'events': 'length'})._repr_html_()
+        else:
+            return pd.DataFrame(columns=["name", "length", "healthy"])._repr_html_()
 
     def __iter__(self):
         return iter([Stream(
