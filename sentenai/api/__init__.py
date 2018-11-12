@@ -20,7 +20,7 @@ from sentenai.utils import *
 from sentenai.historiQL import EventPath, Returning, delta, Delta, Query, Select
 
 from sentenai.api.uploader import Uploader
-from sentenai.api.stream import Stream, Event, StreamsView
+from sentenai.api.stream import Stream, Event, StreamsView, StreamMetadata
 from sentenai.api.search import Search
 
 BoundStream = Stream
@@ -104,7 +104,7 @@ class Sentenai(BaseClient):
 
     def Stream(self, name, *args, **kwargs):
         tz = kwargs.get('tz')
-        return BoundStream(self, name, kwargs.get('meta', {}), tz, False, *args)
+        return BoundStream(self, name, tz, False, *args)
 
 
     def upload(self, iterable, processes=4, progress=False):
@@ -268,7 +268,7 @@ class Sentenai(BaseClient):
                 raise APIError(resp)
 
 
-    def streams(self, name=None, meta={}):
+    def streams(self, q=None):
         """Get list of available streams.
 
         Optionally, parameters may be supplied to enable searching
@@ -276,20 +276,18 @@ class Sentenai(BaseClient):
 
         Arguments:
            name -- A regular expression pattern to search names for
-           meta -- A dictionary of key/value pairs to match from stream
-                   metadata
+           q -- A dictionary of key/value pairs to match from stream
+                   qdata
         """
         url = "/".join([self.host, "streams"])
-        resp = self.session.get(url, params={'stats': 'true'})
+        if q:
+            resp = self.session.get(url, params={
+                'stats': 'true',
+                'q': base64json(q())
+                })
+        else:
+            resp = self.session.get(url, params={'stats': 'true'})
         status_codes(resp)
-
-        def filtered(s):
-            f = True
-            if name:
-                f = bool(re.search(name, s['name']))
-            for k, v in meta.items():
-                f = f and s.get('meta', {}).get(k) == v
-            return f
 
         try:
             return StreamsView(self, resp.json())

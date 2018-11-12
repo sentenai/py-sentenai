@@ -1,6 +1,6 @@
-__all__ = ["Within", "After", "Lasting", "During", "And", "Or", 'V']
+__all__ = ["Within", "After", "Lasting", "During", "And", "Or", 'V', 'M']
 
-from sentenai.historiQL import Within, After, Lasting, And, Or, EventPath, Par, InCircle, InPolygon
+from sentenai.historiQL import Within, After, Lasting, And, Or, EventPath, Par, InCircle, InPolygon, StreamMetadata
 
 from sentenai.utils import PY3
 
@@ -42,3 +42,4 @@ class During(object):
 
 
 V = EventPath()
+M = StreamMetadata()

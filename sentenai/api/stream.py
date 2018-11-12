@@ -160,17 +160,96 @@ class Fields(object):
             )._repr_html_()
 
 
+class StreamMetadata(object):
+    def __init__(self, stream):
+        self._stream = stream
+        self._meta = self.read()
 
+    def read(self):
+        resp = self._stream._client.session.get("/".join([self._stream._client.host, "streams", self._stream._name, "meta"]), params={})
+        if resp.status_code == 404:
+            return None
+        elif resp.status_code == 200:
+            data = resp.json()
+            parsed = {}
+            for k,v in data.items():
+                if type(v) in [float, int, bool]:
+                    parsed[k] = v
+                else:
+                    for fmt in ["%Y-%m-%dT%H:%M:%S.%fZ","%Y-%m-%dT%H:%M:%SZ","%Y-%m-%dT%H:%M:%S","%Y-%m-%dT%H:%M:%S.%f"]:
+                        try:
+                            val = datetime.strptime(v, fmt)
+                        except ValueError:
+                            pass
+                        else:
+                            parsed[k] = val
+                            break
+                    else:
+                        parsed[k] = v
+
+        return parsed
+
+
+    def update(self, kvs):
+        kvs2 = {}
+        for k, v in kvs.items():
+            kvs2[k] = dts(v)
+        self._stream._client.session.patch("/".join([self._stream._client.host, "streams", self._stream._name, "meta"]), json=kvs2)
+
+
+    def replace(self, kvs):
+        kvs2 = {}
+        for k, v in kvs.items():
+            kvs2[k] = dts(v)
+        self._stream._client.session.put("/".join([self._stream._client.host, "streams", self._stream._name, "meta"]), json=kvs2)
+
+
+    def clear(self):
+        self._stream._client.session.put("/".join([self._stream._client.host, "streams", self._stream._name, "meta"]), json={})
+
+
+
+    def __repr__(self):
+        return repr(self._meta)
+
+    def _type(self, v):
+        if type(v) in [int, float]:
+            return "Numeric"
+        elif type(v) == datetime:
+            return "Datetime"
+        elif type(v) == bool:
+            return "Boolean"
+        else:
+            return "String"
+
+    def _repr_html_(self):
+        xs = []
+        for f,v in self._meta.items():
+            xs.append({'field': f, 'value': str(v), 'type': self._type(v)})
+
+        return pd.DataFrame(xs, columns=["field", "value", "type"])._repr_html_()
+
+    def __getitem__(self, key):
+        return self.read()[key]
+
+    def __setitem__(self, key, val):
+        self.update({key: val})
+
+    def __delitem__(self, key):
+        self.update({key: None})
 
 
 class Stream(BaseStream):
-    def __init__(self, client, name, meta, tz, exists, *filters):
+    def __init__(self, client, name, tz, exists, *filters):
         self._client = client
         self._exists = exists
-        BaseStream.__init__(self, name, meta, tz, *filters)
+        BaseStream.__init__(self, name, tz, *filters)
+        self._meta = StreamMetadata(self)
+
 
     def __len__(self):
         return self.stats().get('events')
+
 
     def __bool__(self):
         resp = self._client.session.get("/".join([self._client.host, "streams", self._name]), params={})
@@ -185,6 +264,12 @@ class Stream(BaseStream):
     __nonzero__ = __bool__
 
 
+    def where(self, *filters, **kwargs):
+        """Return copy of stream with filters."""
+        kwargs['replace'] = True
+        return self.filtered(*filters, **kwargs)
+
+
     def filtered(self, *filters, **kwargs):
         """Return copy of stream with additional filters.
 
@@ -192,9 +277,9 @@ class Stream(BaseStream):
             replace -- when True, copy stream while replacing filters instead of adding them.
         """
         if kwargs.get("replace", False):
-            return Stream(self._client, self.name, {}, self.tz, self._exists, *filters)
+            return Stream(self._client, self.name, self.tz, self._exists, *filters)
         else:
-            return Stream(self._client, self.name, {}, self.tz, self._exists, *(tuple(self._filters) + filters))
+            return Stream(self._client, self.name, self.tz, self._exists, *(tuple(self._filters) + filters))
 
 
     def __getattribute__(self, name):
@@ -202,6 +287,18 @@ class Stream(BaseStream):
             raise AttributeError("Cannot call this method.")
         else:
             return BaseStream.__getattribute__(self, name)
+
+
+    def earliest(self):
+        """Get the oldest event by timestamp in this stream.
+        """
+        return self._client.oldest(self)
+
+
+    def latest(self):
+        """Get the newest event by timestamp in this stream.
+        """
+        return self._client.newest(self)
 
     def oldest(self):
         """Get the oldest event by timestamp in this stream.
@@ -483,14 +580,13 @@ class StreamsView(object):
         return iter([Stream(
             self._client,
             name=v['name'],
-            meta=v.get('meta', {}),
             tz=v.get('tz', None),
             exists=True
          ) for v in self._streams])
 
     def __getitem__(self, i):
         v = self._streams[i]
-        return Stream(self._client, name=v['name'], meta=v.get('meta', {}), tz=v.get('tz', None), exists=True)
+        return Stream(self._client, name=v['name'], tz=v.get('tz', None), exists=True)
 
 
 

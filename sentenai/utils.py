@@ -58,7 +58,7 @@ def cts(ts):
 
 
 def dts(obj):
-    """Convert a timestring to an ISO8601 unix timestamp."""
+    """Convert a datetime to an ISO8601 unix timestamp."""
     if isinstance(obj, datetime):
         serial = iso8601(obj)
         return serial

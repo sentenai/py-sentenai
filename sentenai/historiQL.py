@@ -649,21 +649,17 @@ class Stream(HistoriQL):
     used when writing queries, access specific API end points, and manipulating
     result sets.
     """
-    def __init__(self, name, meta, tz, *filters):
+    def __init__(self, name, tz, *filters):
         """Initialize a stream object.
 
         Arguments:
             name    -- The name of a stream stored at
                        https://api.senten.ai/streams/<name>.
-            meta    -- Meta data about the stream. TODO: This can be an arbitrary
-                       object and does
-                       not persist across Stream objects.
             info    -- TODO
             filters -- Conditions to be applied to the stream when filtering
                        events.
         """
         self._name = quote(name.encode('utf-8'))
-        self._meta = meta
         self._filters = filters
         self.tz = tz
 
@@ -801,10 +797,12 @@ class Stream(HistoriQL):
         Arguments:
             name -- The name of the variable to get
         """
-        if not name.startswith('_') and name not in ['name', 'tz']:
+        if not name.startswith('_') and name not in ['name', 'tz', 'meta']:
             return StreamPath((name,), self)
         elif name == 'name':
             return self.__getattribute__("_name")
+        elif name == 'meta':
+            return self.__getattribute__("_meta")
         else:
             return self.__getattribute__(name)
 
@@ -1856,6 +1854,244 @@ class Query(HistoriQL):
 
     def __str__(self):
         return "\n".join(map(str, self.statements))
+
+
+class StreamMetadata(object):
+    def __getitem__(self, field):
+        return MetadataField(field)
+
+
+class MetadataField(object):
+    def __init__(self, field):
+        self.field = field
+
+    def __eq__(self, val):
+        if isinstance(val, MetaCondChain):
+            val.lpath = self.field
+            val.lcond = MetaCond(self.field, '==', val.lval)
+            return val.reify()
+        else:
+            return MetaCond(self, '==', val)
+
+    def __ne__(self, val):
+        if isinstance(val, MetaCondChain):
+            val.lpath = self.field
+            val.lcond = MetaCond(self.field, '!=', val.lval)
+            return val.reify()
+        else:
+            return MetaCond(self, '!=', val)
+
+    def __ge__(self, val):
+        if isinstance(val, MetaCondChain):
+            val.lpath = self.field
+            val.lcond = MetaCond(self.field, '!=', val.lval)
+            return val.reify()
+        else:
+            return MetaCond(self, '>=', val)
+
+    def __gt__(self, val):
+        if isinstance(val, MetaCondChain):
+            val.lpath = self.field
+            val.lcond = MetaCond(self.field, '>', val.lval)
+            return val.reify()
+        else:
+            return MetaCond(self, '>', val)
+
+    def __lt__(self, val):
+        if isinstance(val, MetaCondChain):
+            val.lpath = self.field
+            val.lcond = MetaCond(self.field, '!=', val.lval)
+            return val.reify()
+        else:
+            return MetaCond(self, '<', val)
+
+    def __le__(self, val):
+        if isinstance(val, MetaCondChain):
+            val.lpath = self.field
+            val.lcond = MetaCond(self.field, '<=', val.lval)
+            return val.reify()
+        else:
+            return MetaCond(self.field, '<=', val)
+
+    def __rand__(self, other):
+        return MetaCondChain(MetaAnd, lval=other, rpath=self.field)
+
+    def __ror__(self, other):
+        return MetaCondChain(MetaOr, lval=other, rpath=self.field)
+
+
+class MetaCondChain(object):
+    def __init__(self, op, lpath=None, lval=None, lcond=None, rpath=None, rval=None, rcond=None):
+        self.op = op
+        self.lpath = lpath
+        self.rpath = rpath
+        self.lcond = lcond
+        self.rcond = rcond
+        self.lval  = lval
+        self.rval  = rval
+        self.arr = [lpath, lcond, lval, op, rpath, rcond, rval]
+
+    def reify(self):
+        if self.lcond and self.rcond:
+            return self.op(self.lcond, self.rcond)
+        else:
+            return self
+
+    def __lt__(self, val):
+        if not self.rpath:
+            raise Exception("missing rpath")
+        elif isinstance(val, MetaCondChain):
+            self.rval = val.lval
+            self.rcond = MetaCond(self.rpath, '<', self.rval)
+            val.lcond = self.reify()
+            return val
+        elif isinstance(self.rcond, MetaCondChain):
+            self.rcond = self.rcond < val
+            return self.reify()
+        else:
+            self.rval = val
+            self.rcond = MetaCond(self.rpath, '<', val)
+            return self.reify()
+
+    def __le__(self, val):
+        if not self.rpath:
+            raise Exception("missing rpath")
+        elif isinstance(val, MetaCondChain):
+            self.rval = val.lval
+            self.rcond = MetaCond(self.rpath, '<=', self.rval)
+            val.lcond = self.reify()
+            return val
+        elif isinstance(self.rcond, MetaCondChain):
+            self.rcond = self.rcond <= val
+            return self.reify()
+        else:
+            self.rval = val
+            self.rcond = MetaCond(self.rpath, '<=', val)
+            return self.reify()
+
+    def __eq__(self, val):
+        if not self.rpath:
+            raise Exception("missing rpath")
+        elif isinstance(val, MetaCondChain):
+            self.rval = val.lval
+            self.rcond = MetaCond(self.rpath, '==', self.rval)
+            val.lcond = self.reify()
+            return val
+        elif isinstance(self.rcond, MetaCondChain):
+            self.rcond = self.rcond == val
+            return self.reify()
+        else:
+            self.rval = val
+            self.rcond = MetaCond(self.rpath, '==', val)
+            return self.reify()
+
+    def __ne__(self, val):
+        if not self.rpath:
+            raise Exception("missing rpath")
+        elif isinstance(val, MetaCondChain):
+            self.rval = val.lval
+            self.rcond = MetaCond(self.rpath, '!=', self.rval)
+            val.lcond = self.reify()
+            return val
+        elif isinstance(self.rcond, MetaCondChain):
+            self.rcond = self.rcond != val
+            return self.reify()
+        else:
+            self.rval = val
+            self.rcond = MetaCond(self.rpath, '!=', val)
+            return self.reify()
+
+    def __gt__(self, val):
+        if not self.rpath:
+            raise Exception("missing rpath")
+        elif isinstance(val, MetaCondChain):
+            self.rval = val.lval
+            self.rcond = MetaCond(self.rpath, '>', self.rval)
+            val.lcond = self.reify()
+            return val
+        elif isinstance(self.rcond, MetaCondChain):
+            self.rcond = self.rcond > val
+            return self.reify()
+        else:
+            self.rval = val
+            self.rcond = MetaCond(self.rpath, '>', val)
+            return self.reify()
+
+    def __ge__(self, val):
+        if not self.rpath:
+            raise Exception("missing rpath")
+        elif isinstance(val, MetaCondChain):
+            self.rval = val.lval
+            self.rcond = MetaCond(self.rpath, '>=', self.rval)
+            val.lcond = self.reify()
+            return val
+        elif isinstance(self.rcond, MetaCondChain):
+            self.rcond = self.rcond >= val
+            return self.reify()
+        else:
+            self.rval = val
+            self.rcond = MetaCond(self.rpath, '>=', val)
+            return self.reify()
+
+class MetaCond(object):
+    def __init__(self, field, op, val):
+        self.field = field
+        self.op = op
+        self.val = val
+
+    def __call__(self, stream=None):
+        """Generate AST for the condition.
+
+        Arguments:
+            stream -- a stream to apply the condition to
+        """
+        if isinstance(self.val, float):
+            vt = 'double'
+        elif isinstance(self.val, bool):
+            vt = 'bool'
+        elif isinstance(self.val, int):
+            vt = 'int'
+        elif isinstance(self.val, datetime):
+            vt = "datetime"
+            val = iso8601(self.val)
+            try:
+                tz = self.val.tzinfo.zone
+            except:
+                pass
+        else:
+            vt = 'string'
+
+        d = {'metadata': self.field, 'op': self.op, 'arg': {'type': vt, 'val': self.val}}
+        return d
+
+    def __or__(self, q):
+        """Define the `|` operator for conditions."""
+        return MetaOr(self, q)
+
+    def __and__(self, q):
+        """Define the `&` operator for conditions."""
+        return MetaAnd(self, q)
+
+
+
+class MetaAnd(object):
+    def __init__(self, a, b):
+        self.a, self.b = a, b
+
+    def __call__(self):
+        return {'expr': '&&', 'args': [self.a(), self.b()]}
+
+    def __or__(self, q):
+        return MetaOr(self, q)
+
+    def __and__(self, q):
+        return MetaAnd(self, q)
+
+class MetaOr(MetaAnd):
+    def __call__(self):
+        return {'expr': '||', 'args': [self.a(), self.b()]}
+
+
 
 # Needed for testing
 def ast_dict(*statements):
