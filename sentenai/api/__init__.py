@@ -296,20 +296,13 @@ class Sentenai(BaseClient):
             raise SentenaiException("Something went wrong")
 
 
-    def destroy(self, stream, **kwargs):
-        """Delete stream.
-
-        Keyword Argument:
-            confirm -- Must be `True` to confirm destroy stream
-        """
-        if not kwargs.get('confirm') is True:
-            print("Stream not destroyed. You must confirm destroy command via argument confirm=True.")
-        else:
-            url = "/".join([self.host, "streams", stream.name])
-            headers = {'auth-key': self.auth_key}
-            resp = requests.delete(url, headers=headers)
-            status_codes(resp)
-            return None
+    def destroy(self, stream):
+        """Delete stream."""
+        url = "/".join([self.host, "streams", stream.name])
+        headers = {'auth-key': self.auth_key}
+        resp = requests.delete(url, headers=headers)
+        status_codes(resp)
+        return None
 
 
     def range(self, stream, start, end, limit=None, proj=None, sorting=None):

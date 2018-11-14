@@ -130,7 +130,8 @@ class Values(object):
 
 
 class Fields(object):
-    def __init__(self, fields):
+    def __init__(self, fields, view="field"):
+        self._view = view
         self._fields = [f for f in fields if f['path']]
 
     def __getitem__(self, path):
@@ -154,7 +155,7 @@ class Fields(object):
         return df.rename(
                 index=str,
                 columns={
-                    'path': 'Field',
+                    'path': self._view.capitalize(),
                     'start': 'Added At'
                     }
             )._repr_html_()
@@ -193,23 +194,34 @@ class StreamMetadata(object):
     def update(self, kvs):
         kvs2 = {}
         for k, v in kvs.items():
-            kvs2[k] = dts(v)
-        self._stream._client.session.patch("/".join([self._stream._client.host, "streams", self._stream._name, "meta"]), json=kvs2)
+            if v is None:
+                kvs2[k] = None
+            else:
+                kvs2[k] = dts(v)
+        if self._stream:
+            self._stream._client.session.patch("/".join([self._stream._client.host, "streams", self._stream._name, "meta"]), json=kvs2)
+        else:
+            self._stream._client.session.post("/".join([self._stream._client.host, "streams", self._stream._name, "meta"]), json=kvs2)
 
 
     def replace(self, kvs):
         kvs2 = {}
         for k, v in kvs.items():
             kvs2[k] = dts(v)
-        self._stream._client.session.put("/".join([self._stream._client.host, "streams", self._stream._name, "meta"]), json=kvs2)
+        if self._stream:
+            self._stream._client.session.put("/".join([self._stream._client.host, "streams", self._stream._name, "meta"]), json=kvs2)
+        else:
+            self._stream._client.session.post("/".join([self._stream._client.host, "streams", self._stream._name, "meta"]), json=kvs2)
 
 
     def clear(self):
-        self._stream._client.session.put("/".join([self._stream._client.host, "streams", self._stream._name, "meta"]), json={})
+        if self._stream:
+            self._stream._client.session.put("/".join([self._stream._client.host, "streams", self._stream._name, "meta"]), json={})
 
 
 
     def __repr__(self):
+        self._meta = self.read()
         return repr(self._meta)
 
     def _type(self, v):
@@ -224,19 +236,28 @@ class StreamMetadata(object):
 
     def _repr_html_(self):
         xs = []
-        for f,v in self._meta.items():
-            xs.append({'field': f, 'value': str(v), 'type': self._type(v)})
+        self._meta = self.read()
+        if self._meta:
+            for f,v in self._meta.items():
+                xs.append({'field': f, 'value': str(v), 'type': self._type(v)})
 
         return pd.DataFrame(xs, columns=["field", "value", "type"])._repr_html_()
 
     def __getitem__(self, key):
-        return self.read()[key]
+        self._meta = self.read()
+        return self._meta()[key]
 
     def __setitem__(self, key, val):
         self.update({key: val})
 
     def __delitem__(self, key):
-        self.update({key: None})
+        x = self.read()
+        try:
+            del x[key]
+        except:
+            print("not there")
+        else:
+            self.replace(x)
 
 
 class Stream(BaseStream):
@@ -316,6 +337,10 @@ class Stream(BaseStream):
         """Get a view of all fields in this stream."""
         return Fields(self._client.fields(self))
     _fields = fields
+
+    def tags(self):
+        """Get a view of all tags in this stream."""
+        return Fields(self._client.fields(self, view="tag"))
 
     def stats(self):
         """Get a dictionary of stream statistics."""
@@ -509,12 +534,16 @@ class Stream(BaseStream):
 class StreamRange(object):
     def __init__(self, stream, start, end, limit=None, sorting="asc"):
         self.stream = stream
-        self._events = None
+        self._events = []
         self.sort = sorting
         self.limit = limit
         self.start = start
         self.end = end
 
+    def __getitem__(self, i):
+        if not self._events:
+            self._events = self.stream._client.range(self.stream, self.start, self.end, limit=self.limit, sorting=self.sort)
+        return self._events[i]
 
     def __iter__(self):
         if not self._events:

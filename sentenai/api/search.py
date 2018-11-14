@@ -177,7 +177,7 @@ class ResultSet(object):
         for x in self[:]:
             dfs.append(x.df(*args, **kwargs))
         if len(dfs):
-            return pd.concat(dfs, keys=range(0,len(dfs)))
+            return pd.concat(dfs, keys=range(0,len(dfs)), sort=True)
         else:
             return pd.DataFrame()
 
@@ -274,7 +274,7 @@ class Result(object):
         streams = {}
         url = '{host}/query/{cursor}/events'.format(host=self.search.client.host, cursor=self.cursor)
         if self.projection:
-            params = {'returning': base64.urlsafe_b64encode(bytes(json.dumps(self.projection()), 'UTF-8'))}
+            params = {'projections': base64.urlsafe_b64encode(bytes(json.dumps(self.projection()), 'UTF-8'))}
         else:
             params = {}
         try:
