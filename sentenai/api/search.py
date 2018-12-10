@@ -200,14 +200,14 @@ class ResultSet(object):
         if data:
             d = [ float(r.duration.total_seconds())
                   for r in data
-                  if r.duration < timedelta.max]
-            maxd = max(d) if d else timedelta.max.total_seconds()
+                  if r.duration is not None]
+            maxd = max(d) if d else 1
 
-        x = lambda r: int(round(r.duration.total_seconds() / maxd * 10)) * u"\u2588"
+        x = lambda r: int(round((r.duration.total_seconds() if r.duration else 0) / maxd * 10)) * u"\u2588"
         df = pd.DataFrame([
             { 'Start': r.start,
               'End': r.end,
-              'Duration': u"{}".format(r.duration if r.duration else 0),
+              'Duration': u"{}".format(r.duration) if r.duration else None,
               'Viz': u"{}".format(x(r)),
             } for r in data])
         if df.empty:
@@ -233,7 +233,7 @@ class Result(object):
         if self.end and self.start:
             return self.end - self.start
         else:
-            return timedelta.max
+            return None
 
 
     def _repr_html_(self):

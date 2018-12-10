@@ -181,6 +181,14 @@ class ProjAgg(object):
     def __call__(self):
         return {"aggregation": self.op, "expr": [{'var': ('event',) + self.path}]}
 
+class ProjShift(object):
+    def __init__(self, path, n):
+        self.n = n
+        self.path = path
+
+    def __call__(self):
+        return {'var': ('event',) + self.path, "shift": self.n}
+
 
 
 class InCircle(HistoriQL):
@@ -984,8 +992,10 @@ class EventPath(Projection):
         raise HistoriQLSynxtaxError("Or not supported in event sequences.")
 
     def __call__(self, *args, **kwargs):
-        if self._attrlist[-1] in ['sum', 'mean']:
+        if self._attrlist[-1] in ['sum', 'mean', 'min', 'max', 'std']:
             return ProjAgg(self._attrlist[-1], self._attrlist[:-1])
+        elif self._attrlist[-1] == 'shift':
+            return ProjShift(self._attrlist[:-1], *args)
 
 
 @py2str
