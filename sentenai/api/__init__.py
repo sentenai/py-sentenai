@@ -218,6 +218,7 @@ class Sentenai(BaseClient):
             return {
                 'id': resp.headers['location'],
                 'ts': resp.headers['timestamp'],
+                'duration': resp.headers.get('duration'),
                 'event': resp.json()}
         else:
             return resp.json()
@@ -305,7 +306,7 @@ class Sentenai(BaseClient):
         return None
 
 
-    def range(self, stream, start, end, limit=None, proj=None, sorting=None):
+    def range(self, stream, start, end, limit=None, proj=None, sorting=None, frequency=None, fill=None, offset=None):
         """Get all stream events between start (inclusive) and end (exclusive).
 
         Arguments:
@@ -321,12 +322,19 @@ class Sentenai(BaseClient):
         """
         params = stream._serialized_filters()
         params['stream'] = True
-        if proj is not None:
+        if proj:
             params['projection'] = base64json(proj)
         if limit is not None:
             params['limit'] = limit
         if sorting is not None:
             params['sort'] = sorting
+        if frequency is not None:
+            params['frequency'] = frequency
+        if offset is not None:
+            params['offset'] = frequency
+        if fill is not None:
+            params['fill'] = fill
+
         url = "/".join(
             [self.host, "streams",
              stream.name,
@@ -338,7 +346,7 @@ class Sentenai(BaseClient):
         resp = self.session.get(url, params=params)
 
         status_codes(resp)
-        return [Event(self, stream, **json.loads(line)) for line in resp.text.splitlines()]
+        return [Event(self, stream, **data) for data in json.loads(resp.text)]
 
 
     def head(self, stream, n):

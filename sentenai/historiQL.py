@@ -128,11 +128,12 @@ class Returning(object):
 
 
 class Proj(object):
-    def __init__(self, stream, proj=True):
+    def __init__(self, stream, proj=True, resample=None):
         if not isinstance(stream, Stream):
             raise QuerySyntaxError("returning dict top-level keys must be streams.")
         self.stream = stream
         self.proj = proj
+        self.resample = resample
 
     def __call__(self):
         if self.proj is True:
@@ -150,6 +151,8 @@ class Proj(object):
                         new[key] = [{'var': z}]
                     elif isinstance(val, ProjMath):
                         new[key] = [val()]
+                    elif isinstance(val, ProjAgg):
+                        new[key] = val()
                     elif isinstance(val, float):
                         new[key] = [{'lit': {'val': val, 'type': 'double'}}]
                     elif isinstance(val, int):
@@ -163,7 +166,20 @@ class Proj(object):
                         l.append((val,new[key]))
                     else:
                         raise QuerySyntaxError("%s: %s is unsupported." % (key, val.__class__))
-            return {'stream': self.stream(), 'projection': nd}
+            if self.resample is None:
+                return {'stream': self.stream(), 'projection': nd}
+            else:
+                return {'stream': self.stream(), 'projection': nd, 'frequency': self.resample}
+
+
+
+class ProjAgg(object):
+    def __init__(self, op, path):
+        self.op = op
+        self.path = path
+
+    def __call__(self):
+        return {"aggregation": self.op, "expr": [{'var': ('event',) + self.path}]}
 
 
 
@@ -967,6 +983,10 @@ class EventPath(Projection):
         #return CondChain(Or, lval=other, rpath=self)
         raise HistoriQLSynxtaxError("Or not supported in event sequences.")
 
+    def __call__(self, *args, **kwargs):
+        if self._attrlist[-1] in ['sum', 'mean']:
+            return ProjAgg(self._attrlist[-1], self._attrlist[:-1])
+
 
 @py2str
 class StreamPath(Projection):
@@ -1115,7 +1135,6 @@ class StreamPath(Projection):
 
     def __ror__(self, other):
         return CondChain(Or, lval=other, rpath=self)
-
 
     def __repr__(self):
         """Generate an unambiguous representation of the StreamPath."""

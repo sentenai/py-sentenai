@@ -317,7 +317,7 @@ class Result(object):
                 kwargs['default'] = kwargs.get('default', False)
             self.projection = Returning(*attrs, **kwargs)
         x = json_normalize([evt.json(df=True) for evt in iter(self)])
-        return x.set_index('ts')
+        return x if x.empty else x.set_index('ts')
 
 
     @property

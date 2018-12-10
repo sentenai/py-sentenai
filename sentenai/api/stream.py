@@ -340,7 +340,7 @@ class Stream(BaseStream):
 
     def tags(self):
         """Get a view of all tags in this stream."""
-        return Fields(self._client.fields(self, view="tag"))
+        return Fields(self._client.fields(self), view="tag")
 
     def stats(self):
         """Get a dictionary of stream statistics."""
@@ -464,7 +464,7 @@ class Stream(BaseStream):
            start  -- Optional argument indicating start time in stream for calculations.
            end    -- Optional argument indicating end time in stream for calculations.
         """
-        return self._client.unique(self, field)
+        return UniqueView(self._client.unique(self, field))
     _unique = unique
 
     def put(self, event, id=None, timestamp=None, duration=None):
@@ -529,6 +529,24 @@ class Stream(BaseStream):
     _oldest = oldest
 
 
+class UniqueView(object):
+    def __init__(self, u):
+        if u['categorical']:
+            self.unique = u['categorical']
+        elif u['numerical']:
+            self.unique = u['numerical']
+        else:
+            self.unique = []
+
+    def _repr_html_(self):
+        if self.unique:
+            return pd.DataFrame([{"value": k, "frequency": v} for k, v in self.unique])[["value","frequency"]]._repr_html_()
+        else:
+            return pd.DataFrame.empty._repr_html_()
+
+    def __getitem__(self, x):
+        return self.unique.get(str(x), 0)
+
 
 
 class StreamRange(object):
@@ -539,6 +557,7 @@ class StreamRange(object):
         self.limit = limit
         self.start = start
         self.end = end
+        self.frequency = None
 
     def __getitem__(self, i):
         if not self._events:
@@ -552,7 +571,47 @@ class StreamRange(object):
                 self._events = reversed(self.events)
             return iter(self._events)
 
+    def resample(self, freq):
+        self.frequency = freq
+        return self
+
+    def agg(self, *args, **kwargs):
+        if self.frequency is None:
+            raise Exception("Cannot call `.agg()` on raw data.")
+        for arg in args:
+            # field renames
+            if isinstance(arg, dict):
+                for k, v in arg.items():
+                    kwargs[k] = v
+                continue
+
+            base = kwargs
+            segments = list(arg)
+            for a in segments[:-1]:
+                x = kwargs.get(a)
+                if isinstance(x, dict):
+                    base = x
+                else:
+                    base = base[a] = {}
+            else:
+                base[segments[-1]] = arg
+
+        p = Proj(self.stream, kwargs, resample=self.frequency)()['projection']
+
+        self._events = self.stream._client.range(self.stream, self.start, self.end, limit=self.limit, proj=p, sorting=self.sort, frequency=self.frequency)
+
+        if len(self._events):
+            if self.sort == "desc":
+                self._events = reversed(self._events)
+            f = json_normalize([x.json(df=True) for x in self._events])
+            return f.set_index('ts')
+        else:
+            return pd.DataFrame()
+
+
     def df(self, *args, **kwargs):
+        if self.frequency is not None:
+            raise Exception("Cannot call `.df()` on resampled data.")
         for arg in args:
             # field renames
             if isinstance(arg, dict):
@@ -583,12 +642,14 @@ class StreamRange(object):
         else:
             return pd.DataFrame()
 
+
     def json(self, *args):
         if len(args) == 1 and isinstance(args[0], dict):
             p = Proj(self, args[0])()['projection']
         else:
             p = None
         return JSON.dumps([x.json(include_id=True) for x in self._events], default=dts, indent=4)
+
 
     def _repr_html_(self):
         return self.df()._repr_html_()
