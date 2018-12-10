@@ -332,8 +332,13 @@ class Result(object):
 
     def __iter__(self):
         data = self._events()
-        streams = {k: Stream(self.search.client, s['name'], {}, None, True)
-                   for k, s in data.get('streams', {}).items()}
+        try:
+            streams = {k: Stream(self.search.client, s['name'], {}, None, True)
+                       for k, s in data.get('streams', {}).items()}
+        except KeyError:
+            # TEMPORARY: REMOVE AFTER FIX
+            streams = {k: Stream(self.search.client, s['stream']['name'], {}, None, True)
+                       for k, s in data.get('streams', {}).items()}
         return iter([Event(self.search.client, streams[e['stream']], e['id'], e['ts'], e['event'] or {})
                      for e in data['events']])
 
