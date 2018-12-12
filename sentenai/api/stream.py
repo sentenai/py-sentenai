@@ -13,6 +13,7 @@ from datetime import timedelta
 from functools import partial
 from multiprocessing.pool import ThreadPool
 from threading import Lock
+from shapely.geometry import Point
 
 from sentenai.exceptions import *
 from sentenai.exceptions import handle
@@ -176,6 +177,8 @@ class StreamMetadata(object):
             for k,v in data.items():
                 if type(v) in [float, int, bool]:
                     parsed[k] = v
+                elif type(v) == dict and 'lat' in v and 'lon' in v:
+                    parsed[k] = Point(v['lon'], v['lat'])
                 else:
                     for fmt in ["%Y-%m-%dT%H:%M:%S.%fZ","%Y-%m-%dT%H:%M:%SZ","%Y-%m-%dT%H:%M:%S","%Y-%m-%dT%H:%M:%S.%f"]:
                         try:
@@ -283,6 +286,13 @@ class Stream(BaseStream):
         return self._exists
 
     __nonzero__ = __bool__
+
+
+    def __enter__(self):
+        return BaseStream(self.name, self.tz, *self._filters)
+
+    def __exit__(self, *args, **kwargs):
+        pass
 
 
     def where(self, *filters, **kwargs):
@@ -452,8 +462,8 @@ class Stream(BaseStream):
             print("count\t{count}\nunique\t{unique}\ntop\t{top}\nfreq\t{freq}".format(**x['categorical']))
         else:
             p = x['numerical']
-            print("count\t{}\nmean\t{:.2f}\nstd\t{:.2f}\nmin\t{}\n25%\t{}\n50%\t{}\n75%\t{}\nmax\t{}".format(
-                p['count'], p['mean'], p['std'], p['min'], p.get('25%'), p.get('50%'), p.get('75%'), p['max']))
+            print("count\t{}\nmean\t{:.2f}\nstd\t{:.2f}\nmin\t{}\nmax\t{}".format(
+                p['count'], p['mean'], p['std'], p['min'], p['max']))
     _describe = describe
 
     def unique(self, field):
@@ -607,7 +617,6 @@ class StreamRange(object):
             return f.set_index('ts')
         else:
             return pd.DataFrame()
-
 
     def df(self, *args, **kwargs):
         if self.frequency is not None:

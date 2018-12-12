@@ -59,7 +59,7 @@ class SQ(object):
 
 
 class BaseClient(object):
-    def __init__(self, auth_key="", host="https://api.sentenai.com"):
+    def __init__(self, auth_key="", host="http://35.192.62.84"):
         self.auth_key = auth_key
         self.host = host
         self.build_url = partial(build_url, self.host)

@@ -65,10 +65,10 @@ class Projection(HistoriQL):
     def __rmul__(self, other):
         return ProjMath("*", other, self)
 
-    def __div__(self, other):
+    def __truediv__(self, other):
         return ProjMath("/", self, other)
 
-    def __rdiv__(self, other):
+    def __rtruediv__(self, other):
         return ProjMath("/", other, self)
 
     def __or__(self, other):
@@ -97,6 +97,12 @@ class ProjMath(Projection):
                 return {'var': ('event',) + p._attrlist}
             elif isinstance(p, ProjMath):
                 return p()
+            elif isinstance(p, ProjAgg):
+                return p()
+            elif isinstance(p, ProjShift):
+                return p()
+            elif isinstance(p, ProjRolling):
+                return p()
             else:
                 raise QuerySyntaxError("projection math with non-numeric types is unsupported.")
             return {'stream': self.stream(), 'projection': nd}
@@ -121,10 +127,17 @@ class Returning(object):
             else:
                 raise QuerySyntaxError("Invalid projection type in `returning`")
         self.default = kwargs.get('default', True)
+        self.join = kwargs.get('join', True)
+        self.freq = kwargs.get('frequency') 
 
     def __call__(self):
-        return dict(projections={'explicit': [p() for p in self.projs], '...': self.default})
-
+        if self.join:
+            for p in self.projs:
+                p.resample = self.freq
+            ps = {'explicit': [p() for p in self.projs], '...': False}
+        else:
+            ps = {'explicit': [p() for p in self.projs], '...': self.default}
+        return dict(projections=ps)
 
 
 class Proj(object):
@@ -149,7 +162,11 @@ class Proj(object):
                     if isinstance(val, EventPath):
                         z = ('event',) + val._attrlist
                         new[key] = [{'var': z}]
+                    elif isinstance(val, ProjShift):
+                        new[key] = [val()]
                     elif isinstance(val, ProjMath):
+                        new[key] = [val()]
+                    elif isinstance(val, ProjRolling):
                         new[key] = [val()]
                     elif isinstance(val, ProjAgg):
                         new[key] = val()
@@ -173,13 +190,22 @@ class Proj(object):
 
 
 
-class ProjAgg(object):
+class ProjAgg(Projection):
     def __init__(self, op, path):
         self.op = op
         self.path = path
+        self.n = None
+
+    def shift(self, n):
+        self.n = n
+        return self
 
     def __call__(self):
-        return {"aggregation": self.op, "expr": [{'var': ('event',) + self.path}]}
+        x = {'var': ('event',) + self.path}
+        if self.n is not None:
+            x['shift'] = self.n
+        return {"aggregation": self.op, "expr": [x]}
+
 
 class ProjShift(object):
     def __init__(self, path, n):
@@ -188,6 +214,43 @@ class ProjShift(object):
 
     def __call__(self):
         return {'var': ('event',) + self.path, "shift": self.n}
+
+
+class ProjRolling(object):
+    def __init__(self, path, n, win_type="none", center=False):
+        self.n = n
+        self.path = path
+        self.op = None
+        self.center = center
+        self.win_type = win_type
+        self.win_args = {}
+
+    def mean(self, **kwargs):
+        self.op = "mean"
+        self.win_args = kwargs
+        return self
+
+    def sum(self, **kwargs):
+        self.op = "sum"
+        self.win_args = kwargs
+        return self
+
+    def std(self, **kwargs):
+        self.op = "std"
+        self.win_args = kwargs
+        return self
+
+
+    def __call__(self):
+        self.win_args["type"] = self.win_type
+        return {
+            "window": self.win_args,
+            "size": self.n,
+            "op": self.op,
+            'var': ('event',) + self.path,
+            'labelPos': "center" if self.center else "right"
+        }
+
 
 
 
@@ -694,6 +757,12 @@ class Stream(HistoriQL):
         else:
             return {}
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self):
+        pass
+
     def __pos__(self):
         return Proj(self, True)
 
@@ -701,6 +770,9 @@ class Stream(HistoriQL):
         return Proj(self, False)
 
     def __mod__(self, pdict):
+        return Proj(self, pdict)
+
+    def __matmul__(self, pdict):
         return Proj(self, pdict)
 
     def __cmp__(self, other):
@@ -821,12 +893,14 @@ class Stream(HistoriQL):
         Arguments:
             name -- The name of the variable to get
         """
-        if not name.startswith('_') and name not in ['name', 'tz', 'meta']:
+        if not name.startswith('_') and name not in ['name', 'tz', 'meta', 'oldest', 'newest']:
             return StreamPath((name,), self)
         elif name == 'name':
             return self.__getattribute__("_name")
         elif name == 'meta':
             return self.__getattribute__("_meta")
+        elif name in ['oldest', 'newest']:
+            return self.__getattribute__("_"+name)()
         else:
             return self.__getattribute__(name)
 
@@ -996,6 +1070,8 @@ class EventPath(Projection):
             return ProjAgg(self._attrlist[-1], self._attrlist[:-1])
         elif self._attrlist[-1] == 'shift':
             return ProjShift(self._attrlist[:-1], *args)
+        elif self._attrlist[-1] == 'rolling':
+            return ProjRolling(self._attrlist[:-1], *args, **kwargs)
 
 
 @py2str

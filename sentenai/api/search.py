@@ -27,6 +27,9 @@ class Search(object):
     def all(self):
         return ResultSet(self).all()
 
+    def resample(self, freq):
+        return ResultSet(self).all().resample(freq)
+
     def __iter__(self):
         return ResultSet(self)
 
@@ -55,7 +58,6 @@ class Search(object):
 
     def df(self, *args, **kwargs):
         return ResultSet(self).df(*args, **kwargs)
-
 
 
 class ResultPage(object):
@@ -181,6 +183,20 @@ class ResultSet(object):
         else:
             return pd.DataFrame()
 
+    def agg(self, *args, **kwargs):
+        dfs = []
+        for x in self[:]:
+            dfs.append(x.resample(self.freq).agg(*args, **kwargs))
+        if len(dfs):
+            return pd.concat(dfs, keys=range(0,len(dfs)), sort=True)
+        else:
+            return pd.DataFrame()
+
+
+    def resample(self, freq):
+        self.freq = freq
+        return self
+
 
     def all(self):
         while self.cursors[-1]:
@@ -226,6 +242,7 @@ class Result(object):
         self.events = 0
         self.cursor = cursor
         self.projection = None
+        self.freq = None
 
 
     @property
@@ -318,6 +335,29 @@ class Result(object):
             self.projection = Returning(*attrs, **kwargs)
         x = json_normalize([evt.json(df=True) for evt in iter(self)])
         return x if x.empty else x.set_index('ts')
+
+
+    def agg(self, *attrs, **kwargs):
+        self.projection = Returning(*attrs, frequency=self.freq, join=True)
+        data = self._events()
+        els = []
+        ss = {}
+        for e in data['events']:
+            el = {'ts': e['ts']}
+            el.update(e['event'])
+            if e['stream'] not in ss:
+                ss[e['stream']] = []
+            ss[e['stream']].append(el)
+        dfs = [pd.DataFrame(ss[v]) for v in ss]
+        for df in dfs:
+            if not df.empty:
+                df.set_index('ts', inplace=True)
+        return dfs[0].join(dfs[1:], how='outer').ffill()
+
+
+    def resample(self, freq):
+        self.freq = freq
+        return self
 
 
     @property

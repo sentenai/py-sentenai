@@ -53,7 +53,6 @@ def cts(ts):
         else:
             return dt.replace(tzinfo=dateutil.tz.tzutc())
     except:
-        print("invalid time: " + ts)
         return ts
 
 
