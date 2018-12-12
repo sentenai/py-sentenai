@@ -191,7 +191,9 @@ class StreamMetadata(object):
                     else:
                         parsed[k] = v
 
-        return parsed
+            return parsed
+        else:
+            return SentenaiException()
 
 
     def update(self, kvs):
@@ -578,7 +580,7 @@ class StreamRange(object):
         if not self._events:
             self._events = self.stream._client.range(self.stream, self.start, self.end, limit=self.limit, sorting=self.sort)
             if self.sort == "desc":
-                self._events = reversed(self.events)
+                self._events = reversed(self._events)
             return iter(self._events)
 
     def resample(self, freq):
