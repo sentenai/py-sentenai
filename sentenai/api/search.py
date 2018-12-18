@@ -15,9 +15,11 @@ from pandas.io.json import json_normalize
 
 
 class Search(object):
-    def __init__(self, client, select):
+    def __init__(self, client, select, start=None, end=None):
         self.client = client
         self.query = select
+        self.start = start
+        self.end = end
         self.optimize = True
 
     def returning(self, *args):
@@ -66,6 +68,7 @@ class ResultPage(object):
         self.results = results
         self.start = kwargs.get("start")
         self.stop = kwargs.get("stop")
+        self.freq = None
 
     def __len__(self):
         return len(self.results) or 0
@@ -93,6 +96,29 @@ class ResultPage(object):
             return "_"
         else:
             return df[['Start', 'End', 'Duration', 'Viz']]._repr_html_()
+
+    def df(self, *args, **kwargs):
+        dfs = []
+        for x in self.results:
+            dfs.append(x.df(*args, **kwargs))
+        if len(dfs):
+            return pd.concat(dfs, keys=range(0,len(dfs)), sort=True)
+        else:
+            return pd.DataFrame()
+
+    def agg(self, *args, **kwargs):
+        dfs = []
+        for x in self:
+            dfs.append(x.resample(self.freq).agg(*args, **kwargs))
+        if len(dfs):
+            return pd.concat(dfs, keys=range(0,len(dfs)), sort=True)
+        else:
+            return pd.DataFrame()
+
+
+    def resample(self, freq):
+        self.freq = freq
+        return self
 
 
 class ResultSet(object):
@@ -234,6 +260,8 @@ class ResultSet(object):
 
 
 
+
+
 class Result(object):
     def __init__(self, search, start, end, cursor):
         self.search = search
@@ -251,7 +279,6 @@ class Result(object):
             return self.end - self.start
         else:
             return None
-
 
     def _repr_html_(self):
         df = pd.DataFrame([
@@ -394,6 +421,7 @@ class Result(object):
                     ss.append(s)
         return RView(self, ss)
 
+
 class RView(object):
     def __init__(self, result, streams, head=None):
         self.result = result
@@ -427,10 +455,4 @@ class RView(object):
     def df(self):
         return json_normalize([x.json(df=True) for x in v])
 
-
-
-class ProjectedStream(object):
-    def __init__(self, stream, projections):
-        self._stream = stream
-        self._projections = projections
 

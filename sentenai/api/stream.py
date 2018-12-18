@@ -167,6 +167,7 @@ class StreamMetadata(object):
         self._stream = stream
         self._meta = self.read()
 
+
     def read(self):
         resp = self._stream._client.session.get("/".join([self._stream._client.host, "streams", self._stream._name, "meta"]), params={})
         if resp.status_code == 404:
@@ -296,6 +297,36 @@ class Stream(BaseStream):
     def __exit__(self, *args, **kwargs):
         pass
 
+    def log(self, event=None, ts=None, id=None, duration=None):
+        if event is None:
+            data = {}
+        else:
+            data = event
+        e = self.Event(data=data, ts=ts, id=id, duration=duration).create()
+        print(f"Event successfully logged at time {ts} in Stream('{self.name}')")
+
+    _log = log
+
+    def upload(self, file_path, ts="timestamp", threads=4, apply=dict):
+        def f(row):
+            timestamp = row[ts]
+            d = apply(row)
+            if apply is dict:
+                del d[ts]
+            self.Event(ts = timestamp, data = d).create()
+            time.sleep(.01)
+
+        with open(file_path) as fobj:
+            fobj.seek(0)
+            num_lines = sum(1 for line in fobj) - 1
+            errors = 0
+        with ThreadPool(threads) as pool:
+            for x in log_progress(pd.read_csv(file_path, chunksize=threads), size=num_lines):
+                pool.map(f, [r for i, r in x.iterrows()])
+
+
+
+    _upload = upload
 
     def where(self, *filters, **kwargs):
         """Return copy of stream with filters."""
@@ -517,7 +548,7 @@ class Stream(BaseStream):
            Result:
            A time ordered list of all events in a stream from `start` to `end`
         """
-        return StreamRange(self, DTMIN, DTMAX, limit=n, sorting='desc')
+        return StreamRange(self, self.oldest.ts, self.newest.ts, limit=n, sorting='desc')
 
     def head(self, n=5):
         """Get all of a stream's events between start (inclusive) and end (exclusive).
@@ -528,7 +559,7 @@ class Stream(BaseStream):
            Result:
            A time ordered list of all events in a stream from `start` to `end`
         """
-        return StreamRange(self, DTMIN, DTMAX, limit=n, sorting='asc')
+        return StreamRange(self, self.oldest.ts, self.newest.ts, limit=n, sorting='asc')
 
     def newest(self):
         """Get the most recent event in the stream."""
@@ -654,6 +685,25 @@ class StreamRange(object):
             return pd.DataFrame()
 
 
+    def reshape(self, *args, lag, horizon, features):
+        if args and not features:
+            features = args
+        if self.frequency is None:
+            raise Exception("Cannot call `.reshape()` on raw data.")
+        kwargs = dict(("feature-{:04d}".format(i), arg) for i, arg in enumerate(features))
+        keys = list(sorted(kwargs.keys()))
+        p = Proj(self.stream, kwargs, resample=self.frequency)()['projection']
+        r = self.stream._client.range(self.stream, self.start, self.end, limit=self.limit, proj=p, sorting=self.sort, frequency=self.frequency)
+
+        def tensors():
+            for i in range(len(r) - lag - horizon):
+                yield ( np.array([[[e.data.get(k) for k in keys] for e in r[i:i+lag]]], np.float32)
+                      , np.array([[e.data.get(k) for k in keys] for e in r[i+lag:i+lag+horizon]], np.float32)
+                      )
+
+        return tensors()
+
+
     def json(self, *args):
         if len(args) == 1 and isinstance(args[0], dict):
             p = Proj(self, args[0])()['projection']
@@ -701,6 +751,51 @@ class StreamsView(object):
 
 
 
+def log_progress(sequence, size=0, name='Uploaded'):
+    from ipywidgets import IntProgress, HTML, VBox
+    from IPython.display import display
+
+    if size <= 200:
+        every = 1
+    else:
+        every = int(size / 200)
+
+
+    progress = IntProgress(min=0, max=size, value=0)
+    label = HTML()
+    box = VBox(children=[label, progress])
+    display(box)
+    index = 0
+    ts0 = datetime.utcnow()
+    label.value = u'{name}: {index} / {size} Events'.format(
+        name=name,
+        index=index,
+        size=size
+    )
+    try:
+        for record in sequence:
+            index += len(record)
+            if index == 1 or index % every == 0:
+                progress.value = index
+                label.value = u'{name}: {index} / {size} Events'.format(
+                    name=name,
+                    index=index,
+                    size=size
+                )
+            yield record
+    except:
+        progress.bar_style = 'danger'
+        raise
+    else:
+        ts1 = datetime.utcnow()
+        progress.bar_style = 'success'
+        progress.value = index
+        td = ts1 - ts0
+        label.value = "{name} {index} Events in {time}".format(
+            name=name,
+            index=str(index or '?'),
+            time="{:.1f} seconds".format(td.total_seconds()) if td.total_seconds() < 60 else ts
+        )
 
 
 

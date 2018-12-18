@@ -51,7 +51,7 @@ class SQ(object):
 
     def __call__(self, *args):
         try:
-            p = Query(Select(*args)[self.timerange] if self.timerange else Select(*args))
+            p = Query(Select(*args)[self.timerange], start=self.timerange.start, end=self.timerange.stop) if self.timerange else Query(Select(*args))
             return Search(self.client, p)
         finally:
             self.query = None
@@ -66,6 +66,14 @@ class BaseClient(object):
         self.session = requests.Session()
         self.session.headers.update({ 'auth-key': auth_key })
         self.select = SQ(self)
+
+    def __getitem__(self, s):
+        if type(s) == str:
+            return self.Stream(s)
+        elif type(s) == int:
+            return self.streams()[s]
+        else:
+            return self.streams(s)
 
     @staticmethod
     def _debug(enable=True):
@@ -97,9 +105,10 @@ class BaseClient(object):
 
 
 class Sentenai(BaseClient):
-    def __init__(self, auth_key="", host="https://api.sentenai.com"):
+    def __init__(self, auth_key="", host="https://api.sentenai.com", notebook=False):
         BaseClient.__init__(self, auth_key, host)
         self.select = SQ(self)
+        self.notebook = notebook
 
 
     def Stream(self, name, *args, **kwargs):
