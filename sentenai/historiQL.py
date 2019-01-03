@@ -122,7 +122,7 @@ class Returning(object):
                         self.projs.append(Proj(x))
                     elif isinstance(x, Proj):
                         self.projs.append(x)
-            elif isinstance(s, Proj):
+            elif isinstance(s, Proj) or isinstance(s, ProjAgg):
                 self.projs.append(s)
             else:
                 raise QuerySyntaxError("Invalid projection type in `returning`")
@@ -191,10 +191,11 @@ class Proj(object):
 
 
 class ProjAgg(Projection):
-    def __init__(self, op, path):
+    def __init__(self, op, path, stream=None):
         self.op = op
         self.path = path
         self.n = None
+        self.stream = stream
 
     def shift(self, n):
         self.n = n
@@ -207,23 +208,25 @@ class ProjAgg(Projection):
         return {"aggregation": self.op, "expr": [x]}
 
 
-class ProjShift(object):
-    def __init__(self, path, n):
+class ProjShift(Projection):
+    def __init__(self, path, n, stream=None):
         self.n = n
         self.path = path
+        self.stream = stream
 
     def __call__(self):
         return {'var': ('event',) + self.path, "shift": self.n}
 
 
-class ProjRolling(object):
-    def __init__(self, path, n, win_type="none", center=False):
+class ProjRolling(Projection):
+    def __init__(self, path, n, win_type="none", center=False, stream=None):
         self.n = n
         self.path = path
         self.op = None
         self.center = center
         self.win_type = win_type
         self.win_args = {}
+        self.stream = stream
 
     def mean(self, **kwargs):
         self.op = "mean"
@@ -736,7 +739,7 @@ class Stream(HistoriQL):
     used when writing queries, access specific API end points, and manipulating
     result sets.
     """
-    def __init__(self, name, tz, *filters):
+    def __init__(self, name, tz, filters):
         """Initialize a stream object.
 
         Arguments:
@@ -861,19 +864,7 @@ class Stream(HistoriQL):
             if self.tz:
                 b['timezone'] = self.tz
             if self._filters:
-                s = self._filters
-                expr = s[-1]()
-                if 'type' in expr:
-                    del expr['type']
-                for x in s[-2::-1]:
-                    y = x()
-                    if 'type' in y:
-                        del y['type']
-                    expr = {
-                        'expr': '&&',
-                        'args': [y, expr]
-                    }
-                b['filter'] = expr
+                b['filter'] = self._filters()
             return b
         else:
             try:
@@ -1073,6 +1064,34 @@ class EventPath(Projection):
         elif self._attrlist[-1] == 'rolling':
             return ProjRolling(self._attrlist[:-1], *args, **kwargs)
 
+def check_proj(p):
+    ptype = None
+    for k,v in p.items():
+        if type(v) is dict:
+            x = check_proj(v)
+            if ptype is not None and x != ptype:
+                raise HistoriQLSynxtaxError("Cannot mix aggregation and non-aggregation types")
+            elif ptype is None:
+                ptype = x
+        elif isinstance(v, ProjAgg):
+            if ptype in [None, "agg"]:
+                ptype = "agg"
+            else:
+                raise HistoriQLSynxtaxError("Cannot mix aggregation and non-aggregation types")
+        elif isinstance(v, EventPath) or isinstance(v, Projection):
+            if ptype in [None, "proj"]:
+                ptype = "proj"
+            else:
+                raise HistoriQLSynxtaxError("Cannot mix aggregation and non-aggregation types")
+        else:
+            pass # it's a constant. Can't tell much from that
+    return ptype
+
+
+
+
+
+
 
 @py2str
 class StreamPath(Projection):
@@ -1233,14 +1252,12 @@ class StreamPath(Projection):
         return '{stream}:{attrs}'.format(stream=str(self._stream), attrs=foo)
 
     def __call__(self, *args, **kwargs):
-        if len(self._attrlist) == 1:
-            return self._stream.__getattr__("_"+self._attrlist[0])(*args, **kwargs)
-        elif self._attrlist[-1] == 'describe':
-            return self._stream.__getattr__("_describe")(".".join(self._attrlist[:-1]), *args, **kwargs)
-        elif self._attrlist[-1] == 'stats':
-            return self._stream.__getattr__("_fstats")(".".join(self._attrlist[:-1]), *args, **kwargs)
-        elif self._attrlist[-1] == 'unique':
-            return self._stream.__getattr__("_unique")(".".join(self._attrlist[:-1]), *args, **kwargs)
+        if self._attrlist[-1] in ['sum', 'mean', 'min', 'max', 'std']:
+            return ProjAgg(self._attrlist[-1], self._attrlist[:-1], stream=self._stream)
+        elif self._attrlist[-1] == 'shift':
+            return ProjShift(self._attrlist[:-1], stream=self._stream, *args)
+        elif self._attrlist[-1] == 'rolling':
+            return ProjRolling(self._attrlist[:-1], stream=self._stream, *args, **kwargs)
         else:
             raise QuerySyntaxError("cannot call path")
 
@@ -1970,13 +1987,16 @@ class MetadataField(object):
     def __init__(self, field):
         self.field = field
 
+    def __call__(self):
+        return self.field
+
     def __eq__(self, val):
         if isinstance(val, MetaCondChain):
             val.lpath = self.field
             val.lcond = MetaCond(self.field, '==', val.lval)
             return val.reify()
         else:
-            return MetaCond(self, '==', val)
+            return MetaCond(self.field, '==', val)
 
     def __ne__(self, val):
         if isinstance(val, MetaCondChain):
@@ -1984,7 +2004,7 @@ class MetadataField(object):
             val.lcond = MetaCond(self.field, '!=', val.lval)
             return val.reify()
         else:
-            return MetaCond(self, '!=', val)
+            return MetaCond(self.field, '!=', val)
 
     def __ge__(self, val):
         if isinstance(val, MetaCondChain):
@@ -1992,7 +2012,7 @@ class MetadataField(object):
             val.lcond = MetaCond(self.field, '!=', val.lval)
             return val.reify()
         else:
-            return MetaCond(self, '>=', val)
+            return MetaCond(self.field, '>=', val)
 
     def __gt__(self, val):
         if isinstance(val, MetaCondChain):

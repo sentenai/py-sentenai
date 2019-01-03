@@ -26,7 +26,7 @@ class AuthenticationError(SentenaiException):
 
 
 class NotFound(SentenaiException):
-    """A NotFount Exeption."""
+    """A NotFound Exeption."""
     pass
 
 def status_codes(resp):

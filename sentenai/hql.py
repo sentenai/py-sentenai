@@ -1,6 +1,6 @@
-__all__ = ["Within", "After", "Lasting", "During", "And", "Or", 'V', 'M']
+__all__ = ["Within", "After", "Lasting", "During", "And", "Or", 'V', 'M', 'stream']
 
-from sentenai.historiQL import Within, After, Lasting, And, Or, EventPath, Par, InCircle, InPolygon, StreamMetadata
+from sentenai.historiQL import Within, After, Lasting, And, Or, EventPath, Par, InCircle, InPolygon, StreamMetadata, Stream
 
 from sentenai.utils import PY3
 
@@ -11,6 +11,8 @@ if not PY3: import virtualtime
 
 # Convenience Functions
 
+def stream(*args, **kwargs):
+    return Stream(*args, **kwargs)
 
 def event(*args, **kwargs):
     return Switch(*args, **kwargs)

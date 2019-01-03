@@ -10,7 +10,7 @@ from sentenai.exceptions import *
 from sentenai.exceptions import handle
 from sentenai.historiQL import Select, Returning
 from sentenai.utils import *
-from sentenai.api.stream import Stream, Event
+from sentenai.api.stream import Stream, Event, TD
 from pandas.io.json import json_normalize
 
 
@@ -38,6 +38,9 @@ class Search(object):
     def __getitem__(self, i):
         return ResultSet(self)[i]
 
+    def head(self, n=5):
+        return ResultSet(self)[:n]
+
     def _spans(self, cursor):
         url = '{0}/query/{1}/spans'.format(self.client.host, cursor)
         retries = 0
@@ -60,6 +63,9 @@ class Search(object):
 
     def df(self, *args, **kwargs):
         return ResultSet(self).df(*args, **kwargs)
+
+    def agg(self, *args, **kwargs):
+        return ResultSet(self).agg(*args, **kwargs)
 
 
 class ResultPage(object):
@@ -131,6 +137,7 @@ class ResultSet(object):
             ))
         self.cursors = [r.headers['location']]
         self.spans = {}
+        self.freq = None
         self.pos = (False, 0)
 
     def __getitem__(self, i):
@@ -210,9 +217,10 @@ class ResultSet(object):
             return pd.DataFrame()
 
     def agg(self, *args, **kwargs):
+        f = self.freq if self.freq is not None else '9000AS'
         dfs = []
         for x in self[:]:
-            dfs.append(x.resample(self.freq).agg(*args, **kwargs))
+            dfs.append(x.resample(f).agg(*args, **kwargs))
         if len(dfs):
             return pd.concat(dfs, keys=range(0,len(dfs)), sort=True)
         else:
@@ -257,6 +265,59 @@ class ResultSet(object):
         else:
             return df[['Start', 'End', 'Duration', 'Viz']]._repr_html_()
 
+    def reshape(self, *args, lag, horizon, features):
+        lags, hors = [], []
+        for r in list(self[:]):
+            if not lags:
+                lags.append((self.search.start or DTMIN, r.start))
+            else:
+                lags.append((hors[-1][1], r.start))
+
+            hors.append((r.start, r.end))
+        else:
+            if hors and hors[-1][1]:
+                lags.append((hors[-1][1], self.search.end or DTMAX))
+
+        streams = {}
+        for i, feature in enumerate(features):
+            if feature.stream:
+                z = streams.get(feature.stream, {})
+                if not z:
+                    streams[feature.stream] = z
+                z['feature-{:04d}'.format(i)] = feature
+
+        kwargs = dict(("feature-{:04d}".format(i), arg) for i, arg in enumerate(features))
+        keys = list(sorted(kwargs.keys()))
+
+        ps = [s @ p for s, p in streams.items()]
+
+        if self.freq is None:
+            raise Exception("Cannot call `.reshape()` on raw data.")
+
+        def tensors():
+            for i, (s, e) in enumerate(lags):
+                r = Result(self.search, s, e, "{}+{}+{}".format(self.cursors[0], iso8601(s), iso8601(e)).replace("+00:00", "Z"))
+                a = r.resample(self.freq).agg(*ps)
+                a['span'] = 0
+
+                if i < len(hors):
+                    r2 = Result(self.search, s, e, "{}+{}+{}".format(self.cursors[0], iso8601(hors[i][0]), iso8601(hors[i][1])).replace("+00:00", "Z")).limit(horizon)
+                    b = r2.resample(self.freq).agg(*ps)
+                    b['span'] = 1
+                    z = pd.concat([a,b])
+                else:
+                    z = a
+                d1, d2 = [], []
+                for i, row in z.iterrows():
+                    d1.append([row[k] for k in keys])
+                    d2.append(row['span'])
+
+                for i in range(len(z) - lag - horizon):
+                    yield ( np.array([[x for x in d1[i:i+lag]]], np.float32)
+                          , np.array(d2[i+lag:i+lag+horizon], np.float32)
+                          )
+
+        return TD(tensors())
 
 
 
@@ -271,6 +332,7 @@ class Result(object):
         self.cursor = cursor
         self.projection = None
         self.freq = None
+        self._limit = None
 
 
     @property
@@ -279,6 +341,10 @@ class Result(object):
             return self.end - self.start
         else:
             return None
+
+    def limit(self, n):
+        self._limit = n
+        return self
 
     def _repr_html_(self):
         df = pd.DataFrame([
@@ -321,6 +387,9 @@ class Result(object):
             params = {'projections': base64.urlsafe_b64encode(bytes(json.dumps(self.projection()), 'UTF-8'))}
         else:
             params = {}
+        if self._limit:
+            params['limit'] = str(self._limit)
+
         try:
             r = self.search.client.session.get(url, params=params)
             if not r.ok:
@@ -379,7 +448,21 @@ class Result(object):
         for df in dfs:
             if not df.empty:
                 df.set_index('ts', inplace=True)
-        return dfs[0].join(dfs[1:], how='outer').ffill()
+        if len(dfs) == 0:
+            out = pd.DataFrame()
+        elif len(dfs) == 1:
+            out = dfs[0]
+        else:
+            out = dfs[0].join(dfs[1:], how='outer').ffill()
+        if self.freq == '9000AS':
+            out.reset_index(inplace=True)
+            del out['ts']
+            out['start'] = self.start
+            out['end'] = self.end
+            out['duration'] = self.duration
+            return out.set_index(['start', 'end'])
+        else:
+            return out
 
 
     def resample(self, freq):
