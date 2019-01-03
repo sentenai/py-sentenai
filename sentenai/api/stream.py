@@ -94,20 +94,23 @@ class Stream(object):
         pass
 
     def log(self, event=None, ts=None, id=None, duration=None):
-        if event is None:
-            data = {}
-        else:
-            data = event
-        e = self.Event(data=data, ts=ts, id=id, duration=duration).create()
-        print(f"Event successfully logged at time {ts} in Stream('{self.name}')")
+        data = {} if event is None else event
+        self._client._queue.put(self.Event(data=data, ts=ts, id=id, duration=duration))
 
-    def upload(self, file_path, ts="timestamp", threads=4, apply=dict):
+
+    def upload(self, file_path, id=None, ts="timestamp", duration=None, threads=4, apply=dict):
         def f(row):
             timestamp = row[ts]
+            dur = row[duration] if duration else None
+            eid = row[id] if uid else None
             d = apply(row)
             if apply is dict:
                 del d[ts]
-            self.Event(ts = timestamp, data = d).create()
+                if eid is not None:
+                    del d[id]
+                if dur is not None:
+                    del d[duration]
+            self.Event(id=eid, ts=timestamp, duration=dur, data=d).create()
             time.sleep(.01)
 
         with open(file_path) as fobj:
@@ -115,8 +118,12 @@ class Stream(object):
             num_lines = sum(1 for line in fobj) - 1
             errors = 0
         with ThreadPool(threads) as pool:
-            for x in log_progress(pd.read_csv(file_path, chunksize=threads), size=num_lines):
-                pool.map(f, [r for i, r in x.iterrows()])
+            if self._client.notebook:
+                for x in log_progress(pd.read_csv(file_path, chunksize=threads), size=num_lines):
+                    pool.map(f, [r for i, r in x.iterrows()])
+            else:
+                for x in pd.read_csv(file_path, chunksize=threads):
+                    pool.map(f, [r for i, r in x.iterrows()])
 
     def where(self, filters):
         """Return stream with additional filters applied.
@@ -158,6 +165,16 @@ class Stream(object):
         resp = self.get('fields')
         if resp.status_code == 200:
             return Fields(self, resp.json())
+        elif resp.status_code == 404:
+            return None
+        else:
+            raise SentenaiException(resp.status_code)
+
+    def _fields(self, start=None, end=None):
+        """Get a view of all fields in this stream."""
+        resp = self.get('fields')
+        if resp.status_code == 200:
+            return Fields(self, resp.json(), start=start, end=end)
         elif resp.status_code == 404:
             return None
         else:
@@ -227,14 +244,14 @@ class Stream(object):
         elif type(s) == slice:
             if s.start is None and s.stop is None and s.step is not None:
                 if s.step < 0:
-                    return self[self.newest.ts:self.oldest.ts:s.step]
+                    return self[self.newest.ts:self.oldest.ts - timedelta(microseconds=1):s.step]
                 else:
-                    return self[self.oldest.ts:self.newest.ts:s.step]
+                    return self[self.oldest.ts:self.newest.ts + timedelta(microseconds=1):s.step]
             # replace None start/stop with oldest/newest
             if s.start is None:
                 start = self.oldest.ts
             if s.stop is None:
-                stop = self.newest.ts
+                stop = self.newest.ts + timedelta(microseconds=1)
             # select start ts by id, datetime or timedelta
             if type(s.start) is str:
                 start = self[s.start].ts
@@ -257,7 +274,11 @@ class Stream(object):
             else:
                 return self.range(start, stop, sorting='asc')
         elif type(s) == str:
-            return self.Event(id=s).read()
+            x = self.Event(id=s).read()
+            if x is None:
+                raise KeyError
+            else:
+                return x
         elif type(s) == datetime:
             return self.values(at=s)
         else:
@@ -316,7 +337,16 @@ class Stream(object):
         params = {'limit': limit, 'sort': sorting}
         resp = self.get('start', iso8601(start), 'end', iso8601(end), params=params)
         if resp.status_code == 200:
-            return Events(self, [self.Event(saved=True, **data) for data in json.loads(resp.text)])
+            evts = [self.Event(saved=True, **data) for data in json.loads(resp.text)]
+            if limit is None:
+                return Events(self, evts, start=start, end=end)
+            elif evts:
+                if sorting == 'asc':
+                    return Events(self, evts, start=evts[0].ts, end=evts[-1].ts)
+                else:
+                    return Events(self, evts, start=evts[-1].ts, end=evts[0].ts)
+            else:
+                return Events(self, [], start, end)
         else:
             raise SentenaiException(resp.status_code)
 
@@ -398,10 +428,17 @@ class Event(object):
             resp = self.stream.put('events', self.id, headers=headers, json=self.data)
         else:
             resp = self.stream.post('events', headers=headers, json=self.data)
-        loc = resp.headers['Location']
-        self.id = loc
-        self._saved = True
-        return self
+        if resp.status_code in [200, 201]:
+            loc = resp.headers['Location']
+            self.id = loc
+            self._saved = True
+            return self
+        elif resp.status_code >= 500:
+            raise SentenaiException('retry later')
+        elif resp.status_code == 404:
+            raise NotFound
+        else:
+            raise Exception(resp.status_code)
 
     def read(self):
         resp = self.stream.get("events", self.id)
@@ -486,10 +523,12 @@ class Values(object):
 
 
 class Field(object):
-    def __init__(self, stream, path):
+    def __init__(self, stream, path, start=None, end=None):
         self._stream = stream
         self._path = path
         self._stats = None
+        self._start = start
+        self._end = end
 
     def __repr__(self):
         return ".".join(self._path)
@@ -547,7 +586,7 @@ class Field(object):
             raise TypeError
 
     @property
-    def cardinality(self):
+    def unique(self):
         try:
             return self.stats['categorical']['unique']
         except KeyError:
@@ -570,7 +609,8 @@ class Field(object):
     @property
     def stats(self):
         if self._stats is None:
-            resp = self._stream.get('fields', ".".join(["event"] + self._path), 'stats')
+            params = {'start': self._start, 'end': self._end}
+            resp = self._stream.get('fields', ".".join(["event"] + self._path), 'stats', params=params)
             if resp.status_code == 200:
                 data = resp.json()
                 self._stats = data
@@ -581,9 +621,10 @@ class Field(object):
             return self._stats
 
     @property
-    def unique(self):
+    def values(self):
         if self.stats['categorical']:
-            resp = self._stream.get('fields', ".".join(["event"] + self._path), 'values')
+            params = {'start': self._start, 'end': self._end}
+            resp = self._stream.get('fields', ".".join(["event"] + self._path), 'values', params=params)
             if resp.status_code == 200:
                 data = resp.json()
                 return Unique(data)
@@ -591,6 +632,7 @@ class Field(object):
                 raise TypeError
         else:
             raise TypeError
+
 
 class Unique(object):
     def __init__(self, u):
@@ -625,26 +667,28 @@ class Unique(object):
 
 
 class Fields(object):
-    def __init__(self, stream, fields, view="field"):
+    def __init__(self, stream, fields, view="field", start=None, end=None):
         self.stream = stream
         self._view = view
         self._fields = fields
+        self._start = start
+        self._end = end
 
     def __getitem__(self, s):
         if type(s) is slice:
-            return Fields(self.stream, self._fields[s], self._view)
+            return Fields(self.stream, self._fields[s], self._view, start=self._start, end=self._end)
         elif type(s) is int:
-            return Field(self.stream, self._fields[s]['path'])
+            return Field(self.stream, self._fields[s]['path'], start=self._start, end=self._end)
         elif type(s) is str:
             for field in self._fields:
                 if len(field['path']) == 1 and field['path'][0] == s:
-                    return Field(self.stream, field['path'])
+                    return Field(self.stream, field['path'], start=self._start, end=self._end)
             else:
                 raise KeyError
         elif type(s) is tuple and all([type(x) == str for x in s]):
             for field in self._fields:
                 if field['path'] == list(s):
-                    return Field(self.stream, field['path'])
+                    return Field(self.stream, field['path'], start=self._start, end=self._end)
             else:
                 raise KeyError
 
@@ -652,7 +696,7 @@ class Fields(object):
         return repr(self._fields)
 
     def __iter__(self):
-        return (Field(self.stream, x['path']) for x in self._fields)
+        return (Field(self.stream, x['path'], start=self._start, end=self._end) for x in self._fields)
 
     def _repr_html_(self):
         df = pd.DataFrame(sorted(self._fields, key=lambda x: (x['start'], ".".join(x['path']))))
@@ -771,24 +815,34 @@ class StreamMetadata(object):
 
 
 class Events(object):
-    def __init__(self, stream, events):
+    def __init__(self, stream, events, start=None, end=None):
         self.events = events
         self.stream = stream
+        self.start = start
+        self.end = end
 
     def __iter__(self):
         return iter(self.events)
 
     def __getitem__(self, s):
         if type(s) == slice:
-            return Events(self.stream, self.events[s])
+            return Events(self.stream, self.events[s], start=self.start, end=self.end)
         else:
             return self.events[s]
 
     def _repr_html_(self):
-        return pd.DataFrame([{'id': x.id, 'ts': x.ts, 'duration': x.duration} for x in self.events])[['id', 'ts', 'duration']]._repr_html_()
+        if self.events:
+            return pd.DataFrame([{'id': x.id, 'ts': x.ts, 'duration': x.duration} for x in self.events])[['id', 'ts', 'duration']]._repr_html_()
+        else:
+            return pd.DataFrame()._repr_html_()
 
     def __len__(self):
         return len(self.events)
+
+    @property
+    def fields(self):
+        return self.stream._fields(self.start, self.end)
+
 
 
 

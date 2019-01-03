@@ -13,6 +13,8 @@ from copy import copy
 from sentenai.exceptions import *
 from sentenai.utils import base64json
 from sentenai.api.stream import Stream
+from threading import Thread
+from queue import Queue
 
 class Debug(object):
     def __init__(self):
@@ -121,6 +123,23 @@ class Sentenai(BaseClient):
     def __init__(self, auth_key="", host="https://api.sentenai.com", notebook=False):
         BaseClient.__init__(self, auth_key, host)
         self.notebook = bool(notebook)
+        self._queue = Queue(1024)
+        self._workers = [Thread(target=self._logger) for x in range(8)]
+        for t in self._workers:
+            t.start()
+
+    def _logger(self):
+        while True:
+            evt = self._queue.get()
+            while True:
+                try:
+                    evt.create()
+                except SentenaiException:
+                    time.sleep(1)
+                else:
+                    break
+
+
 
     def Stream(self, id, *filters):
         return Stream(self, id, filters)
