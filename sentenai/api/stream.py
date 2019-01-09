@@ -2,14 +2,15 @@ from __future__ import print_function
 import json as JSON
 import pytz
 from copy import copy
-import re, sys, time, base64, random
+import re, sys, time, base64, random, types
 import requests
+from time import sleep
 
 import numpy as np
 import pandas as pd
 
 from pandas.io.json import json_normalize
-from datetime import timedelta
+from datetime import timedelta, datetime, time
 from functools import partial
 from multiprocessing.pool import ThreadPool
 from threading import Lock
@@ -42,6 +43,10 @@ class Stream(object):
         self.id = self.name = self._name = quote(id.encode('utf-8'))
         self.filters = filters
         self.meta = StreamMetadata(self)
+
+    @property
+    def where(self):
+        return Query(self._client, self)
 
     def __repr__(self):
         return f'Stream(id="{self.id}")'
@@ -97,33 +102,107 @@ class Stream(object):
         data = {} if event is None else event
         self._client._queue.put(self.Event(data=data, ts=ts, id=id, duration=duration))
 
+    def upload(self, file_path, id=None, ts="timestamp", duration=None, threads=4, apply=dict, skiprows=None, ):
+        def f(prow, row, nrow):
+            if type(ts) == str:
+                timestamp = row[ts]
+            elif type(ts) == tuple and len(ts) == 2:
+                try:
+                    timestamp = pd.datetime.combine(row[ts[0]], row[ts[1]])
+                except:
+                    print(ts)
+                    print(row)
+                    raise
 
-    def upload(self, file_path, id=None, ts="timestamp", duration=None, threads=4, apply=dict):
-        def f(row):
-            timestamp = row[ts]
-            dur = row[duration] if duration else None
-            eid = row[id] if uid else None
-            d = apply(row)
-            if apply is dict:
-                del d[ts]
-                if eid is not None:
-                    del d[id]
-                if dur is not None:
-                    del d[duration]
-            self.Event(id=eid, ts=timestamp, duration=dur, data=d).create()
-            time.sleep(.01)
-
-        with open(file_path) as fobj:
-            fobj.seek(0)
-            num_lines = sum(1 for line in fobj) - 1
-            errors = 0
-        with ThreadPool(threads) as pool:
-            if self._client.notebook:
-                for x in log_progress(pd.read_csv(file_path, chunksize=threads), size=num_lines):
-                    pool.map(f, [r for i, r in x.iterrows()])
             else:
-                for x in pd.read_csv(file_path, chunksize=threads):
-                    pool.map(f, [r for i, r in x.iterrows()])
+                timestamp = ts(row)
+
+            if duration is None:
+                dur = None
+            elif type(duration) == str:
+                dur = row[duration]
+            else:
+                dur = duration(row)
+
+
+            eid = row[id] if type(id) == str else None
+            if apply is dict:
+                d = apply(row)
+                if type(ts) == tuple:
+                    del d[ts[0]]
+                    del d[ts[1]]
+                elif type(ts) == str:
+                    del d[ts]
+                if type(id) == str:
+                    del d[id]
+                if type(dur) == str:
+                    del d[duration]
+
+            elif apply.__code__.co_argcount == 0:
+                d = apply()
+            elif apply.__code__.co_argcount == 1:
+                d = apply(row)
+            elif apply.__code__.co_argcount == 2:
+                d = apply(row, prow)
+            elif apply.__code__.co_argcount == 3:
+                d = apply(prow, row, nrow)
+            elif apply.__code__.co_argcount > 3:
+                raise TypeError('apply function has too many arguments')
+            else:
+                raise TypeError
+            if d is not None:
+                self.log(id=eid, ts=timestamp, duration=dur, event=d)
+            else:
+                print(row)
+
+        try:
+            with open(file_path) as fobj:
+                fobj.seek(0)
+                num_lines = sum(1 for line in fobj) - 1
+                errors = 0
+        except:
+            num_lines = None
+
+        prv = None
+        cur = None
+        try:
+            o = pd.read_csv(file_path, chunksize=1, skiprows=skiprows)
+        except:
+            pass
+        else:
+            num_lines = None
+            with open(file_path) as fobj:
+                fobj.seek(0)
+                num_lines = sum(1 for line in fobj) - 1
+            lp = (lambda x: log_progress(x, size=num_lines)) if self._client.notebook else id
+            for x in lp(o):
+                for i, nxt in x.iterrows():
+                    if cur is not None:
+                        f(prv, cur, nxt)
+                    prv = cur
+                    cur = nxt
+            else:
+                f(prv, cur, None)
+            return None
+
+        try:
+            o = pd.read_excel(file_path, skiprows=skiprows)
+        except:
+            raise TypeError("wrong file type")
+        else:
+            num_lines = len(o)
+            lp = (lambda x: log_progress(x, size=num_lines)) if self._client.notebook else id
+            for i, nxt in lp(o.iterrows()):
+                if cur is not None:
+                    f(prv, cur, nxt)
+                prv = cur
+                cur = nxt
+            else:
+                f(prv, cur, None)
+            return None
+
+
+
 
     def where(self, filters):
         """Return stream with additional filters applied.
@@ -216,21 +295,8 @@ class Stream(object):
     def Event(self, *args, **kwargs):
         return Event(self._client, self, *args, **kwargs)
 
-    def describe(self, field, start=None, end=None):
-        """Describe a given numeric field.
-
-           Arguments:
-           field  -- A dotted field name for a numeric field in the stream.
-           start  -- Optional argument indicating start time in stream for calculations.
-           end    -- Optional argument indicating end time in stream for calculations.
-        """
-        x = self._client.field_stats(self, field, start, end)
-        if x.get('categorical'):
-            print("count\t{count}\nunique\t{unique}\ntop\t{top}\nfreq\t{freq}".format(**x['categorical']))
-        else:
-            p = x['numerical']
-            print("count\t{}\nmean\t{:.2f}\nstd\t{:.2f}\nmin\t{}\nmax\t{}".format(
-                p['count'], p['mean'], p['std'], p['min'], p['max']))
+    def __iter__(self):
+        return iter(self[:])
 
     def __getitem__(self, s):
         if type(s) == int:
@@ -311,7 +377,6 @@ class Stream(object):
             raise ValueError("Invalid event definition")
 
     def __delitem__(self, s):
-        print(s)
         if type(s) == datetime:
             raise ValueError("wrong type")
         elif type(s) == slice:
@@ -379,20 +444,68 @@ class Event(object):
     def __init__(self, client, stream, id=None, ts=None, data=None, event=None, duration=None, saved=False):
         self.stream = stream
         self.id = id
-        self.ts = ts if isinstance(ts, datetime) or ts is None else cts(ts)
-        self.data = data or event or {}
+        self.ts = ts
         self.duration = duration
+        self.data = data or event or None
         self._saved = saved
 
-    """
-    def get(self, *parts, params={}, headers={}):
-        if self.filters: params['filters'] = self.filters()
-        return self.stream.get(*(['events', self.id] + list(parts)), params=params, headers=headers)
+    @property
+    def data(self):
+        return self._data
 
-    def put(self, *parts, params={}, headers={}):
-        if self.filters: params['filters'] = self.filters()
-        return self.stream.put(*(['events', self.id] + list(parts)), params=params, headers=headers)
-    """
+    @data.setter
+    def data(self, d):
+        if d is None:
+            self._data = {}
+        else:
+            self._data = dict(d)
+
+    @property
+    def id(self):
+        return self._id
+
+    @id.setter
+    def id(self, val):
+        if val is None:
+            self._id = None
+        elif isinstance(val, str):
+            self._id = val
+        else:
+            self._id = repr(val)
+
+    @property
+    def ts(self):
+        return self._ts
+
+    @ts.setter
+    def ts(self, ts):
+        if ts is None:
+            self._ts = None
+        else:
+            self._ts = pd.to_datetime(ts).to_pydatetime()
+
+    @property
+    def duration(self):
+        return self._duration
+
+    @duration.setter
+    def duration(self, duration):
+        if type(duration) in (int, float):
+            if math.isnan(duration):
+                self._duration = None
+            elif duration < 0:
+                raise ValueError("Duration cannot be negative")
+            else:
+                self._duration = timedelta(seconds=duration)
+        elif isinstance(duration, time):
+            dt = duration
+            self._duration = timedelta(hours=dt.hour, minutes=dt.minute, seconds=dt.second, microseconds=dt.microsecond)
+        elif isinstance(duration, timedelta):
+            self._duration = duration
+        elif duration is None:
+            self._duration = None
+        else:
+            raise TypeError("invalid duration type")
 
     @property
     def exists(self):
@@ -419,7 +532,7 @@ class Event(object):
         if self.ts and self.duration:
             headers = {'start': iso8601(self.ts), 'end': iso8601(self.ts + self.duration)}
         elif self.ts:
-            headers = {'ts': iso8601(self.ts)}
+            headers = {'timestamp': iso8601(self.ts)}
         elif self.ts is None and self.duration is None:
             headers = {}
         else:
@@ -428,6 +541,8 @@ class Event(object):
             resp = self.stream.put('events', self.id, headers=headers, json=self.data)
         else:
             resp = self.stream.post('events', headers=headers, json=self.data)
+        if resp.status_code != 201:
+            print(self)
         if resp.status_code in [200, 201]:
             loc = resp.headers['Location']
             self.id = loc
@@ -1128,10 +1243,10 @@ class StreamsView(object):
 
 
 def log_progress(sequence, size=0, name='Uploaded'):
-    from ipywidgets import IntProgress, HTML, VBox
+    from ipywidgets import IntProgress, HTML, HBox
     from IPython.display import display
 
-    if size <= 200:
+    if size <= 20000:
         every = 1
     else:
         every = int(size / 200)
@@ -1139,21 +1254,21 @@ def log_progress(sequence, size=0, name='Uploaded'):
 
     progress = IntProgress(min=0, max=size, value=0)
     label = HTML()
-    box = VBox(children=[label, progress])
+    box = HBox(children=[progress, label])
     display(box)
     index = 0
     ts0 = datetime.utcnow()
-    label.value = u'{name}: {index} / {size} Events'.format(
+    label.value = u'<pre style="padding-top: 6px;">  {index} / {size}Events</pre>'.format(
         name=name,
         index=index,
         size=size
     )
     try:
         for record in sequence:
-            index += len(record)
+            index += 1
             if index == 1 or index % every == 0:
                 progress.value = index
-                label.value = u'{name}: {index} / {size} Events'.format(
+                label.value = u'<pre style="padding-top: 6px;">  {name}: {index} / {size} Events</pre>'.format(
                     name=name,
                     index=index,
                     size=size
@@ -1170,7 +1285,7 @@ def log_progress(sequence, size=0, name='Uploaded'):
         label.value = "{name} {index} Events in {time}".format(
             name=name,
             index=str(index or '?'),
-            time="{:.1f} seconds".format(td.total_seconds()) if td.total_seconds() < 60 else ts
+            time="{:.1f} seconds".format(td.total_seconds()) if td.total_seconds() < 60 else td
         )
 
 

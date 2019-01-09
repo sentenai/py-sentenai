@@ -1,8 +1,8 @@
 import dateutil
 import dateutil.tz
-import sys, base64, json
-from datetime import datetime, timedelta, tzinfo
-import json
+import sys, base64, math
+import simplejson as json
+from datetime import datetime, timedelta, tzinfo, time
 
 # Constants
 
@@ -61,6 +61,8 @@ def dts(obj):
     if isinstance(obj, datetime):
         serial = iso8601(obj)
         return serial
+    if isinstance(obj, time):
+        return time.isoformat()
     else:
         return obj
 
@@ -70,6 +72,20 @@ def divtime(l, r):
     divisor   = r.days * 3600 * 24 + r.seconds
     return int( numerator / divisor )
 
+class SentenaiEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, str):
+            return obj
+        if isinstance(obj, datetime):
+            return iso8601(obj) + "Z"
+        if isinstance(obj, time):
+            return obj.isoformat()
+
+        print(obj)
+        if type(obj) == float:
+            if math.isnan(obj):
+                return None
+        return json.JSONEncoder.default(self, serial)
 
 DTMIN = datetime.fromtimestamp((-2**62 + 1)/10**9).replace(tzinfo=dateutil.tz.tzutc())
 DTMAX = datetime.fromtimestamp((2**62 - 1)/10**9).replace(tzinfo=dateutil.tz.tzutc())

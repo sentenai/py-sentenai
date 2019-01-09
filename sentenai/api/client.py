@@ -8,11 +8,13 @@ import time
 
 import http.client as http_client
 import pandas as pd
+import simplejson as JSON
 
 from copy import copy
 from sentenai.exceptions import *
-from sentenai.utils import base64json
+from sentenai.utils import base64json, SentenaiEncoder
 from sentenai.api.stream import Stream
+from sentenai.api.query import Query
 from threading import Thread
 from queue import Queue
 
@@ -80,6 +82,8 @@ class BaseClient(object):
             self.auth_key, self.host)
 
     def _req(self, method, parts, params={}, headers={}, data=None):
+        if data:
+            headers['Content-Type'] = 'application/json'
         ps = {}
         if self.debug.debugging:
             print("parameters\n----------")
@@ -99,7 +103,7 @@ class BaseClient(object):
         if data is None:
             r = method("/".join([self.host]+list(parts)), params=ps, headers=headers)
         else:
-            r = method("/".join([self.host]+list(parts)), params=ps, headers=headers, json=data)
+            r = method("/".join([self.host]+list(parts)), params=ps, headers=headers, data=JSON.dumps(data, ignore_nan=True, cls=SentenaiEncoder))
 
         return self.debug.cache(r)
 
@@ -124,9 +128,13 @@ class Sentenai(BaseClient):
         BaseClient.__init__(self, auth_key, host)
         self.notebook = bool(notebook)
         self._queue = Queue(1024)
-        self._workers = [Thread(target=self._logger) for x in range(8)]
+        self._workers = [Thread(target=self._logger) for x in range(2)]
         for t in self._workers:
             t.start()
+
+    @property
+    def where(self):
+        return Query(self)
 
     def _logger(self):
         while True:
@@ -134,7 +142,8 @@ class Sentenai(BaseClient):
             while True:
                 try:
                     evt.create()
-                except SentenaiException:
+                except:
+                    print(evt)
                     time.sleep(1)
                 else:
                     break
@@ -145,17 +154,21 @@ class Sentenai(BaseClient):
         return Stream(self, id, filters)
 
     def __getitem__(self, s):
-        """Get stream via dict-like reference. Throws KeyError if it"""
+        """Get stream via dict-like reference. Throws KeyError if it doesn't exist."""
         if type(s) == str:
             x = self.get('streams', s)
             if x.status_code == 200:
                 return Stream(self, s, None)
             else:
                 raise KeyError("Stream `{}` not found".format(s))
-        elif type(s) == int:
-            return self.streams()[s]
+        elif type(s) == tuple and len(s) == 2:
+            x = self.get('streams', s[0])
+            if x.status_code == 200:
+                return Stream(self, s, s[1])
+            else:
+                raise KeyError("Stream `{}` not found".format(s))
         else:
-            return self.streams(s)
+            raise TypeError()
 
     def streams(self, q=None):
         """Get list of available streams.
@@ -220,3 +233,32 @@ class StreamsView(object):
             return [Stream(self._client, x['name']) for x in self._streams[i]]
         else:
             return Stream(self._client, id=self._streams[i]['name'])
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
