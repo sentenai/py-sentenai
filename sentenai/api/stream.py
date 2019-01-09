@@ -45,7 +45,7 @@ class Stream(object):
         self.meta = StreamMetadata(self)
 
     @property
-    def where(self):
+    def when(self):
         return Query(self._client, self)
 
     def __repr__(self):
@@ -207,7 +207,12 @@ class Stream(object):
     def where(self, filters):
         """Return stream with additional filters applied.
         """
-        return Stream(self, self._client, self.id, None if filters is None else self.filters & filters)
+        if filters is None:
+            return Stream(self._client, self.id, None)
+        elif self.filters is None:
+            return Stream(self._client, self.id, filters)
+        else:
+            return Stream(self._client, self.id, filters & filters)
 
     filtered = where
 
@@ -334,11 +339,11 @@ class Stream(object):
                 stop = start + s.stop
             # add limit via the step argument
             if s.step and s.step < 0:
-                return self.range(stop, start, abs(s.step), sorting='desc')
+                return self._range(stop, start, abs(s.step), sorting='desc')
             elif s.step:
-                return self.range(start, stop, s.step, sorting='asc')
+                return self._range(start, stop, s.step, sorting='asc')
             else:
-                return self.range(start, stop, sorting='asc')
+                return self._range(start, stop, sorting='asc')
         elif type(s) == str:
             x = self.Event(id=s).read()
             if x is None:
@@ -387,7 +392,7 @@ class Stream(object):
             self[s].delete()
 
 
-    def range(self, start, end, limit=None, sorting='asc'):
+    def _range(self, start, end, limit=None, sorting='asc'):
         """Get all of a stream's events between start (inclusive) and end (exclusive).
 
         Arguments:
@@ -415,6 +420,9 @@ class Stream(object):
         else:
             raise SentenaiException(resp.status_code)
 
+    def range(self, start, end, limit=None, sorting='asc'):
+        return StreamRange(self, start, end, limit, sorting)
+
     def tail(self, n=5):
         """Get all of a stream's events between start (inclusive) and end (exclusive).
 
@@ -424,7 +432,7 @@ class Stream(object):
            Result:
            A time ordered list of all events in a stream from `start` to `end`
         """
-        return self[::-1 * n]
+        return self.range(start, self.oldest.ts, self.newest.ts + timedelta(microseconds=1), limit=n, sorting='desc')
 
     def head(self, n=5):
         """Get all of a stream's events between start (inclusive) and end (exclusive).
@@ -435,9 +443,7 @@ class Stream(object):
            Result:
            A time ordered list of all events in a stream from `start` to `end`
         """
-        return self[::n]
-
-
+        return self.range(start, self.oldest.ts, self.newest.ts + timedelta(microseconds=1), limit=n)
 
 
 class Event(object):

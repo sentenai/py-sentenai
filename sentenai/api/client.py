@@ -14,7 +14,9 @@ from copy import copy
 from sentenai.exceptions import *
 from sentenai.utils import base64json, SentenaiEncoder
 from sentenai.api.stream import Stream
-from sentenai.api.query import Query
+#from sentenai.api.query import Query
+from sentenai.historiQL import EventPath, Returning, delta, Delta, Query, Select
+from sentenai.api.search import Search
 from threading import Thread
 from queue import Queue
 
@@ -122,6 +124,33 @@ class BaseClient(object):
     def patch(self, *parts, params={}, headers={}, json={}):
         return self._req(self.session.patch, parts, params, headers, data=json)
 
+class SQ(object):
+    def __init__(self, client):
+        self.client = client
+        self.timerange = None
+        self.query = None
+
+    def __getitem__(self, s):
+        x = SQ(self.client)
+        x.timerange = s
+        return x
+
+    def __call__(self, *args):
+        try:
+            p = Query(Select(*args)[self.timerange]) if self.timerange else Query(Select(*args))
+            return Search(self.client, p, start=self.timerange.start, end=self.timerange.stop) if self.timerange else Search(self.client, p)
+        finally:
+            self.query = None
+            self.timerange = None
+
+    def resample(self, *args, **kwargs):
+        return self().resample(*args, **kwargs)
+
+    def agg(self, *args, **kwargs):
+        return self().agg(*args, **kwargs)
+
+    def df(self, *args, **kwargs):
+        return self().df(*args, **kwargs)
 
 class Sentenai(BaseClient):
     def __init__(self, auth_key="", host="https://api.sentenai.com", notebook=False):
@@ -129,8 +158,8 @@ class Sentenai(BaseClient):
         self.notebook = bool(notebook)
         self._queue = Queue(1024)
         self._workers = [Thread(target=self._logger) for x in range(2)]
-        for t in self._workers:
-            t.start()
+        for t in self._workers: t.start()
+        self.select = SQ(self)
 
     @property
     def where(self):
