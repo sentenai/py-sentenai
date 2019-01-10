@@ -222,7 +222,7 @@ class Stream(object):
         """
         resp = self.get("oldest", params={'filters': self.filters})
         if resp.status_code == 200:
-            return Event(self._client, self, resp.headers['Location'], cts(resp.headers['Timestamp']), resp.json(), saved=True)
+            return Event(self._client, self, resp.headers['Location'], cts(resp.headers['Timestamp']), resp.json(), saved=True, duration=float(resp.headers['Duration']) if resp.headers.get('Duration') else None)
         elif resp.status_code == 404:
             return None
         else:
@@ -234,7 +234,7 @@ class Stream(object):
         """
         resp = self.get("newest", params={'filters': self.filters})
         if resp.status_code == 200:
-            return Event(self._client, self, resp.headers['Location'], cts(resp.headers['Timestamp']), resp.json(), saved=True)
+            return Event(self._client, self, resp.headers['Location'], cts(resp.headers['Timestamp']), resp.json(), saved=True, duration=float(resp.headers['Duration']) if resp.headers.get('Duration') else None)
         elif resp.status_code == 404:
             return None
         else:
