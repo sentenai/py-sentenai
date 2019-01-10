@@ -87,7 +87,7 @@ class ResultPage(object):
         maxd = max([
             float(r.duration.total_seconds())
             for r in self.results
-            if r.duration < timedelta.max])
+            if r.duration is not None and r.duration < timedelta.max])
 
         x = lambda r: int(round(r.duration.total_seconds() / maxd * 10)) * u"\u2588"
         df = pd.DataFrame([
