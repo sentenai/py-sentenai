@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='sentenai',
-    version='0.99.0.3',
+    version='0.99.1.0',
     description='Client library for Sentenai',
     long_description="",
     url='https://github.com/sentenai/py-sentenai',
@@ -26,7 +26,7 @@ setup(
     keywords='sentenai cloud sensor database',
     packages=['sentenai', 'sentenai.api'],
 
-    install_requires=['dateutils', 'pandas', 'pytz', 'requests', 'shapely', 'virtualtime', 'simplejson'],
+    install_requires=['dateutils', 'pandas', 'pytz', 'requests', 'shapely', 'virtualtime', 'simplejson', 'scipy'],
     extras_require={},
     package_data={},
     data_files=[],

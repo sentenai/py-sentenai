@@ -319,10 +319,6 @@ class ResultSet(object):
 
         return TD(tensors())
 
-
-
-
-
 class Result(object):
     def __init__(self, search, start, end, cursor):
         self.search = search
@@ -483,11 +479,11 @@ class Result(object):
     def __iter__(self):
         data = self._events()
         try:
-            streams = {k: Stream(self.search.client, s['name'], {}, None, True)
+            streams = {k: Stream(self.search.client, s['name'])
                        for k, s in data.get('streams', {}).items()}
         except KeyError:
             # TEMPORARY: REMOVE AFTER FIX
-            streams = {k: Stream(self.search.client, s['stream']['name'], {}, None, True)
+            streams = {k: Stream(self.search.client, s['stream']['name'])
                        for k, s in data.get('streams', {}).items()}
         return iter([Event(self.search.client, streams[e['stream']], e['id'], e['ts'], e['event'] or {})
                      for e in data['events']])
@@ -496,11 +492,11 @@ class Result(object):
         ss = []
         if type(i) is tuple:
             for s in self.streams:
-                if s.name in i:
+                if s.id in i:
                     ss.append(s)
         else:
             for s in self.streams:
-                if s.name == i:
+                if s.id == i:
                     ss.append(s)
         return RView(self, ss)
 
@@ -527,7 +523,7 @@ class RView(object):
         rd = self._view()
         vs = []
         for k, v in rd.items():
-            vs.append("<div><b>{}</b></div>".format(k.name) + json_normalize([x.json(df=True) for x in v])._repr_html_())
+            vs.append("<div><b>{}</b></div>".format(k.id) + json_normalize([x.json(df=True) for x in v])._repr_html_())
 
         return "<hr/>".join(vs)
 

@@ -86,7 +86,7 @@ class ProjMath(Projection):
         self.rhs = p2
         self.op = op
 
-    def __call__(self):
+    def __call__(self, bound=None):
 
         def convert(p):
             if isinstance(p, float):
@@ -96,12 +96,14 @@ class ProjMath(Projection):
             elif isinstance(p, EventPath):
                 return {'var': ('event',) + p._attrlist}
             elif isinstance(p, ProjMath):
-                return p()
+                return p(bound)
             elif isinstance(p, ProjAgg):
                 return p()
             elif isinstance(p, ProjShift):
                 return p()
             elif isinstance(p, ProjRolling):
+                return p()
+            elif isinstance(p, ProjZ):
                 return p()
             else:
                 raise QuerySyntaxError("projection math with non-numeric types is unsupported.")
@@ -148,7 +150,7 @@ class Proj(object):
         self.proj = proj
         self.resample = resample
 
-    def __call__(self):
+    def __call__(self, bound=None):
         if self.proj is True:
             return {'stream': self.stream(), 'projection': "default"}
         elif self.proj is False:
@@ -164,8 +166,12 @@ class Proj(object):
                         new[key] = [{'var': z}]
                     elif isinstance(val, ProjShift):
                         new[key] = [val()]
+                    elif isinstance(val, ProjZ):
+                        new[key] = [val(bound)]
+                    elif isinstance(val, ProjDiff):
+                        new[key] = [val(bound)]
                     elif isinstance(val, ProjMath):
-                        new[key] = [val()]
+                        new[key] = [val(bound)]
                     elif isinstance(val, ProjRolling):
                         new[key] = [val()]
                     elif isinstance(val, ProjAgg):
@@ -201,6 +207,11 @@ class ProjAgg(Projection):
         self.n = n
         return self
 
+    def lag(self, n):
+        self.n = -1 * n
+        return self
+
+
     def __call__(self):
         x = {'var': ('event',) + self.path}
         if self.n is not None:
@@ -216,6 +227,42 @@ class ProjShift(Projection):
 
     def __call__(self):
         return {'var': ('event',) + self.path, "shift": self.n}
+
+class ProjZ(Projection):
+    def __init__(self, path, stream=None, n=None):
+        self.path = path
+        self.n = n
+        self.stream = stream
+
+    def __call__(self, bound):
+        return {
+            'op': '/',
+            'lhs': {
+                'op': '-',
+                'lhs': {'var': ('event',) + self.path, 'shift': self.n},
+                'rhs': {'lit': {'val': bound.fields[tuple(self.path)].mean, 'type': 'double'}},
+            },
+            'rhs': {
+                'lit': {'val': bound.fields[tuple(self.path)].std, 'type': 'double'}
+            }
+        }
+
+    def lag(self, n):
+        return ProjZ(self.path, n=n, stream=self.stream)
+
+    def diff(self, n=1):
+        return ProjDiff(self, n)
+
+class ProjDiff(Projection):
+    def __init__(self, x, differences=1):
+        self.x = x
+        self.differences = differences
+
+    def __call__(self, bound=None):
+        d = self.x(bound)
+        for i in range(1, self.differences + 1):
+            d = {'op': '-', 'lhs': d, 'rhs': self.x.lag(i)(bound)}
+        return d
 
 
 class ProjRolling(Projection):
@@ -1059,8 +1106,12 @@ class EventPath(Projection):
     def __call__(self, *args, **kwargs):
         if self._attrlist[-1] in ['sum', 'mean', 'min', 'max', 'std']:
             return ProjAgg(self._attrlist[-1], self._attrlist[:-1])
-        elif self._attrlist[-1] == 'shift':
+        elif self._attrlist[-1] in ['shift', 'lag']:
             return ProjShift(self._attrlist[:-1], *args)
+        elif self._attrlist[-1] in ['z', 'standardize']:
+            return ProjZ(self._attrlist[:-1], *args)
+        elif self._attrlist[-1] == 'diff':
+            return ProjDiff(self._attrlist[:-1], *args)
         elif self._attrlist[-1] == 'rolling':
             return ProjRolling(self._attrlist[:-1], *args, **kwargs)
 
@@ -1254,8 +1305,12 @@ class StreamPath(Projection):
     def __call__(self, *args, **kwargs):
         if self._attrlist[-1] in ['sum', 'mean', 'min', 'max', 'std']:
             return ProjAgg(self._attrlist[-1], self._attrlist[:-1], stream=self._stream)
-        elif self._attrlist[-1] == 'shift':
+        elif self._attrlist[-1] in ['shift', 'lag']:
             return ProjShift(self._attrlist[:-1], stream=self._stream, *args)
+        elif self._attrlist[-1] == 'diff':
+            ProjDiff(self.__class__(self._attrlist[:-1], stream=self._stream), *args)
+        elif self._attrlist[-1] in ['z', 'standardize']:
+            ProjZ(self._attrlist[:-1], stream=self._stream)
         elif self._attrlist[-1] == 'rolling':
             return ProjRolling(self._attrlist[:-1], stream=self._stream, *args, **kwargs)
         else:

@@ -3,7 +3,9 @@ import json as JSON
 import pytz
 from copy import copy
 import re, sys, time, base64, random, types
-import requests
+from scipy import fftpack
+from scipy.stats import wasserstein_distance
+import requests, dateutil
 from time import sleep
 
 import numpy as np
@@ -13,7 +15,7 @@ from pandas.io.json import json_normalize
 from datetime import timedelta, datetime, time
 from functools import partial
 from multiprocessing.pool import ThreadPool
-from threading import Lock
+from threading import Lock, Thread
 from shapely.geometry import Point
 
 from sentenai.exceptions import *
@@ -43,6 +45,7 @@ class Stream(object):
         self.id = self.name = self._name = quote(id.encode('utf-8'))
         self.filters = filters
         self.meta = StreamMetadata(self)
+        self._cache = {}
 
     @property
     def when(self):
@@ -201,7 +204,29 @@ class Stream(object):
                 f(prv, cur, None)
             return None
 
-
+    def add(self, name, features):
+        ### Work around
+        # t0 = self[t0::-10][-1].ts
+        s = self._client.Stream(self.id + '-' + name)
+        def f(self, name, features, s):
+            t0 = self.oldest.ts
+            t1 = self.newest.ts + timedelta(microseconds=1)
+            skip = False
+            while t0 < t1:
+                try:
+                    data = [s.Event(**x) for x in self.range(t0, t1, 100).json(features)]
+                    for evt in (data[10:] if skip else data):
+                        s.log(id=evt.id, ts=evt.ts, duration=evt.duration, event=evt.data)
+                    if len(data) > 10:
+                        t0 = (data[-10].ts).replace(tzinfo=dateutil.tz.tzutc())
+                        skip  = True
+                    else:
+                        break
+                except Exception as e:
+                    print(datetime.utcnow(), e)
+        self._job = Thread(target=f, name="add-features", args=(self, name, features, s))
+        self._job.start()
+        return s
 
 
     def where(self, filters):
@@ -246,13 +271,18 @@ class Stream(object):
     @property
     def fields(self):
         """Get a view of all fields in this stream."""
-        resp = self.get('fields')
-        if resp.status_code == 200:
-            return Fields(self, resp.json())
-        elif resp.status_code == 404:
-            return None
+        if 'fields' in self._cache and self._cache['fields']['expires'] > datetime.utcnow():
+            return Fields(self, self._cache['fields']['val'])
         else:
-            raise SentenaiException(resp.status_code)
+            resp = self.get('fields')
+            if resp.status_code == 200:
+                data = resp.json()
+                self._cache['fields'] = {'expires': datetime.utcnow() + timedelta(seconds=60), 'val': data}
+                return Fields(self, data)
+            elif resp.status_code == 404:
+                return None
+            else:
+                raise SentenaiException(resp.status_code)
 
     def _fields(self, start=None, end=None):
         """Get a view of all fields in this stream."""
@@ -432,7 +462,7 @@ class Stream(object):
            Result:
            A time ordered list of all events in a stream from `start` to `end`
         """
-        return self.range(start, self.oldest.ts, self.newest.ts + timedelta(microseconds=1), limit=n, sorting='desc')
+        return self.range(self.oldest.ts, self.newest.ts + timedelta(microseconds=1), limit=n, sorting='desc')
 
     def head(self, n=5):
         """Get all of a stream's events between start (inclusive) and end (exclusive).
@@ -443,7 +473,7 @@ class Stream(object):
            Result:
            A time ordered list of all events in a stream from `start` to `end`
         """
-        return self.range(start, self.oldest.ts, self.newest.ts + timedelta(microseconds=1), limit=n)
+        return self.range(self.oldest.ts, self.newest.ts + timedelta(microseconds=1), limit=n)
 
 
 class Event(object):
@@ -729,17 +759,21 @@ class Field(object):
 
     @property
     def stats(self):
-        if self._stats is None:
+        try:
+            x = self._stream._cache[(tuple(self._path), 'stats')]
+            if x['expires'] < datetime.utcnow():
+                raise ValueError()
+            else:
+                return x['val']
+        except:
             params = {'start': self._start, 'end': self._end}
             resp = self._stream.get('fields', ".".join(["event"] + self._path), 'stats', params=params)
             if resp.status_code == 200:
                 data = resp.json()
-                self._stats = data
+                self._stream._cache[(tuple(self._path), 'stats')] = {'expires': datetime.utcnow() + timedelta(minutes=2), 'val': data}
                 return data
             else:
                 raise SentenaiException("can't get stats")
-        else:
-            return self._stats
 
     @property
     def values(self):
@@ -796,6 +830,8 @@ class Fields(object):
         self._end = end
 
     def __getitem__(self, s):
+        if isinstance(s, EventPath):
+            s = tuple(s)
         if type(s) is slice:
             return Fields(self.stream, self._fields[s], self._view, start=self._start, end=self._end)
         elif type(s) is int:
@@ -812,6 +848,8 @@ class Fields(object):
                     return Field(self.stream, field['path'], start=self._start, end=self._end)
             else:
                 raise KeyError
+        else:
+            raise TypeError
 
     def __repr__(self):
         return repr(self._fields)
@@ -987,6 +1025,55 @@ class Result(object):
         data = {'select': {'expr': 'true'}}
         self.stream
 
+def fft(feature, window, stride=1, n=None):
+    return FFTS(window, stride, feature, n=n)
+
+class FFTS(object):
+    def __init__(self, window, stride, *features, n=None):
+        self.window = window
+        self.stride = stride
+        self.features = features
+        self.data = None
+        self._i = 0
+        self._proj = dict(("feature-{:04d}".format(i), arg) for i, arg in enumerate(self.features))
+        self._prev = None
+        self._n = n
+
+    def __rmatmul__(self, ds):
+        self.data = ds.json(self._proj)
+        return self
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return self.next()
+
+    def next(self):
+        start = self._i * self.stride
+        evts = self.data[start:start+self.window]
+        if len(evts) < self.window:
+            raise StopIteration
+        keys = sorted(list(self._proj.keys()))
+        if len(keys) == 1:
+            arrs = [e['event'].get(keys[0]) for e in evts]
+            self._i += 1
+            x = FFT(cts(evts[0]['ts']), cts(evts[-1]['ts']), arrs, self._prev, self._n)
+            self._prev = x.fft
+            return x
+        else:
+            arrs = tuple([[e['event'].get(k) for e in evts] for k in keys])
+            self._i += 1
+            self._prev = fftpack.fftn(arrs)
+            return self._prev
+
+class FFT(object):
+    def __init__(self, start, stop, samples, prev=None, n=None):
+        self._n = None
+        self.fft = fftpack.fft(samples, n=n)
+        self.start = start
+        self.stop = stop
+        self.emd = wasserstein_distance(self.fft.real, prev.real) if prev is not None else None
 
 
 
@@ -1013,13 +1100,20 @@ class StreamRange(object):
             else:
                 lag, horiz = window, 0
             return self.reshape(lag=lag, horizon=horiz, features=(features,) if isinstance(features, ProjAgg) else features)
-        elif self.frequency is None:
-            if check_proj(d) == "agg":
-                return self.agg(**d)
+        elif isinstance(d, dict):
+            corder = [k for k in d]
+            if self.frequency is None:
+                if check_proj(d) == "agg":
+                    return self.agg(**d)[corder]
+                else:
+                    return self.df(**d)[corder]
             else:
-                return self.df(**d)
+                return self.agg(**d)[corder]
+        elif hasattr(d, "__rmatmul__"):
+            return d.__rmatmul__(self)
         else:
-            return self.agg(**d)
+            raise TypeError("unsupported projection type")
+
 
     def __getitem__(self, i):
         params = {'limit': self.limit, 'sort': self.sort}
@@ -1094,6 +1188,22 @@ class StreamRange(object):
         else:
             return pd.DataFrame()
 
+    def json(self, proj=None):
+        params = {}
+        if proj is not None:
+            with self.stream as s:
+                p = Proj(s, proj, resample=self.frequency)(self.stream)['projection']
+                params['projection'] = p
+        params['limit'] = self.limit
+        params['sort'] = self.sort
+        params['frequency'] = self.frequency
+        params['fill'] = self.fill
+        resp = self.stream.get('start', iso8601(self.start), 'end', iso8601(self.end), params=params)
+        if resp.status_code == 200:
+            return json.loads(resp.text)
+        else:
+            raise SentenaiException(resp.status_code)
+
     def df(self, *args, **kwargs):
         if self.frequency is not None:
             raise Exception("Cannot call `.df()` on resampled data.")
@@ -1116,13 +1226,13 @@ class StreamRange(object):
                 base[segments[-1]] = arg
 
         with self.stream as s:
-            p = Proj(s, kwargs)()['projection']
+            p = Proj(s, kwargs)(self.stream)['projection']
 
 
         params = {}
         if kwargs:
             with self.stream as s:
-                p = Proj(s, kwargs, resample=self.frequency)()['projection']
+                p = Proj(s, kwargs, resample=self.frequency)(self.stream)['projection']
                 params['projection'] = p
         params['limit'] = self.limit
         params['sort'] = self.sort
