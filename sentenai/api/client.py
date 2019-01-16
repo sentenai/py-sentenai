@@ -41,7 +41,7 @@ class Debug(object):
         requests_log = logging.getLogger("requests.packages.urllib3")
         requests_log.setLevel(0)
         requests_log.propagate = False
-        logging.disable()
+        logging.disable(logging.CRITICAL)
         self.resp_cache = None
         self.debugging = False
 
