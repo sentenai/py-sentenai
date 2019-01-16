@@ -52,7 +52,7 @@ class Stream(object):
         return Query(self._client, self)
 
     def __repr__(self):
-        return f'Stream(id="{self.id}")'
+        return 'Stream(id="{}")'.format(self.id)
 
     def get(self, *parts, params={}, headers={}):
         if self.filters: params['filters'] = self.filters()

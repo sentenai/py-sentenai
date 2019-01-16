@@ -786,7 +786,7 @@ class Stream(HistoriQL):
     used when writing queries, access specific API end points, and manipulating
     result sets.
     """
-    def __init__(self, name, tz, filters):
+    def __init__(self, name, tz=None, filters=None):
         """Initialize a stream object.
 
         Arguments:
