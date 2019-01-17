@@ -988,7 +988,7 @@ class EventPath(Projection):
             name -- the name of the variable to get.
         """
         if type(name) is int:
-            return "asdfasdfasd"
+            raise NotImplemented
         if hasattr(name, "isalnum"):
             return EventPath(self._attrlist + (name,))
         else:
@@ -1003,11 +1003,16 @@ class EventPath(Projection):
             val -- The value to compare the stream variable to.
         """
         if isinstance(val, CondChain):
-            val.lcond = Cond(self, 'in' if type(val.lval) is list else '==', val.lval)
+            if isinstance(val.lval, list):
+                val.lcond = Or(*[Cond(self, '==', x) for x in val.lval])
+            else:
+                val.lcond = Cond(self, '==', val.lval)
             val.lpath = self
             return val.reify()
+        elif isinstance(val, list):
+            return Or(*[Cond(self, '==', x) for x in val])
         else:
-            return Cond(self, 'in' if type(val) is list else '==', val)
+            return Cond(self, '==', val)
 
     def __contains__(self, path):
         joiner = "$$$$%$$$$"
@@ -1209,11 +1214,16 @@ class StreamPath(Projection):
             val -- The value to compare the stream variable to.
         """
         if isinstance(val, CondChain):
-            val.lcond = Cond(self, 'in' if type(val.lval) is list else '==', val.lval)
+            if isinstance(val.lcond, list):
+                val.lcond = Or(*[Cond(self, '==', x) for x in val.lcond])
+            else:
+                val.lcond = Cond(self, '==', val.lval)
             val.arr = [self, '=='] + val.arr
             return val.reify()
+        elif isinstance(val, list):
+            return Or(*[Cond(self, '==', x) for x in val])
         else:
-            return Cond(self, 'in' if type(val) is list else '==', val)
+            return Cond(self, '==', val)
 
     def __ne__(self, val):
         """Create inequality conditions for event variable.
