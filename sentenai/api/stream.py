@@ -105,7 +105,7 @@ class Stream(object):
         data = {} if event is None else event
         self._client._queue.put(self.Event(data=data, ts=ts, id=id, duration=duration))
 
-    def upload(self, file_path, id=None, ts="timestamp", duration=None, threads=4, apply=dict, skiprows=None, ):
+    def upload(self, file_path, id=None, ts="timestamp", duration=None, threads=4, apply=dict, skiprows=None, sep=','):
         def f(prow, row, nrow):
             if type(ts) == str:
                 timestamp = row[ts]
@@ -169,7 +169,7 @@ class Stream(object):
         prv = None
         cur = None
         try:
-            o = pd.read_csv(file_path, chunksize=1, skiprows=skiprows)
+            o = pd.read_csv(file_path, chunksize=1, skiprows=skiprows, sep=sep)
         except:
             pass
         else:
@@ -517,6 +517,8 @@ class Event(object):
     def ts(self, ts):
         if ts is None:
             self._ts = None
+        elif isinstance(ts, np.int64) or isinstance(ts, int):
+            self._ts = datetime.utcfromtimestamp(ts)
         else:
             self._ts = pd.to_datetime(ts).to_pydatetime()
 
