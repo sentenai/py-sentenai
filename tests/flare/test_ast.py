@@ -2,10 +2,7 @@
 import pytest
 from sentenai import Sentenai, hql, V
 from sentenai.historiQL import ast_dict, Returning, Or, Lasting, Within, After, Select
-from sentenai.api.stream import Stream
-
-def stream(name, *filters):
-    return Stream(None, name, {}, None, True, *filters)
+from sentenai.hql import stream
 
 def test_basic_select_span():
     s = stream("S")
