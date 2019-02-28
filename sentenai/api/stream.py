@@ -103,7 +103,7 @@ class Stream(object):
 
     def log(self, event=None, ts=None, id=None, duration=None):
         data = {} if event is None else event
-        self._client._queue.put(self.Event(data=data, ts=ts, id=id, duration=duration))
+        self._client.queue.put(self.Event(data=data, ts=ts, id=id, duration=duration))
 
     def upload(self, file_path, id=None, ts="timestamp", duration=None, threads=4, apply=dict, skiprows=None, sep=','):
         def f(prow, row, nrow):

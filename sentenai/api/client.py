@@ -152,14 +152,23 @@ class SQ(object):
     def df(self, *args, **kwargs):
         return self().df(*args, **kwargs)
 
+
+
 class Sentenai(BaseClient):
-    def __init__(self, auth_key="", host="https://api.sentenai.com", notebook=False):
+    def __init__(self, auth_key="", host="https://api.sentenai.com", notebook=False, qlen=1024, workers=4):
         BaseClient.__init__(self, auth_key, host)
         self.notebook = bool(notebook)
-        self._queue = Queue(1024)
-        self._workers = [Thread(target=self._logger) for x in range(2)]
+        self.queue = Queue(qlen)
+        self._workers = [Thread(target=self._logger, daemon=True) for x in range(workers if 0 < workers <= 32 else 4)]
         for t in self._workers: t.start()
         self.select = SQ(self)
+
+    def wait(self):
+        """
+        Wait for all background events in queue to be flushed from the queue.
+        """
+        while not self.queue.empty():
+            time.sleep(.1)
 
     @property
     def where(self):
@@ -167,7 +176,7 @@ class Sentenai(BaseClient):
 
     def _logger(self):
         while True:
-            evt = self._queue.get()
+            evt = self.queue.get()
             while True:
                 try:
                     evt.create()
@@ -176,7 +185,6 @@ class Sentenai(BaseClient):
                     time.sleep(1)
                 else:
                     break
-
 
 
     def Stream(self, id, *filters):
