@@ -959,7 +959,7 @@ class StreamMetadata(object):
 
     def __getitem__(self, key):
         self._meta = self.read()
-        return self._meta()[key]
+        return self._meta[key]
 
     def __setitem__(self, key, val):
         self._meta = self.read()
