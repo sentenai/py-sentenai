@@ -11,7 +11,6 @@ from datetime import datetime, timedelta, tzinfo
 import datetime as dt
 
 import http.client as http_client
-import pandas as pd
 import numpy as np
 import simplejson as JSON
 
@@ -70,7 +69,7 @@ class SentenaiEncoder(JSON.JSONEncoder):
             return obj
         if isinstance(obj, datetime):
             return iso8601(obj)
-        if isinstance(obj, pd.datetime64):
+        if isinstance(obj, np.datetime64):
             return iso8601(obj)
         if isinstance(obj, dt.time):
             return obj.isoformat()
