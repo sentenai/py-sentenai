@@ -1,0 +1,208 @@
+import math
+from datetime import datetime, timedelta
+from sentenai.api import API, dt64, td64, iso8601
+
+
+class Events(API):
+    def __init__(self, parent):
+        API.__init__(self, parent._credentials, *parent._prefix, "events")
+        self._parent = parent
+
+    @property
+    def _params(self):
+        if self._parent._filters:
+            return {'filters': self._parent._filters}
+        else:
+            return {}
+
+    def __repr__(self):
+        return repr(self._parent) + ".events"
+
+    def __iter__(self):
+        raise NotImplemented("?")
+
+    def __delitem__(self, i):
+        res = self._delete(i)
+        if res.status_code == 404:
+            raise KeyError("Event does not exist.")
+        elif res.status_code != 200:
+            raise Exception(res.status_code)
+
+    def __len__(self):
+        res = self._head(params=self._params)
+        return int(res.headers['events'])
+
+    def __setitem__(self, key, event):
+        event.id = key
+        self.insert(event)
+
+    def __getitem__(self, i):
+        if isinstance(i, str):
+            # this is get by id
+            res = self._get(i)
+            if res.status_code == 200:
+                ej = res.json()
+                return Event(id=i, ts=ej['ts'], duration=ej.get("duration"), data=ej['event'] or None)
+            elif res.status_code == 404:
+                raise KeyError("Events does not exist")
+            else:
+                raise Exception(res.status_code)
+
+        elif isinstance(i, int):
+            if i == 0:
+                resp = self._get(params={'sort': 'asc', 'limit': 1, 'filters': self._params['filters']})
+            elif i == -1:
+                resp = self._get(params={'sort': 'desc', 'limit': 1, 'filters': self._params['filters']})
+            elif i < -1:
+                resp = self._get(params={'offset': abs(i) - 1, 'sort': 'desc', 'limit': 1, 'filters': self._params['filters']})
+            elif i > 0:
+                resp = self._get(params={'offset': i, 'sort': 'asc', 'limit': 1, 'filters': self._params['filters']})
+
+            if resp.status_code == 200:
+                ej = resp.json()[0]
+                e = Event(id=ej['id'], ts=ej['ts'], duration=ej.get("duration"), data=ej['event'] or None)
+                return e
+            elif resp.status_code == 404:
+                raise IndexError("Stream empty.")
+            else:
+                raise Exception(resp.status_code)
+
+        elif isinstance(i, slice):
+            if isinstance(i.start, datetime) or isinstance(i.stop, datetime):
+                # time slice
+                params = self._params
+                params['sort'] = 'asc'
+                if i.start is not None:
+                    params['start'] = iso8601(i.start)
+                if i.stop is not None:
+                    params['end'] = iso8601(i.stop)
+                if i.step is not None:
+                    params['limit'] = i.step
+                if 'start' in params and 'end' in params:
+                    if i.start > i.stop:
+                        params['start'], params['end'] = params['end'], params['start']
+                        params['sort'] = 'desc'
+
+            elif isinstance(i.start, int) or isinstance(i.stop, int) or (i.start is None and i.stop is None):
+                # number slice
+                params = self._params
+                params['sort'] = 'asc'
+                if i.start is not None:
+                    if i.stop is not None and i.stop < i.start:
+                        params['offset'] = i.stop
+                    else:
+                        params['offset'] = i.start
+                if i.stop is not None:
+                    if i.start is not None and i.stop < i.start:
+                        params['limit'] = i.start - i.stop
+                        params['sort'] = 'desc'
+                    elif i.start is not None:
+                        params['limit'] = i.stop - i.start
+                        params['sort'] = 'asc'
+                    else:
+                        params['limit'] = i.stop
+                        params['sort'] = 'asc'
+            else:
+                raise ValueError("invalid slice type")
+
+            resp = self._get(params=params)
+            if resp.status_code == 200:
+                return [Event(id=ej['id'], ts=ej['ts'], duration=ej.get("duration"), data=ej['event'] or None) for ej in resp.json()]
+            else:
+                raise Exception(resp.status_code)
+        else:
+            raise ValueError("input must be either string or slice")
+
+    def update(self, evt):
+        hdrs = {}
+        if evt.id is None:
+            raise ValueError("Event id required for updates.")
+        if evt.ts is not None:
+            hdrs["timestamp"] = iso8601(dt64(evt.ts))
+        if evt.duration is not None:
+            hdrs["duration"] = str(td64(evt.duration).astype(float) / 1000000000.)
+        self._put(evt.id, json=evt.data, headers=hdrs)
+
+    def insert(self, evt):
+        hdrs = {}
+        if evt.ts is not None and evt.duration is None:
+            hdrs["timestamp"] = iso8601(dt64(evt.ts))
+        elif evt.duration is not None:
+            hdrs['start'] = iso8601(evt.ts)
+            hdrs["end"] = iso8601(evt.ts + evt.duration)
+
+        if evt.id is not None:
+            r = self._put(evt.id, json=evt.data, headers=hdrs)
+            if r.status_code in [200, 201]:
+                return self[r.headers['Location']]
+            else:
+                raise Exception(r.status_code)
+        else:
+            r = self._post(json=evt.data, headers=hdrs)
+            if r.status_code in [200, 201]:
+                return self[r.headers['Location']]
+            else:
+                raise Exception(r.status_code)
+
+    def remove(self, evt):
+        del self[evt.id]
+
+
+
+class Event(object):
+    def __init__(self, id=None, ts=None, duration=None, data=None):
+        self.id = str(id) if id is not None else None
+        self.ts = dt64(ts) if ts is not None else None
+        self.duration = td64(duration) if duration is not None else None
+        self.data = data
+
+    def __repr__(self):
+        x = ["{}={}".format(k, repr(getattr(self, k)))
+                for k in ("id", "ts", "duration", "data")
+                if getattr(self, k) is not None]
+        return "Event({})".format(", ".join(x))
+
+    def __len__(self):
+        return self.duration
+
+    @property
+    def start(self):
+        if self.ts and self.duration:
+            return self.ts
+
+    @property
+    def end(self):
+        if self.ts and self.duration:
+            return self.ts + self.duration
+
+    def __lt__(self, other):
+        if not isinstance(other, Event):
+            raise TypeError("Can only compare events.")
+        return self.ts < (other.ts or datetime.max) or self.ts == other.ts and self.duration < other.duration
+
+    def __le__(self, other):
+        if not isinstance(other, Event):
+            raise TypeError("Can only compare events.")
+        return self.ts < other.ts or self.ts == other.ts and self.duration <= other.duration
+
+    def __eq__(self, other):
+        if not isinstance(other, Event):
+            raise TypeError("Can only compare events.")
+        return self.ts == other.ts and self.duration == other.duration
+
+    def __gt__(self, other):
+        if not isinstance(other, Event):
+            raise TypeError("Can only compare events.")
+        return self.ts > other.ts or self.ts == other.ts and self.duration > other.duration
+
+    def __ge__(self, other):
+        if not isinstance(other, Event):
+            raise TypeError("Can only compare events.")
+        return self.ts > other.ts or self.ts == other.ts and self.duration >= other.duration
+
+    def __ne__(self, other):
+        if not isinstance(other, Event):
+            raise TypeError("Can only compare events.")
+        return self.ts != other.ts or self.duration != other.duration
+
+
