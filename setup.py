@@ -24,9 +24,9 @@ setup(
         'Programming Language :: Python :: 3.7',
     ],
     keywords='sentenai cloud sensor database',
-    packages=['sentenai', 'sentenai.api'],
+    packages=['sentenai', 'sentenai.stream', 'sentenai.pattern', 'sentenai.view'],
 
-    install_requires=['dateutils', 'pandas', 'pytz', 'requests', 'shapely', 'virtualtime', 'simplejson', 'scipy'],
+    install_requires=['dateutils', 'pytz', 'requests', 'shapely', 'simplejson', 'numpy'],
     extras_require={},
     package_data={},
     data_files=[],
