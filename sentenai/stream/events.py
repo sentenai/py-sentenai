@@ -37,6 +37,7 @@ class Events(API):
         self.insert(event)
 
     def __getitem__(self, i):
+
         if isinstance(i, str):
             # this is get by id
             res = self._get(i)
@@ -48,16 +49,22 @@ class Events(API):
             else:
                 raise Exception(res.status_code)
 
-        elif isinstance(i, int):
-            if i == 0:
-                resp = self._get(params={'sort': 'asc', 'limit': 1, 'filters': self._params['filters']})
-            elif i == -1:
-                resp = self._get(params={'sort': 'desc', 'limit': 1, 'filters': self._params['filters']})
-            elif i < -1:
-                resp = self._get(params={'offset': abs(i) - 1, 'sort': 'desc', 'limit': 1, 'filters': self._params['filters']})
-            elif i > 0:
-                resp = self._get(params={'offset': i, 'sort': 'asc', 'limit': 1, 'filters': self._params['filters']})
+        params = self._params
 
+        if isinstance(i, int):
+            params['limit'] = 1
+            if i == 0:
+                params['sort'] = 'asc'
+            elif i == -1:
+                params['sort'] = 'desc'
+            elif i < -1:
+                params['offset'] = abs(i) - 1
+                params['sort'] = 'desc'
+            elif i > 0:
+                params['offset'] = i
+                params['sort'] = 'asc'
+
+            resp = self._get(params=params)
             if resp.status_code == 200:
                 ej = resp.json()[0]
                 e = Event(id=ej['id'], ts=ej['ts'], duration=ej.get("duration"), data=ej['event'] or None)
@@ -70,7 +77,6 @@ class Events(API):
         elif isinstance(i, slice):
             if isinstance(i.start, datetime) or isinstance(i.stop, datetime):
                 # time slice
-                params = self._params
                 params['sort'] = 'asc'
                 if i.start is not None:
                     params['start'] = iso8601(i.start)
@@ -85,7 +91,6 @@ class Events(API):
 
             elif isinstance(i.start, int) or isinstance(i.stop, int) or (i.start is None and i.stop is None):
                 # number slice
-                params = self._params
                 params['sort'] = 'asc'
                 if i.start is not None:
                     if i.stop is not None and i.stop < i.start:

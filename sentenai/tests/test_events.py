@@ -33,17 +33,17 @@ def test_update_event(client):
 
 @pytest.fixture(scope='module')
 def evts_stream(client, request):
-    if client.streams['test-events']:
-        del client.streams['test-events']
+    if client.streams['pytest-events']:
+        del client.streams['pytest-events']
     def teardown():
         for i in range(20):
-            del client.streams['test-events'].events[str(i)]
-        del client.streams['test-events']
+            del client.streams['pytest-events'].events[str(i)]
+        del client.streams['pytest-events']
     for i in range(20):
-        client.streams['test-events'].events.insert(Event(id=str(i), ts=datetime(2015,1,1+i), data={"i": i}))
+        client.streams['pytest-events'].events.insert(Event(id=str(i), ts=datetime(2015,1,1+i), data={"i": i}))
     request.addfinalizer(teardown)
     time.sleep(5)
-    return client.streams['test-events']
+    return client.streams['pytest-events']
 
 
 def test_events_length(client, evts_stream):
