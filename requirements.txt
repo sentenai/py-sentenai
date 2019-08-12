@@ -1,4 +1,4 @@
-certifi==2017.4.17
+certifi==2019.6.16
 chardet==3.0.4
 coverage==4.4.1
 dateutils==0.6.6
