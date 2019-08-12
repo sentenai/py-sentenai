@@ -43,10 +43,12 @@ def dt64(dt):
 def td64(td):
     if isinstance(dt, float):
         return np.timedelta64(int(round(td*1000000000)), 'ns')
-    elif isinstance(td, timedelta):
-        return np.timedelta64(td)
     elif isinstance(td, np.timedelta64):
         return td
+    elif isinstance(td, int):
+        return np.timedelta64(td, 'ns')
+    elif isinstance(td, timedelta):
+        return np.timedelta64(td)
     else:
         raise TypeError("Cannot convert `{}` to timedelta64".format(type(td)))
 

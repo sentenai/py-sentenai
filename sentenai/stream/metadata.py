@@ -7,7 +7,6 @@ class Metadata(API):
         API.__init__(self, parent._credentials, *parent._prefix, 'metadata')
         self._parent = parent
 
-
     def clear(self):
         resp = self._put(json={})
         if resp.status_code not in (200, 204):

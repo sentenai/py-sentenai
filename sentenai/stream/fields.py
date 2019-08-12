@@ -1,5 +1,6 @@
 from sentenai.api import API, iso8601, dt64, td64
 from sentenai.view.expression import Var
+from sentenai.pattern.expression import Path
 
 class Fields(API):
     def __init__(self, parent):
@@ -25,7 +26,7 @@ class Fields(API):
             return Field(self, self._stream, key)
 
 
-class Field(API, Var):
+class Field(API, Var, Path):
     def __init__(self, parent, stream, *path):
         API.__init__(self, parent._credentials, *parent._prefix)
         self._path = path
@@ -36,6 +37,9 @@ class Field(API, Var):
 
     def __str__(self):
         return ".".join(self._path)
+
+    def json(self):
+        return {'path': ("event", ) + self._path, 'stream': self._stream.json()}
 
     @property
     def path(self):

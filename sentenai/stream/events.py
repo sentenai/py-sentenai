@@ -11,7 +11,7 @@ class Events(API):
     @property
     def _params(self):
         if self._parent._filters:
-            return {'filters': self._parent._filters}
+            return {'filter': self._parent._filters}
         else:
             return {}
 

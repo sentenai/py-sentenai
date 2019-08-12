@@ -33,10 +33,6 @@ class Expression(object):
 
 
 class Var(object):
-    def __init__(self, path, stream):
-        self._stream = stream
-        self._path = path
-
     def __add__(self, other):
         return Formula(self) + other
 
@@ -69,12 +65,6 @@ class Var(object):
 
     def rolling(self, n):
         return Formula(self).rolling(n)
-
-    def json(self):
-        x = {'path': ("event", ) + self._path, 'stream':{'name': self._stream.name}}
-        #if self._stream.filters:
-        #    x['stream']['filter'] = self._stream.filters.json()
-        return x
 
 
 class Formula(object):

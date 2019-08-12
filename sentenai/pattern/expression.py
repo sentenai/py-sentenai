@@ -1,12 +1,6 @@
 
 class Expression(object):
 
-    def __init__(self, ast):
-        self.ast = ast
-
-    def json(self):
-        return self.ast
-
     @property
     def followed_by(self):
         return Function(Seq, self)
@@ -37,6 +31,40 @@ class Expression(object):
         return During(self, other)
 
 
+class Path(object):
+    def __eq__(self, other):
+        return Condition(self, '==', other)
+    def __lt__(self, other):
+        return Condition(self, '<', other)
+    def __gt__(self, other):
+        return Condition(self, '>', other)
+    def __ne__(self, other):
+        return Condition(self, '!=', other)
+    def __le__(self, other):
+        return Condition(self, '<=', other)
+    def __ge__(self, other):
+        return Condition(self, '>=', other)
+
+
+class When(Expression):
+    def __init__(self, signal, duration, within):
+        self._signal = signal
+        self._within = within
+        self._duration = duration
+
+    def json(self):
+        if isinstance(self._signal, When):
+            d = {'type':'serial', 
+             'conds':[self._signal.json()]}
+        else:
+            d = self._signal.json()
+        if self._duration:
+            d.update(self._duration.json())
+        if self._within:
+            d.update(self._within.json())
+        return d
+
+
 class Condition(When):
 
     def __init__(self, var, op, val):
@@ -57,7 +85,7 @@ class Condition(When):
             vt = 'datetime'
         else:
             vt = 'string'
-        d = {'op':self._op,  'arg':{'type':vt,  'val':self._val},  'type':'span'}
+        d = {'op':self._op, 'arg':{'type':vt,  'val':self._val},  'type':'span'}
         d.update(self._var.json())
         return d
 
@@ -69,8 +97,7 @@ class Or(When):
         self._right = right
 
     def json(self):
-        return {'expr':'||', 
-         'args':[self._left.json(), self._right.json()]}
+        return {'expr':'||', 'args':[self._left.json(), self._right.json()]}
 
 
 class And(When):
@@ -80,28 +107,7 @@ class And(When):
         self._right = right
 
     def json(self):
-        return {'expr':'&&', 
-         'args':[self._left.json(), self._right.json()]}
-
-
-class When(When):
-
-    def __init__(self, signal, duration, within):
-        self._signal = signal
-        self._within = within
-        self._duration = duration
-
-    def json(self):
-        if isinstance(self._signal, When):
-            d = {'type':'serial', 
-             'conds':[self._signal.json()]}
-        else:
-            d = self._signal.json()
-        if self._duration:
-            d.update(self._duration.json())
-        if self._within:
-            d.update(self._within.json())
-        return d
+        return {'expr':'&&', 'args':[self._left.json(), self._right.json()]}
 
 
 class During(When):

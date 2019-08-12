@@ -17,7 +17,9 @@ class Patterns(API):
     def __delitem__(self, key):
         x = self[key]
         if x:
-            x.delete()
+            resp = self._delete(key)
+            if resp.status_code not in (200, 204):
+                raise Exception(resp.status_code)
         else:
             raise KeyError("Pattern does not exist")
 
@@ -25,7 +27,7 @@ class Patterns(API):
         if not definition:
             raise ValueError("Pattern must not be empty")
         else:
-            resp = self._put(name, json={"pattern": definition if isinstance(definition, str) else definition.json(), "description": description})
+            resp = self._put(name, json={"pattern": definition if isinstance(definition, str) else {'select': definition.json()}, "description": description})
             if resp.status_code in [200, 201]:
                 return self[name]
             else:
@@ -87,7 +89,7 @@ class Pattern(API):
         if isinstance(definition, str):
             s = definition
         else:
-            s = definition.json()
+            s = {'select': definition.json()}
         resp = self._put(json={'pattern': s, 'description': self._description})
         if resp.status_code == 200:
             self._definition = s

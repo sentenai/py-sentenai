@@ -16,7 +16,7 @@ class Streams(API):
         return Stream(self, name=key)
 
     def __len__(self):
-        return len(list(self))
+        return len(self._get().json())
 
     def __delitem__(self, key):
         x = self[key]
@@ -49,6 +49,12 @@ class Stream(API):
 
     def where(self, filters):
         return Stream(self._parent, self._name, filters)
+
+    def json(self):
+        d = {'name': self._name}
+        if self._filters:
+            d['filters'] = self._filters
+        return d
 
     @property
     def metadata(self):
