@@ -19,6 +19,6 @@ Shapely==1.5.17
 simplegeneric==0.8.1
 six==1.10.0
 traitlets==4.3.2
-urllib3==1.21.1
+urllib3==1.24.2
 virtualtime==1.6
 wcwidth==0.1.7
