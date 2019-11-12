@@ -7,14 +7,14 @@ from datetime import datetime, timedelta
 def test_stream(client, request):
     if client.streams['test-stats']:
         del client.streams['test-stats']
+    client.streams['test-stats'].init()
+    time.sleep(1)
     def teardown():
-        for i in range(20):
-            del client.streams['test-stats'].events[str(i)]
         del client.streams['test-stats']
     for i in range(20):
         client.streams['test-stats'].events.insert(Event(id=str(i), ts=datetime(2010,1,1,0,0,i), data={"i": i}))
+    time.sleep(10)
     request.addfinalizer(teardown)
-    time.sleep(5)
     return client.streams['test-stats']
 
 def test_field_value(client, test_stream):

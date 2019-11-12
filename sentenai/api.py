@@ -37,6 +37,8 @@ def dt64(dt):
         return np.datetime64(dt if dt.tzinfo is None else dt.astimezone(UTC()).replace(tzinfo=None))
     elif isinstance(dt, np.datetime64):
         return dt
+    elif isinstance(dt, int):
+        return dt
     else:
         raise TypeError("Cannot convert `{}` to datetime64".format(type(dt)))
 
@@ -49,6 +51,10 @@ def td64(td):
         return np.timedelta64(td, 'ns')
     elif isinstance(td, timedelta):
         return np.timedelta64(td)
+    elif isinstance(td, np.timedelta64):
+        return np.timedelta64(td)
+    elif isinstance(td, str):
+        return np.timedelta64(int(td), 'ns')
     else:
         raise TypeError("Cannot convert `{}` to timedelta64".format(type(td)))
 
@@ -61,6 +67,9 @@ def iso8601(dt):
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=None)
         return dt.isoformat() + "Z"
+    elif isinstance(dt, int):
+        # Virtual timestamp!
+        return str(dt)
     else:
         raise TypeError("Cannot convert type to ISO8601")
 
@@ -96,6 +105,7 @@ class Debug(object):
         requests_log = logging.getLogger("requests.packages.urllib3")
         requests_log.setLevel(logging.DEBUG)
         requests_log.propagate = True
+        return self
 
     def __exit__(self, *args):
         http_client.HTTPConnection.debuglevel = 0

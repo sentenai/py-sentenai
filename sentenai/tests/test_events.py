@@ -1,48 +1,67 @@
 from sentenai.stream.events import Event
 from datetime import datetime
 import pytest, time
+from uuid import uuid4
 
-def test_create_event(client):
-    e = client.streams['foo'].events.insert(Event(ts=datetime.utcnow(), data={'foo': 'bar'}))
+def test_create_event(client, foo):
+    e = foo.events.insert(Event(ts=datetime.utcnow(), data={'foo': 'bar'}))
     assert isinstance(e, Event)
 
-def test_get_event(client):
-    e = client.streams['foo'].events.insert(Event(ts=datetime.utcnow(), data={'foo': 'bar'}))
-    assert e == client.streams['foo'].events[e.id]
+def test_insert_event_into_nonexistent_stream(client):
+    i = uuid4().hex
+    t = datetime.utcnow()
+    s = client.streams[i]
+    with pytest.raises(Exception):
+        s.events.insert(Event(ts=t, data={'foo': 'bar'}))
+    if s:
+        del client[i]
 
-def test_remove_event(client):
-    foo_evts = client.streams['foo'].events
+
+def test_get_event(client, foo):
+    e = foo.events.insert(Event(ts=datetime.utcnow(), data={'foo': 'bar'}))
+    assert e == foo.events[e.id]
+
+def test_remove_event(client, foo):
+    foo_evts = foo.events
     e = foo_evts.insert(Event(ts=datetime.utcnow(), data={'foo': 'bar'}))
     foo_evts.remove(e)
     with pytest.raises(KeyError):
         foo_evts[e.id]
 
-def test_remove_non_existent_event(client):
+def test_remove_non_existent_event(client, foo):
     e = Event(id="a", ts=datetime.utcnow(), data={'foo': 'bar'})
     with pytest.raises(KeyError):
-        client.streams['foo'].events.remove(e)
+        foo.events.remove(e)
 
 
-def test_update_event(client):
-    foo_evts = client.streams['foo'].events
+def test_update_event(client, foo):
+    foo_evts = foo.events
     e = foo_evts.insert(Event(ts=datetime.utcnow(), data={'foo': 'bar'}))
     e.data = {"bar": "baz"}
     foo_evts.update(e)
     assert foo_evts[e.id].data == {"bar": "baz"}
 
+@pytest.fixture(scope='module')
+def foo(client, request):
+    x = client.streams['foo']
+    if not x:
+        x.init()
+    return x
 
 @pytest.fixture(scope='module')
 def evts_stream(client, request):
     if client.streams['pytest-events']:
         del client.streams['pytest-events']
+    client.streams['pytest-events'].init()
+    time.sleep(1)
     def teardown():
-        for i in range(20):
-            del client.streams['pytest-events'].events[str(i)]
+        #for i in range(20):
+        #    del client.streams['pytest-events'].events[str(i)]
         del client.streams['pytest-events']
     for i in range(20):
         client.streams['pytest-events'].events.insert(Event(id=str(i), ts=datetime(2015,1,1+i), data={"i": i}))
     request.addfinalizer(teardown)
-    time.sleep(5)
+    time.sleep(10)
     return client.streams['pytest-events']
 
 

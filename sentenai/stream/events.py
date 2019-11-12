@@ -25,7 +25,7 @@ class Events(API):
         res = self._delete(i)
         if res.status_code == 404:
             raise KeyError("Event does not exist.")
-        elif res.status_code != 200:
+        elif res.status_code != 204:
             raise Exception(res.status_code)
 
     def __len__(self):
@@ -43,7 +43,7 @@ class Events(API):
             res = self._get(i)
             if res.status_code == 200:
                 ej = res.json()
-                return Event(id=i, ts=ej['ts'], duration=ej.get("duration"), data=ej['event'] or None)
+                return Event(id=i, ts=res.headers['timestamp'], duration=res.headers.get('duration'), data=ej)
             elif res.status_code == 404:
                 raise KeyError("Events does not exist")
             else:
@@ -131,7 +131,7 @@ class Events(API):
     def insert(self, evt):
         hdrs = {}
         if evt.ts is not None and evt.duration is None:
-            hdrs["timestamp"] = iso8601(dt64(evt.ts))
+            hdrs["timestamp"] = iso8601(evt.ts)
         elif evt.duration is not None:
             hdrs['start'] = iso8601(evt.ts)
             hdrs["end"] = iso8601(evt.ts + evt.duration)

@@ -2,6 +2,7 @@ from sentenai.stream.metadata import Metadata
 from sentenai.stream.events import Events
 from sentenai.stream.fields import Fields, Field
 from sentenai.api import API, iso8601
+from datetime import datetime
 
 
 class Streams(API):
@@ -37,6 +38,19 @@ class Stream(API):
         self._parent = parent
         self._name = name
         self._filters = filters
+
+    def init(self, t0="now"):
+        if t0 == "now":
+            r = self._put(headers={'t0': iso8601(datetime.utcnow())}, json=None)
+        elif t0 == None:
+            r = self._put()
+        else:
+            r = self._put(headers={'t0': iso8601(t0)}, json=None)
+        if r.status_code != 201:
+            raise Exception(r.status_code)
+
+
+
 
     def __repr__(self):
         return 'Stream(name={!r})'.format(self._name)
@@ -102,7 +116,7 @@ class Stream(API):
 
     def delete(self):
         r = self._delete()
-        if r.status_code == 200:
+        if r.status_code == 204:
             return None
         else:
             raise Exception("Couldn't delete")
