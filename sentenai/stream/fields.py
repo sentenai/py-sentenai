@@ -4,7 +4,7 @@ from sentenai.pattern.expression import Path
 
 class Fields(API):
     def __init__(self, parent):
-        API.__init__(self, parent._credentials, *parent._prefix)
+        API.__init__(self, parent._credentials, *parent._prefix, params=parent._params)
         self._stream = parent
 
     def __repr__(self):
@@ -28,7 +28,7 @@ class Fields(API):
 
 class Field(API, Var, Path):
     def __init__(self, parent, stream, *path):
-        API.__init__(self, parent._credentials, *parent._prefix)
+        API.__init__(self, parent._credentials, *parent._prefix, params=parent._params)
         self._path = path
         self._stream = stream
 

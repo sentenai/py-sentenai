@@ -34,10 +34,10 @@ class Streams(API):
 
 class Stream(API):
     def __init__(self, parent, name, filters=None):
-        API.__init__(self, parent._credentials, *parent._prefix, name)
+        p = {'filters': filters.json()} if filters else {}
+        API.__init__(self, parent._credentials, *parent._prefix, name, params=p)
         self._parent = parent
         self._name = name
-        self._filters = filters
 
     def init(self, t0="now"):
         if t0 == "now":
@@ -48,9 +48,6 @@ class Stream(API):
             r = self._put(headers={'t0': iso8601(t0)}, json=None)
         if r.status_code != 201:
             raise Exception(r.status_code)
-
-
-
 
     def __repr__(self):
         return 'Stream(name={!r})'.format(self._name)
@@ -66,8 +63,8 @@ class Stream(API):
 
     def json(self):
         d = {'name': self._name}
-        if self._filters:
-            d['filters'] = self._filters
+        if 'filters' in self._params:
+            d['filters'] = self._params['filters']
         return d
 
     @property
@@ -99,8 +96,6 @@ class Stream(API):
         params = {}
         if at:
             params['at'] = iso8601(at)
-        if self._filters:
-            params['filters'] = self._filters
 
         res = self._get(params=params)
         if res.status_code == 200:
@@ -141,6 +136,10 @@ class Stream(API):
 
     def __str__(self):
         return f'stream "{self._name!s}"'
+
+    @property
+    def fields(self):
+        return Fields(self)
 
     def __iter__(self):
         return iter(Fields(self))

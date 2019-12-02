@@ -3,23 +3,29 @@ from datetime import datetime, timedelta
 from sentenai.api import API, dt64, td64, iso8601
 
 
+
+
+
+
 class Events(API):
     def __init__(self, parent):
-        API.__init__(self, parent._credentials, *parent._prefix, "events")
+        API.__init__(self, parent._credentials, *parent._prefix, "events", params=parent._params)
         self._parent = parent
-
-    @property
-    def _params(self):
-        if self._parent._filters:
-            return {'filter': self._parent._filters}
-        else:
-            return {}
 
     def __repr__(self):
         return repr(self._parent) + ".events"
 
     def __iter__(self):
-        raise NotImplemented("?")
+        i = 0
+        n = 100
+        while True:
+            e = self[i::n]
+            if len(e) == 0:
+                raise StopIteration
+            else:
+                for x in e:
+                    yield e
+                i += n
 
     def __delitem__(self, i):
         res = self._delete(i)

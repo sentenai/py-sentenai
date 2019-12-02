@@ -1,6 +1,7 @@
 import base64
 import logging
 import pytz
+import copy
 import re
 import requests
 import sys
@@ -137,12 +138,13 @@ class Credentials(object):
 
 
 class API(object):
-    def __init__(self, credentials, *prefix):
+    def __init__(self, credentials, *prefix, params={}):
         self._credentials = credentials
         self._session = requests.Session()
         self._session.headers.update({ 'auth-key': credentials.auth_key })
         self.debug = Debug()
         self._prefix = prefix
+        self._params = params
 
     @staticmethod
     def _debug(enable=True):
@@ -165,6 +167,8 @@ class API(object):
         return "API({})".format(repr(self._credentials))
 
     def _req(self, method, parts, params={}, headers={}, data=None):
+        params = copy.copy(params)
+        params.update(self._params)
         if data:
             headers['Content-Type'] = 'application/json'
         ps = {}
@@ -188,7 +192,11 @@ class API(object):
         else:
             r = method("/".join([self._credentials.host]+list(self._prefix)+list(parts)), params=ps, headers=headers, data=JSON.dumps(data, ignore_nan=True, cls=SentenaiEncoder))
 
-        return self.debug.cache(r)
+        resp = self.debug.cache(r)
+        if resp.status_code == 403:
+            raise AccessDenied
+        else:
+            return resp
 
     def _get(self, *parts, params={}, headers={}):
         return self._req(self._session.get, parts, params, headers)
@@ -210,7 +218,7 @@ class API(object):
 
 
 
-
+class AccessDenied(Exception): pass
 
 
 
