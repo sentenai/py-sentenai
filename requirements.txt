@@ -17,7 +17,7 @@ requests==2.18.1
 requests-mock==1.3.0
 Shapely==1.5.17
 simplegeneric==0.8.1
-six==1.10.0
+six==1.15.0
 traitlets==4.3.2
 urllib3==1.21.1
 virtualtime==1.6
