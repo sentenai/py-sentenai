@@ -6,7 +6,7 @@ decorator==4.1.2
 hypothesis==3.14.0
 idna==2.5
 numpy==1.13.1
-pandas==0.20.3
+pandas==1.2.1
 py==1.4.34
 Pygments==2.2.0
 pytest==3.1.3
