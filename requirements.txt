@@ -5,7 +5,7 @@ dateutils==0.6.6
 decorator==4.1.2
 hypothesis==3.14.0
 idna==2.5
-numpy==1.13.1
+numpy==1.20.0
 pandas==0.20.3
 py==1.4.34
 Pygments==2.2.0
