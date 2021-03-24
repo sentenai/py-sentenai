@@ -13,7 +13,7 @@ import datetime as dt
 
 import http.client as http_client
 import numpy as np
-import simplejson as JSON
+import json as JSON
 
 def base64json(x):
     return base64.urlsafe_b64encode(bytes(JSON.dumps(x), 'UTF-8'))
@@ -219,17 +219,3 @@ class API(object):
 
 
 class AccessDenied(Exception): pass
-
-
-
-
-
-
-
-
-
-
-
-
-
-
