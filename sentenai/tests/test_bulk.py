@@ -7,7 +7,7 @@ import requests
 import pdb
 import json
 
-def test_streaming(client):
+def test_bulk_events(client):
 
     # get json
     headers = {'Accept': 'application/json'}
@@ -16,27 +16,24 @@ def test_streaming(client):
 
     len1 = len(items)
 
-    #post nd json
-    with open('hartford.ndjson') as f:
-        input = ndjson.load(f)
+    # post nd json
+    with open('data.ndjson') as f:
+        data = ndjson.load(f)
 
-    dataSize = len(input)
+    dataSize = len(data)
     headers = {'Content-type': 'application/x-ndjson'}
-    r = requests.post('http://127.0.0.1:3333/streams/hartford', data=ndjson.dumps(input), headers=headers)
+    r = requests.post('http://127.0.0.1:3333/streams/hartford/events', data=ndjson.dumps(data), headers=headers)
     assert r.status_code == 201
 
     time.sleep(5) # allow riak to persist
     # get x-ndjson
     headers = {'Accept': 'application/x-ndjson'}
     response = requests.get("http://127.0.0.1:3333/streams/hartford/events", headers=headers)
-    output = response.json(cls=ndjson.Decoder)
-    len2 = len(output)
+    items = response.json(cls=ndjson.Decoder)
+    len2 = len(items)
 
-    assert all(item in input for item in output)
+    assert len2 == len1 + dataSize
 
-
-
-   # TODO compare actual response contents to file content. should match exactly
     # post json
     with open('single.json') as f:
         data = json.load(f)
