@@ -4,7 +4,7 @@ from sentenai.stream.fields import Fields, Field
 from sentenai.api import API, iso8601, SentenaiEncoder
 from datetime import datetime
 import simplejson as JSON
-import re
+import re, io
 
 
 class Streams(API):
@@ -65,7 +65,15 @@ class Stream(API):
             raise Exception(r.status_code)
 
     def upload(self, events):
-        r = self._post(json=((JSON.dumps({"id": e.id, "ts": e.ts, "duration": e.duration, "event": e.data}, ignore_nan=True, cls=SentenaiEncoder)+"\n").encode() for e in events))
+        r = None
+        hdr = {'content-type': 'application/x-ndjson'}
+        if isinstance(events, str):
+            with open(events) as f:
+                r = self._post(json=f.read(), headers=hdr)
+        elif isinstance(events, io.IOBase):
+            r = self._post(json=events.read(), headers=hdr)
+        else:
+            r = self._post(json=((JSON.dumps({"id": e.id, "ts": e.ts, "duration": e.duration, "event": e.data}, ignore_nan=True, cls=SentenaiEncoder)+"\n").encode() for e in events), headers=hdr)
         if r.status_code not in range(200, 300):
             raise Exception(r.status_code)
 
