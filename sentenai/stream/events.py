@@ -1,7 +1,24 @@
 import math
+from copy import copy
 from datetime import datetime, timedelta
+import numpy as np
 from sentenai.api import API, dt64, td64, iso8601
+"""
+import pandas as pd
+import numpy as np
+from dateutil.parser import parse
 
+df = pd.read_csv('/Users/ghc/Downloads/ch47_2019-11-14 (1).csv', parse_dates=['timestamp', 'utcTimestamp'], date_parser=parse)
+
+from sentenai.stream.events import Event
+for i, row in df.iterrows():
+    evt = Event(ts=row.timestamp, data={})
+    for k, v in row.items():
+        if k in ['timestamp', 'utcTimestamp']:
+            continue
+        evt.data[k] = v
+    break
+"""
 
 
 
@@ -55,7 +72,7 @@ class Events(API):
             else:
                 raise Exception(res.status_code)
 
-        params = self._params
+        params = copy(self._params)
 
         if isinstance(i, int):
             params['limit'] = 1
@@ -81,40 +98,18 @@ class Events(API):
                 raise Exception(resp.status_code)
 
         elif isinstance(i, slice):
-            if isinstance(i.start, datetime) or isinstance(i.stop, datetime):
-                # time slice
-                params['sort'] = 'asc'
-                if i.start is not None:
-                    params['start'] = iso8601(i.start)
-                if i.stop is not None:
-                    params['end'] = iso8601(i.stop)
-                if i.step is not None:
-                    params['limit'] = i.step
-                if 'start' in params and 'end' in params:
-                    if i.start > i.stop:
-                        params['start'], params['end'] = params['end'], params['start']
-                        params['sort'] = 'desc'
-
-            elif isinstance(i.start, int) or isinstance(i.stop, int) or (i.start is None and i.stop is None):
-                # number slice
-                params['sort'] = 'asc'
-                if i.start is not None:
-                    if i.stop is not None and i.stop < i.start:
-                        params['offset'] = i.stop
-                    else:
-                        params['offset'] = i.start
-                if i.stop is not None:
-                    if i.start is not None and i.stop < i.start:
-                        params['limit'] = i.start - i.stop
-                        params['sort'] = 'desc'
-                    elif i.start is not None:
-                        params['limit'] = i.stop - i.start
-                        params['sort'] = 'asc'
-                    else:
-                        params['limit'] = i.stop
-                        params['sort'] = 'asc'
-            else:
-                raise ValueError("invalid slice type")
+            # time slice
+            params['sort'] = 'asc'
+            if i.start is not None:
+                params['start'] = iso8601(i.start)
+            if i.stop is not None:
+                params['end'] = iso8601(i.stop)
+            if i.step is not None:
+                params['limit'] = i.step
+            if i.start is not None and i.stop is not None:
+                if i.start > i.stop:
+                    params['start'], params['end'] = params['end'], params['start']
+                    params['sort'] = 'desc'
 
             resp = self._get(params=params)
             if resp.status_code == 200:
@@ -145,13 +140,15 @@ class Events(API):
         if evt.id is not None:
             r = self._put(evt.id, json=evt.data, headers=hdrs)
             if r.status_code in [200, 201]:
-                return self[r.headers['Location']]
+                return evt
+                #return self[r.headers['Location']]
             else:
                 raise Exception(r.status_code)
         else:
             r = self._post(json=evt.data, headers=hdrs)
             if r.status_code in [200, 201]:
-                return self[r.headers['Location']]
+                return Event(id=r.headers['Location'], data=evt.data, ts=evt.ts, duration=evt.duration)
+                #return self[r.headers['Location']]
             else:
                 raise Exception(r.status_code)
 
@@ -166,6 +163,15 @@ class Event(object):
         self.ts = dt64(ts) if ts is not None else None
         self.duration = td64(duration) if duration is not None else None
         self.data = data
+
+    def __getitem__(self, pth):
+        if isinstance(pth, str):
+            return self.data[pth]
+        else:
+            d = self.data
+            for s in pth:
+                d = d[s]
+            return d
 
     def __repr__(self):
         x = ["{}={}".format(k, repr(getattr(self, k)))

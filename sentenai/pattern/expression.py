@@ -1,4 +1,4 @@
-
+from datetime import date, datetime
 class Expression(object):
 
     @property
@@ -92,22 +92,38 @@ class Condition(When):
 
 class Or(When):
 
-    def __init__(self, left, right):
-        self._left = left
-        self._right = right
+    def __init__(self, *args):
+        if len(args) == 0:
+            raise ValueError("At least one condition required")
+        self._args = list(args)
 
     def json(self):
-        return {'expr':'||', 'args':[self._left.json(), self._right.json()]}
+        if len(self._args) == 1:
+            return self._args[0].json()
 
+        top = {'expr': '||', 'args': [self._args[0].json()]}
+        last = top
+        for x in self._args[1:-1]:
+            z = {'expr': '||', 'args': [x.json()]}
+            last['args'].append(z)
+            last = z
+        last['args'].append(self._args[-1].json())
+        return top
 
 class And(When):
 
-    def __init__(self, left, right):
-        self._left = left
-        self._right = right
+    def __init__(self, *args):
+        self._args = list(args)
 
     def json(self):
-        return {'expr':'&&', 'args':[self._left.json(), self._right.json()]}
+        top = {'expr': '&&', 'args': [self._args[0].json()]}
+        last = top
+        for x in self._args[1:-1]:
+            z = {'expr': '&&', 'args': [x.json()]}
+            last['args'].append(z)
+            last = z
+        last['args'].append(self._args[-1].json())
+        return top
 
 
 class During(When):

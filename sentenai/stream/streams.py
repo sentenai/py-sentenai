@@ -1,8 +1,10 @@
 from sentenai.stream.metadata import Metadata
 from sentenai.stream.events import Events
 from sentenai.stream.fields import Fields, Field
-from sentenai.api import API, iso8601
+from sentenai.api import API, iso8601, SentenaiEncoder
 from datetime import datetime
+import simplejson as JSON
+import re
 
 
 class Streams(API):
@@ -28,6 +30,18 @@ class Streams(API):
 
     def __iter__(self):
         return iter([(x['name'], Stream(self, name=x['name'])) for x in self._get().json()])
+    
+    def __call__(self, name=".*", **kwargs):
+        ss = []
+        for item in self._get().json():
+            if not re.search(name, item['name']):
+                continue
+            for k, v in kwargs.items():
+                if k in item['meta'] and item['meta'][k] == v:
+                    ss.append(item)
+        return iter([(x['name'], Stream(self, name=x['name'])) for x in ss])
+        
+        
 
 
 
@@ -38,6 +52,7 @@ class Stream(API):
         API.__init__(self, parent._credentials, *parent._prefix, name, params=p)
         self._parent = parent
         self._name = name
+        self._filters = filters
 
     def init(self, t0="now"):
         if t0 == "now":
@@ -48,6 +63,12 @@ class Stream(API):
             r = self._put(headers={'t0': iso8601(t0)}, json=None)
         if r.status_code != 201:
             raise Exception(r.status_code)
+
+    def upload(self, events):
+        r = self._post(json=((JSON.dumps({"id": e.id, "ts": e.ts, "duration": e.duration, "event": e.data}, ignore_nan=True, cls=SentenaiEncoder)+"\n").encode() for e in events))
+        if r.status_code not in range(200, 300):
+            raise Exception(r.status_code)
+
 
     def __repr__(self):
         return 'Stream(name={!r})'.format(self._name)
@@ -64,7 +85,7 @@ class Stream(API):
     def json(self):
         d = {'name': self._name}
         if 'filters' in self._params:
-            d['filters'] = self._params['filters']
+            d['filter'] = self._params['filters']
         return d
 
     @property

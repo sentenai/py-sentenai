@@ -30,7 +30,11 @@ class Views(API):
         if not definition:
             raise ValueError("View must not be empty")
         else:
-            resp = self._put(name, json={"view": Expression(definition).json(), "description": description})
+            if type(definition) == str:
+                vd = definition
+            else:
+                vd = Expression(definition).json()
+            resp = self._put(name, json={"view": vd, "description": description})
             if resp.status_code in [200, 201]:
                 return self[name]
             else:
@@ -43,6 +47,15 @@ class Views(API):
         return API.__repr__(self) + ".views"
 
     def __call__(self, *fields, **definition):
+        if not definition and len(fields) == 1 and type(fields[0]) == str:
+            # text view
+            resp = self._post(json={"view": fields[0]})
+            if resp.status_code in [200, 201]:
+                vid = resp.headers['Location']
+                return View(parent=self, name=vid, definition=fields[0], anonymous=True)
+            else:
+                raise Exception(resp.status_code)
+
         from sentenai.stream.fields import Field
         for field in fields:
             if not isinstance(field, Field):
@@ -115,7 +128,7 @@ class View(API):
 
     @staticmethod
     def from_json(parent, x):
-        return View(parent, x['name'], x['description'])
+        return View(parent, x.get('name', ''), x.get('description'))
 
 class Data(API):
     def __init__(self, parent):

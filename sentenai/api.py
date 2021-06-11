@@ -5,7 +5,7 @@ import copy
 import re
 import requests
 import sys
-import time
+import time, types
 import dateutil
 import dateutil.tz
 from datetime import datetime, timedelta, tzinfo
@@ -83,13 +83,15 @@ class SentenaiEncoder(JSON.JSONEncoder):
             return iso8601(obj)
         if isinstance(obj, np.datetime64):
             return iso8601(obj)
+        if isinstance(obj, np.timedelta64):
+            return str(obj.astype(int))
         if isinstance(obj, dt.time):
             return obj.isoformat()
 
         if type(obj) == float:
             if math.isnan(obj):
                 return None
-        return JSON.JSONEncoder.default(self, serial)
+        return JSON.JSONEncoder.default(self, obj)
 
 
 
@@ -170,7 +172,10 @@ class API(object):
         params = copy.copy(params)
         params.update(self._params)
         if data:
-            headers['Content-Type'] = 'application/json'
+            if isinstance(data, types.GeneratorType):
+                headers['Content-Type'] = 'application/x-ndjson'
+            else:
+                headers['Content-Type'] = 'application/json'
         ps = {}
         if self.debug.debugging:
             print("parameters\n----------")
@@ -189,6 +194,8 @@ class API(object):
             print("----------\n")
         if data is None:
             r = method("/".join([self._credentials.host]+list(self._prefix)+list(parts)), params=ps, headers=headers)
+        elif isinstance(data, types.GeneratorType):
+            r = method("/".join([self._credentials.host]+list(self._prefix)+list(parts)), params=ps, headers=headers, data=data)
         else:
             r = method("/".join([self._credentials.host]+list(self._prefix)+list(parts)), params=ps, headers=headers, data=JSON.dumps(data, ignore_nan=True, cls=SentenaiEncoder))
 

@@ -8,7 +8,7 @@ class Fields(API):
         self._stream = parent
 
     def __repr__(self):
-        return repr(parent) + ".fields"
+        return repr(self._stream) + ".fields"
 
     def __iter__(self):
         x = self._get("fields")
@@ -27,10 +27,13 @@ class Fields(API):
 
 
 class Field(API, Var, Path):
-    def __init__(self, parent, stream, *path):
+    def __init__(self, parent, stream, *path, **kwargs):
         API.__init__(self, parent._credentials, *parent._prefix, params=parent._params)
+        self._parent = parent
         self._path = path
         self._stream = stream
+        self._start = kwargs.get('start')
+        self._end = kwargs.get('end')
 
     def __repr__(self):
         return "{}[{}]".format(repr(self._stream), ', '.join(['"{}"'.format(x) for x in self._path]))
@@ -59,6 +62,8 @@ class Field(API, Var, Path):
 
     def __getitem__(self, s):
         if type(s) == slice:
+            return Field(self._parent, self._stream, *self._path, start=s.start, end=s.stop)
+
             params = {}
             if s.start is not None:
                 try:
@@ -72,45 +77,63 @@ class Field(API, Var, Path):
                 except:
                     raise TypeError("Range slicing only allowed with datetime types")
 
-            resp = self._get('stats', *self._path, params=params)
-            if resp.status_code == 200:
-                data = resp.json()
-                return FieldStats(data)
-            elif resp.status_code == 404:
-                raise ValueError("stream not found")
-            else:
-                raise Exception(resp.status_code)
+
 
         else:
             raise TypeError("Field type can only use range slicing.")
 
+    @property
+    def stats(self): 
+        params = {}
+        if self._start:
+            params['start'] = self._start
+        if self._end:
+            params['end'] = self._end
+        if self._stream._filters:
+            params['filters'] = self._stream._filters.json()
+
+        resp = self._get('stats', *self._path, params=params)
+        if resp.status_code == 200:
+            data = resp.json()
+            return FieldStats(data)
+        elif resp.status_code == 404:
+            raise ValueError("stream not found")
+        else:
+            raise Exception(resp.status_code)
+
     # shortcuts go get full range field stats
     @property
-    def min(self): return self[:].min
+    def min(self): return self.stats.min
     @property
-    def max(self): return self[:].max
+    def max(self): return self.stats.max
     @property
-    def mean(self): return self[:].mean
+    def mean(self): return self.stats.mean
     @property
-    def std(self): return self[:].std
+    def std(self): return self.stats.std
     @property
-    def top(self): return self[:].top
+    def top(self): return self.stats.top
     @property
-    def freq(self): return self[:].freq
+    def freq(self): return self.stats.freq
     @property
-    def count(self): return self[:].count
+    def count(self): return self.stats.count
     @property
-    def missing(self): return self[:].missing
+    def missing(self): return self.stats.missing
 
     @property
     def unique(self):
-        resp = self._get("uniques", *self._path)
+        params = {}
+        if self._start:
+            params['start'] = self._start
+        if self._end:
+            params['end'] = self._end
+        params['filters'] = self._stream._filters.json() if self._stream._filters else None
+        resp = self._get("uniques", *self._path, params=params)
         if resp.status_code == 200:
             u = resp.json()
             if not u['categorical']:
-                return dict(u['numerical'])
+                return {float(v) for v in dict(u['numerical']).keys()}
             else:
-                return dict(u['categorical'])
+                return set(dict(u['categorical']).keys())
         else:
             raise Exception(resp.status_code)
 

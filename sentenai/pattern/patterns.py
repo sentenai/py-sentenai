@@ -43,7 +43,7 @@ class Patterns(API):
         if isinstance(definition, str):
             sj = definition
         else:
-            sj = definition.json()
+            sj = {'select': definition.json()}
         resp = self._post(json={"pattern": sj})
         if resp.status_code in [200, 201]:
             vid = resp.headers['Location']
@@ -116,9 +116,27 @@ class Search(API):
         if s.step is not None:
             params["limit"] = int(s.step)
 
-        resp = self._get(params=params)
-        if resp.status_code == 200:
-            return [Event(ts=dt64(x['start']), duration=dt64(x['end']) - dt64(x['start']), data={'name': self._parent.name, 'pattern': self._parent._definition, 'description': self._parent._description}) for x in resp.json()]
-        else:
-            raise Exception(resp.status_code)
+        results = []
+        while True:
+            resp = self._get(params=params)
+            if resp.status_code == 200:
+                for x in resp.json():
+                    results.append(
+                            Event(
+                                ts=dt64(x['start']),
+                                duration=dt64(x['end']) - dt64(x['start']),
+                                data={
+                                    'name': self._parent.name,
+                                    'pattern': self._parent._definition,
+                                    'description': self._parent._description
+                                }
+                            )
+                    )
+                try:
+                    params['start'] = resp.headers['cursor']
+                except KeyError:
+                    return results
+
+            else:
+                raise Exception(resp.status_code)
 

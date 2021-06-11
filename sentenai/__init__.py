@@ -62,6 +62,7 @@ class Async(object):
                 try:
                     result = stream.insert(event)
                 except:
+                    print("failed")
                     retries += 1
                     time.sleep(retries)
                 else:
