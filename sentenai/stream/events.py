@@ -130,7 +130,7 @@ class Events(API):
         self._put(evt.id, json=evt.data, headers=hdrs)
 
     def insert(self, evt):
-        hdrs = {}
+        hdrs = {'content-type': 'application/json'}
         if evt.ts is not None and evt.duration is None:
             hdrs["timestamp"] = iso8601(evt.ts)
         elif evt.duration is not None:
