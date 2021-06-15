@@ -58,7 +58,7 @@ class Metadata(API):
         return dict(self)[key]
 
     def __setitem__(self, key, val):
-        resp = self._put(key, json=val)
+        resp = self._patch(json={key: val})
         if resp.status_code not in [200, 201]:
             raise Exception(resp.status_code)
 
