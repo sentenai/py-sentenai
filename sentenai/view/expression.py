@@ -87,7 +87,7 @@ class Formula(object):
         return Resample(self, freq)
 
     def rolling(self, n, win_type=None):
-        return Rolling(self, n, win_type=win_type)
+        return Rolling(self, n, win_type)
 
     def __add__(self, n):
         if isinstance(n, Formula):
@@ -218,25 +218,30 @@ class Resampled(Formula):
 
 class Rolling(object):
 
-    def __init__(self, ft, n, win_type=None, center=False):
+    def __init__(self, ft, n, win_type='none', center=False):
         self.source = ft
         self.n = n
         self.center = center
-        self.win_type = win_type or 'none'
+        self.win_type = win_type
 
     def max(self, **kwargs):
+        kwargs['type'] = self.win_type
         return Windowed(self, 'max', kwargs)
 
     def min(self, **kwargs):
+        kwargs['type'] = self.win_type
         return Windowed(self, 'min', kwargs)
 
     def mean(self, **kwargs):
+        kwargs['type'] = self.win_type
         return Windowed(self, 'mean', kwargs)
 
     def std(self, **kwargs):
+        kwargs['type'] = self.win_type
         return Windowed(self, 'std', kwargs)
 
     def sum(self, **kwargs):
+        kwargs['type'] = self.win_type
         return Windowed(self, 'sum', kwargs)
 
 
