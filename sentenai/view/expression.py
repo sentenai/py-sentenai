@@ -63,8 +63,8 @@ class Var(object):
     def resample(self, freq):
         return Formula(self).resample(freq)
 
-    def rolling(self, n):
-        return Formula(self).rolling(n)
+    def rolling(self, n, win_type=None):
+        return Formula(self).rolling(n, win_type)
 
 
 class Formula(object):
@@ -86,8 +86,8 @@ class Formula(object):
     def resample(self, freq):
         return Resample(self, freq)
 
-    def rolling(self, n):
-        return Rolling(self, n)
+    def rolling(self, n, win_type=None):
+        return Rolling(self, n, win_type=win_type)
 
     def __add__(self, n):
         if isinstance(n, Formula):
@@ -218,11 +218,11 @@ class Resampled(Formula):
 
 class Rolling(object):
 
-    def __init__(self, ft, n, win_type='none', center=False):
+    def __init__(self, ft, n, win_type=None, center=False):
         self.source = ft
         self.n = n
         self.center = center
-        self.win_type = win_type
+        self.win_type = win_type or 'none'
 
     def max(self, **kwargs):
         return Windowed(self, 'max', kwargs)
