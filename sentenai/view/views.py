@@ -110,6 +110,9 @@ class View(API):
     def data(self):
         return self._data
 
+    def __matmul__(self, at):
+        return self._data[at:at - datetime(1970,1,1):1]
+
     @property
     def definition(self):
         return self._definition
@@ -217,10 +220,10 @@ class Data(API):
         if resp.status_code == 200:
             dat = []
             for e in resp.json()['events']:
-                x = {"ts": dt64(e['ts'])}
+                x = {}
                 for key in e['event']:
                     x[key] = e['event'][key]
-                dat.append(x)
+                dat.append(Event(ts=dt64(e['ts']), data=x))
             return dat
         else:
             raise Exception(resp.status_code)
