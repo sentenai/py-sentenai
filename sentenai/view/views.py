@@ -111,7 +111,14 @@ class View(API):
         return self._data
 
     def __matmul__(self, at):
-        return self._data[at:at - datetime(1970,1,1):1]
+        at = dt64(at)
+        z = self._data[at:at - datetime(1970,1,1):1]
+        if len(z) == 0:
+            return None
+        else:
+            z[0].ts = at
+            z[0].duration = None
+            return z[0]
 
     @property
     def definition(self):
