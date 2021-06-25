@@ -226,22 +226,32 @@ class Rolling(object):
 
     def max(self, **kwargs):
         kwargs['type'] = self.win_type
+        if self.win_type == "gaussian" and 'std' not in kwargs:
+            kwargs['std'] = 1
         return Windowed(self, 'max', kwargs)
 
     def min(self, **kwargs):
         kwargs['type'] = self.win_type
+        if self.win_type == "gaussian" and 'std' not in kwargs:
+            kwargs['std'] = 1
         return Windowed(self, 'min', kwargs)
 
     def mean(self, **kwargs):
         kwargs['type'] = self.win_type
+        if self.win_type == "gaussian" and 'std' not in kwargs:
+            kwargs['std'] = 1
         return Windowed(self, 'mean', kwargs)
 
     def std(self, **kwargs):
         kwargs['type'] = self.win_type
+        if self.win_type == "gaussian" and 'std' not in kwargs:
+            kwargs['std'] = 1
         return Windowed(self, 'std', kwargs)
 
     def sum(self, **kwargs):
         kwargs['type'] = self.win_type
+        if self.win_type == "gaussian" and 'std' not in kwargs:
+            kwargs['std'] = 1
         return Windowed(self, 'sum', kwargs)
 
 
