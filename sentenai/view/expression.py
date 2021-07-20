@@ -200,6 +200,7 @@ class Resampled(Formula):
         self.op = op
         self.fill = 'na'
         self._offset = 0
+        self._shift = None
 
     def offset(td):
         self._offset = td.total_seconds()
