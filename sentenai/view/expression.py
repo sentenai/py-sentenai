@@ -57,31 +57,35 @@ class Var(object):
     def __rtruediv__(self, other):
         return other / Formula(self)
 
-    def shift(self, n):
-        return Formula(self).shift(n)
-
     def resample(self, freq):
         return Formula(self).resample(freq)
 
     def rolling(self, n, win_type=None):
         return Formula(self).rolling(n, win_type)
 
+    def shift(self, n):
+        return Formula(self).shift(n)
 
 class Formula(object):
 
     def __init__(self, src):
         self._src = src
+        self._shift = None
 
     def json(self, name='_'):
         j = self._src.json()
+        d = {'var': j['path']}
+        if self._shift:
+            d['shift'] = self._shift
         return {'type':'projection', 
-         'fields':{name: [{'var': j['path']}]}, 
+         'fields':{name: [d]}, 
          'source':[
           {'stream':j['stream'], 
            'projection':'default'}]}
 
     def shift(self, n):
-        return Shift(self, n)
+        self._shift = n
+        return self
 
     def resample(self, freq):
         return Resample(self, freq)
@@ -207,12 +211,15 @@ class Resampled(Formula):
 
     def json(self, name='_'):
         j = {}
+        v = {'var': ['event', '_']}
+        if self._shift:
+            v['shift'] = self._shift
         j['frequency'] = self.freq
         j['offset'] = self._offset
         j['type'] = 'resample'
         j['fill'] = self.fill
         j['source'] = [self.source.json()]
-        j['fields'] = {name: {'expr':[{'var': ['event', '_']}],  'aggregation':self.op}}
+        j['fields'] = {name: {'expr':[v],  'aggregation':self.op}}
         return j
 
 
@@ -261,15 +268,18 @@ class Windowed(Formula):
         self.win_args = winargs
         self.op = op
         self.r = rolling
+        self._shift = None
 
     def json(self, name='_'):
-        return {'fields':{name: [
-                 {'window':self.win_args, 
-                  'size':self.r.n, 
-                  'op':self.op, 
-                  'var':[
-                   'event', '_'], 
-                  'labelPos':'center' if self.r.center else 'right'}]}, 
+        x = {'window':self.win_args, 
+             'size':self.r.n, 
+             'op':self.op, 
+             'var':['event', '_'], 
+             'labelPos':'center' if self.r.center else 'right'
+             }
+        if self._shift:
+            x['shift'] = self._shift
+        return {'fields':{name: [x]}, 
          'source':[
           self.r.source.json()], 
          'type':'projection'}
@@ -318,7 +328,7 @@ class BinOp(Formula):
             rhs = self._right.json()
         else:
             rhs = {'var': ['event', '_rhs']}
-            src.append(self._left.json('_rhs'))
+            src.append(self._right.json('_rhs'))
         if len(src) > 1:
             src = [{'source': src, 'type': 'outerjoin'}]
         return {'fields':{name: [{'lhs':lhs,  'rhs':rhs,  'op':self._op}]},  'source':src,  'type': 'projection'}
