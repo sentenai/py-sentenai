@@ -31,6 +31,7 @@ class Field(API, Var, Path):
         API.__init__(self, parent._credentials, *parent._prefix, params=parent._params)
         self._parent = parent
         self._path = path
+        self._shift = None
         self._stream = stream
         self._start = kwargs.get('start')
         self._end = kwargs.get('end')
@@ -41,8 +42,12 @@ class Field(API, Var, Path):
     def __str__(self):
         return ".".join(self._path)
 
+
     def json(self):
-        return {'path': ("event", ) + self._path, 'stream': self._stream.json()}
+        d = {'path': ("event", ) + self._path, 'stream': self._stream.json()}
+        if self._shift:
+            d['shift'] = self._shift
+        return d
 
     @property
     def path(self):
