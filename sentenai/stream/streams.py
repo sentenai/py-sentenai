@@ -16,7 +16,11 @@ class Streams(API):
         return "{}.streams".format(repr(self._parent))
 
     def __getitem__(self, key):
-        return Stream(self, name=key)
+        if type(key) is tuple:
+            k, a = key
+            return Stream(self, name=k, anchor=a)
+        else:
+            return Stream(self, name=key)
 
     def __len__(self):
         return len(self._get().json())
@@ -47,12 +51,13 @@ class Streams(API):
 
 
 class Stream(API):
-    def __init__(self, parent, name, filters=None):
+    def __init__(self, parent, name, filters=None, anchor=None):
         p = {'filters': filters.json()} if filters else {}
         API.__init__(self, parent._credentials, *parent._prefix, name, params=p)
         self._parent = parent
         self._name = name
         self._filters = filters
+        self._anchor = anchor
 
     def init(self, t0="now"):
         if t0 == "now":
@@ -92,6 +97,8 @@ class Stream(API):
 
     def json(self):
         d = {'name': self._name}
+        if self._anchor:
+            d['t0'] = self._anchor
         if 'filters' in self._params:
             d['filter'] = self._params['filters']
         return d

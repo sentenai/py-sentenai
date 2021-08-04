@@ -33,7 +33,10 @@ class Expression(object):
 
 class Path(object):
     def __eq__(self, other):
-        return Condition(self, '==', other)
+        if isinstance(other, InCircle):
+            return Condition(self, 'in', other)
+        else:
+            return Condition(self, '==', other)
     def __lt__(self, other):
         return Condition(self, '<', other)
     def __gt__(self, other):
@@ -64,6 +67,16 @@ class When(Expression):
             d.update(self._within.json())
         return d
 
+class InCircle(object):
+    def __init__(self, pt, radius):
+        self._pt = pt
+        self._r = radius
+
+    def json(self):
+        return {
+            'center': { 'lon': self._pt[0], 'lat': self._pt[1] },
+            'radius': self._r
+        }
 
 class Condition(When):
 
@@ -73,6 +86,7 @@ class Condition(When):
         self._val = val
 
     def json(self):
+        val = self._val
         if isinstance(self._val, float):
             vt = 'double'
         elif isinstance(self._val, bool):
@@ -83,9 +97,12 @@ class Condition(When):
             vt = 'date'
         elif isinstance(self._val, datetime):
             vt = 'datetime'
+        elif isinstance(self._val, InCircle):
+            vt = 'circle'
+            val = self._val.json()
         else:
             vt = 'string'
-        d = {'op':self._op, 'arg':{'type':vt,  'val':self._val},  'type':'span'}
+        d = {'op':self._op, 'arg':{'type':vt,  'val':val},  'type':'span'}
         d.update(self._var.json())
         return d
 

@@ -2,6 +2,7 @@ from sentenai.api import API, Credentials
 from sentenai.stream import Streams, Event
 from sentenai.view import Views
 from sentenai.pattern import Patterns
+from sentenai.pattern.expression import InCircle
 
 from threading import Thread
 import time
