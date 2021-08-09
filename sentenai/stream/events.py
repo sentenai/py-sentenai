@@ -59,41 +59,26 @@ class Events(API):
         params = copy(self._params)
 
         if isinstance(i, int):
-            params['limit'] = 1
-            if i == 0:
-                params['sort'] = 'asc'
-            elif i == -1:
-                params['sort'] = 'desc'
-            elif i < -1:
-                params['offset'] = abs(i) - 1
-                params['sort'] = 'desc'
-            elif i > 0:
-                params['offset'] = i
-                params['sort'] = 'asc'
-
-            resp = self._get(params=params)
-            if resp.status_code == 200:
-                ej = resp.json()[0]
-                try:
-                    ts = int(ej['ts'])
-                except:
-                    ts = ej['ts']
-                e = Event(id=ej['id'], ts=ts, duration=ej.get("duration"), data=ej['event'] or None)
-                return e
-            elif resp.status_code == 404:
-                raise IndexError("Stream empty.")
-            else:
-                raise Exception(resp.status_code)
+            raise TypeError("Integer not valid")
 
         elif isinstance(i, slice):
             # time slice
+            t0 = self._parent.t0
             params['sort'] = 'asc'
             if i.start is not None:
-                params['start'] = iso8601(i.start)
+                if t0 is None:
+                    params['start'] = int(i.start)
+                else:
+                    params['start'] = iso8601(i.start)
             if i.stop is not None:
-                params['end'] = iso8601(i.stop)
+                if t0 is None:
+                    params['end'] = int(i.stop)
+                else:
+                    params['end'] = iso8601(i.stop)
             if i.step is not None:
-                params['limit'] = i.step
+                params['limit'] = abs(i.step)
+                if i.step < 0:
+                    params['sort'] = 'desc'
             if i.start is not None and i.stop is not None:
                 if i.start > i.stop:
                     params['start'], params['end'] = params['end'], params['start']

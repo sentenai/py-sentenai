@@ -82,7 +82,6 @@ class Stream(API):
         if r.status_code not in range(200, 300):
             raise Exception(r.status_code)
 
-
     def __repr__(self):
         return 'Stream(name={!r})'.format(self._name)
 
@@ -92,9 +91,17 @@ class Stream(API):
         else:
             raise TypeError("cannot delete `{}`".format(name))
 
-    def where(self, filters):
-        return Stream(self._parent, self._name, filters, self._anchor)
-
+    def where(self, *filters):
+        if len(filters) < 1:
+            fs = self._filters
+        elif self._filters:
+            fs = self._filters & filters[0]
+        else:
+            fs = filters[0]
+        for f in filters[1:]:
+            fs &= f
+        return Stream(self._parent, self._name, fs, self._anchor)
+            
     def json(self):
         d = {'name': self._name}
         if self._anchor:
@@ -113,7 +120,10 @@ class Stream(API):
 
     @property
     def bounds(self):
-        return self.events[0].ts, self.events[-1].ts
+        try:
+            return self.events[::1][0].ts, self.events[::-1][0].ts
+        except:
+            return (None, None)
 
     @property
     def t0(self):
@@ -135,7 +145,10 @@ class Stream(API):
     def values(self, at=None):
         params = {}
         if at:
-            params['at'] = iso8601(at)
+            if self.t0:
+                params['at'] = iso8601(at)
+            else:
+                params['at'] = at
 
         res = self._get(params=params)
         if res.status_code == 200:
@@ -185,8 +198,6 @@ class Stream(API):
         return iter(Fields(self))
 
     def __getitem__(self, key):
-        if type(key) == slice:
-            raise TypeError()
         return Fields(self)[(key,) if type(key) != tuple else key]
 
     def __setitem__(self, key, val):

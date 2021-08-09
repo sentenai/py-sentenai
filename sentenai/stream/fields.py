@@ -22,9 +22,15 @@ class Fields(API):
     def __getitem__(self, key):
         if type(key) == tuple:
             return Field(self, self._stream, *key)
+        elif type(key) == slice:
+            if key.start is None and key.stop == 'ts':
+                return TimestampField(self, self._stream)
+            elif key.start is None and key.stop == 'duration':
+                return DurationField(self, self._stream)
+            else:
+                raise TypeError("invalid path")
         else:
             return Field(self, self._stream, key)
-
 
 class Field(API, Var, Path):
     def __init__(self, parent, stream, *path, **kwargs):
@@ -141,6 +147,21 @@ class Field(API, Var, Path):
                 return set(dict(u['categorical']).keys())
         else:
             raise Exception(resp.status_code)
+
+class TimestampField(Field):
+    def json(self):
+        d = {'path': ("ts", ) + self._path, 'stream': self._stream.json()}
+        if self._shift:
+            d['shift'] = self._shift
+        return d
+
+class DurationField(Field):
+    def json(self):
+        d = {'path': ("duration", ) + self._path, 'stream': self._stream.json()}
+        if self._shift:
+            d['shift'] = self._shift
+        return d
+
 
 
 class FieldStats(object):
