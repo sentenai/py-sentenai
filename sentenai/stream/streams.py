@@ -93,7 +93,7 @@ class Stream(API):
             raise TypeError("cannot delete `{}`".format(name))
 
     def where(self, filters):
-        return Stream(self._parent, self._name, filters)
+        return Stream(self._parent, self._name, filters, self._anchor)
 
     def json(self):
         d = {'name': self._name}
