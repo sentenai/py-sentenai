@@ -116,6 +116,10 @@ class Stream(API):
         return self.events[0].ts, self.events[-1].ts
 
     @property
+    def t0(self):
+        return self._head().headers.get('t0')
+
+    @property
     def name(self):
         return self._name
 

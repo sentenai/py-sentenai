@@ -30,6 +30,9 @@ class Expression(object):
     def __truediv__(self, other):
         return During(self, other)
 
+    def __rshift__(self, other):
+        return Seq(self, other)
+
 
 class Path(object):
     def __eq__(self, other):

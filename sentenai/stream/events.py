@@ -3,26 +3,6 @@ from copy import copy
 from datetime import datetime, timedelta
 import numpy as np
 from sentenai.api import API, dt64, td64, iso8601
-"""
-import pandas as pd
-import numpy as np
-from dateutil.parser import parse
-
-df = pd.read_csv('/Users/ghc/Downloads/ch47_2019-11-14 (1).csv', parse_dates=['timestamp', 'utcTimestamp'], date_parser=parse)
-
-from sentenai.stream.events import Event
-for i, row in df.iterrows():
-    evt = Event(ts=row.timestamp, data={})
-    for k, v in row.items():
-        if k in ['timestamp', 'utcTimestamp']:
-            continue
-        evt.data[k] = v
-    break
-"""
-
-
-
-
 
 class Events(API):
     def __init__(self, parent):
@@ -66,7 +46,11 @@ class Events(API):
             res = self._get(i)
             if res.status_code == 200:
                 ej = res.json()
-                return Event(id=i, ts=res.headers['timestamp'], duration=res.headers.get('duration'), data=ej)
+                try:
+                    ts = int(res.headers['timestamp'])
+                except:
+                    ts = res.headeres['timestamp']
+                return Event(id=i, ts=ts, duration=res.headers.get('duration'), data=ej)
             elif res.status_code == 404:
                 raise KeyError("Events does not exist")
             else:
@@ -90,7 +74,11 @@ class Events(API):
             resp = self._get(params=params)
             if resp.status_code == 200:
                 ej = resp.json()[0]
-                e = Event(id=ej['id'], ts=ej['ts'], duration=ej.get("duration"), data=ej['event'] or None)
+                try:
+                    ts = int(ej['ts'])
+                except:
+                    ts = ej['ts']
+                e = Event(id=ej['id'], ts=ts, duration=ej.get("duration"), data=ej['event'] or None)
                 return e
             elif resp.status_code == 404:
                 raise IndexError("Stream empty.")
@@ -113,7 +101,21 @@ class Events(API):
 
             resp = self._get(params=params)
             if resp.status_code == 200:
-                return [Event(id=ej['id'], ts=ej['ts'], duration=ej.get("duration"), data=ej['event'] or None) for ej in resp.json()]
+                evts = []
+                for ej in resp.json():
+                    try:
+                        ts = int(ej['ts'])
+                    except:
+                        ts = ej['ts']
+                    evts.append(
+                        Event(
+                            id=ej['id'],
+                            ts=ts,
+                            duration=ej.get("duration"),
+                            data=ej['event'] or None
+                        )
+                    )
+                return evts
             else:
                 raise Exception(resp.status_code)
         else:

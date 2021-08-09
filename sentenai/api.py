@@ -39,7 +39,7 @@ def dt64(dt):
     elif isinstance(dt, np.datetime64):
         return dt
     elif isinstance(dt, int):
-        return dt
+        return np.timedelta64(dt, 'ns')
     else:
         raise TypeError("Cannot convert `{}` to datetime64".format(type(dt)))
 
