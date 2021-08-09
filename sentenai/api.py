@@ -15,8 +15,17 @@ import http.client as http_client
 import numpy as np
 import simplejson as JSON
 
+
+try:
+    import pandas as pd 
+    PANDAS = True
+except:
+    pd = None
+    PANDAS = False
+
+
 def base64json(x):
-    return base64.urlsafe_b64encode(bytes(JSON.dumps(x, ignore_nan=True, cls=SentenaiEncoder)), 'UTF-8')
+    return base64.urlsafe_b64encode(bytes(JSON.dumps(x, ignore_nan=True, cls=SentenaiEncoder), 'UTF-8'))
 
 class UTC(tzinfo):
     """A timezone class for UTC."""
