@@ -1,7 +1,9 @@
 from sentenai.stream.metadata import Metadata
 from sentenai.stream.events import Events
 from sentenai.stream.fields import Fields, Field
-from sentenai.api import API, iso8601, SentenaiEncoder
+from sentenai.api import API, iso8601, SentenaiEncoder, PANDAS
+if PANDAS:
+    import pandas as pd
 from datetime import datetime
 import simplejson as JSON
 import re, io
@@ -11,6 +13,12 @@ class Streams(API):
     def __init__(self, parent):
         self._parent = parent
         API.__init__(self, parent._credentials, *parent._prefix, "streams")
+
+
+    if PANDAS:
+        def _repr_html_(self):
+            data = list(self)
+            return pd.DataFrame([{'name': k, 't0': s.t0} for k, s in data])._repr_html_()
 
     def __repr__(self):
         return "{}.streams".format(repr(self._parent))
@@ -33,7 +41,7 @@ class Streams(API):
             raise KeyError("Stream does not exist")
 
     def __iter__(self):
-        return iter([(x['name'], Stream(self, name=x['name'])) for x in self._get().json()])
+        return iter([(x['name'], Stream(self, name=x['name'], anchor=x.get('t0'))) for x in self._get().json()])
     
     def __call__(self, name=".*", **kwargs):
         ss = []
@@ -127,7 +135,10 @@ class Stream(API):
 
     @property
     def t0(self):
-        return self._head().headers.get('t0')
+        if self._anchor:
+            return self._anchor
+        else:
+            return self._head().headers.get('t0')
 
     @property
     def name(self):
