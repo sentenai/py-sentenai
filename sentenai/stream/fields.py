@@ -1,6 +1,8 @@
-from sentenai.api import API, iso8601, dt64, td64
+from sentenai.api import API, iso8601, dt64, td64, PANDAS
 from sentenai.view.expression import Var
+from sentenai.view.views import Views
 from sentenai.pattern.expression import Path
+if PANDAS: import pandas as pd
 
 class Fields(API):
     def __init__(self, parent):
@@ -9,6 +11,12 @@ class Fields(API):
 
     def __repr__(self):
         return repr(self._stream) + ".fields"
+
+    if PANDAS:
+        def _repr_html_(self):
+            return pd.DataFrame([
+                {'field': str(f)} for f in iter(self)
+            ])._repr_html_()
 
     def __iter__(self):
         x = self._get("fields")
@@ -28,9 +36,26 @@ class Fields(API):
             elif key.start is None and key.stop == 'duration':
                 return DurationField(self, self._stream)
             else:
-                raise TypeError("invalid path")
+                return None("invalid path")
         else:
             return Field(self, self._stream, key)
+
+class FieldData(object):
+    def __init__(self, stream, do):
+        self._str = stream
+        self._do = do
+
+    def __getitem__(self, s):
+        if isinstance(s, slice) and self._str.t0 and (s.start is None or s.end is None):
+            t0, t1 = self._str.bounds
+            s = slice(s.start or t0, s.stop or t1, s.step)
+        return self._do[s]
+
+
+
+
+
+
 
 class Field(API, Var, Path):
     def __init__(self, parent, stream, *path, **kwargs):
@@ -46,7 +71,12 @@ class Field(API, Var, Path):
         return "{}[{}]".format(repr(self._stream), ', '.join(['"{}"'.format(x) for x in self._path]))
 
     def __str__(self):
-        return ".".join(self._path)
+        return "/".join(self._path)
+
+    @property
+    def data(self):
+        d = Views(API(self._credentials))(value=self).data
+        return FieldData(self._stream, d)
 
 
     def json(self):
@@ -80,18 +110,18 @@ class Field(API, Var, Path):
                 try:
                     params['start'] = iso8601(dt64(s.start))
                 except:
-                    raise TypeError("Range slicing only allowed with datetime types")
+                    return None("Range slicing only allowed with datetime types")
 
             if s.stop is not None:
                 try:
                     params['end'] = iso8601(dt64(s.stop))
                 except:
-                    raise TypeError("Range slicing only allowed with datetime types")
+                    return None("Range slicing only allowed with datetime types")
 
 
 
         else:
-            raise TypeError("Field type can only use range slicing.")
+            return None("Field type can only use range slicing.")
 
     @property
     def stats(self): 
@@ -168,33 +198,45 @@ class FieldStats(object):
     def __init__(self, stats):
         self._stats = stats
 
+    if PANDAS:
+        def _repr_html_(self):
+            return pd.DataFrame([
+                {'Statistic': k, 'Value': v}
+                for k, v in self._stats[
+                    'numerical'
+                    if self._stats.get('numerical')
+                    else 'categorical'
+                ].items()
+            ])._repr_html_()
+
+
     @property
     def mean(self):
         try:
             return self._stats['numerical']['mean']
         except KeyError:
-            raise TypeError
+            return None
 
     @property
     def min(self):
         try:
             return self._stats['numerical']['min']
         except KeyError:
-            raise TypeError
+            return None
 
     @property
     def max(self):
         try:
             return self._stats['numerical']['max']
         except KeyError:
-            raise TypeError
+            return None
 
     @property
     def std(self):
         try:
             return self._stats['numerical']['std']
-        except KeyError:
-            raise TypeError
+        except:
+            return None
 
     @property
     def missing(self):
@@ -204,9 +246,9 @@ class FieldStats(object):
             elif self._stats['categorical']:
                 return self._stats['categorical']['missing']
             else:
-                raise TypeError
+                return None
         except KeyError:
-            raise TypeError
+            return None
 
     @property
     def count(self):
@@ -216,20 +258,20 @@ class FieldStats(object):
             elif self._stats['categorical']:
                 return self._stats['categorical']['count']
             else:
-                raise TypeError
+                return None
         except KeyError:
-            raise TypeError
+            return None
 
     @property
     def top(self):
         try:
             return self._stats['categorical']['top']
         except KeyError:
-            raise TypeError
+            return None
 
     @property
     def freq(self):
         try:
             return self._stats['categorical']['freq']
         except KeyError:
-            raise TypeError
+            return None

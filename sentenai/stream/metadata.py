@@ -1,6 +1,7 @@
 from shapely.geometry import Point
 from datetime import datetime
-from sentenai.api import API, dt64
+from sentenai.api import API, dt64, PANDAS
+if PANDAS: import pandas as pd
 
 class Metadata(API):
     def __init__(self, parent):
@@ -42,7 +43,15 @@ class Metadata(API):
 
 
     def __repr__(self):
-        repr(self._parent) + ".metadata"
+        return repr(self._parent) + ".metadata"
+
+    if PANDAS:
+        def _repr_html_(self):
+            return pd.DataFrame([
+                {'key': n, 'value': v} for n, v in iter(self)
+            ])._repr_html_()
+
+
 
     def _type(self, v):
         if type(v) in [int, float]:
@@ -59,7 +68,7 @@ class Metadata(API):
 
     def __setitem__(self, key, val):
         resp = self._patch(json={key: val})
-        if resp.status_code not in [200, 201]:
+        if resp.status_code not in [200, 201, 204]:
             raise Exception(resp.status_code)
 
     def __delitem__(self, key):

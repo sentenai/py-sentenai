@@ -4,6 +4,18 @@ from datetime import datetime, timedelta
 import numpy as np
 from sentenai.api import API, dt64, td64, iso8601
 
+import collections
+
+def flatten(d, parent_key='', sep='_'):
+    items = []
+    for k, v in d.items():
+        new_key = parent_key + sep + k if parent_key else k
+        if isinstance(v, collections.MutableMapping):
+            items.extend(flatten(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
 class Events(API):
     def __init__(self, parent):
         API.__init__(self, parent._credentials, *parent._prefix, "events", params=parent._params)
@@ -150,6 +162,9 @@ class Event(object):
         self.ts = dt64(ts) if ts is not None else None
         self.duration = td64(duration) if duration is not None else None
         self.data = data
+
+    def as_record(self):
+        return flatten({'id': self.id, 'ts': self.ts, 'duration': self.duration, 'event': self.data}, '', '/')
 
     def __getitem__(self, pth):
         if isinstance(pth, str):

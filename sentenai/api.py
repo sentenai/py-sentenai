@@ -72,12 +72,14 @@ def iso8601(dt):
     """Convert a datetime object to an ISO8601 unix timestamp."""
     if isinstance(dt, np.datetime64):
         return str(dt) + "Z"
+    if isinstance(dt, np.timedelta64):
+        return str(int(dt.astype('timedelta64[ns]')))
     elif isinstance(dt, datetime):
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=None)
         return dt.isoformat() + "Z"
-    elif isinstance(dt, int):
         # Virtual timestamp!
+    elif isinstance(dt, int):
         return str(dt)
     else:
         raise TypeError("Cannot convert type to ISO8601")
@@ -152,9 +154,10 @@ class API(object):
         self._credentials = credentials
         self._session = requests.Session()
         self._session.headers.update({ 'auth-key': credentials.auth_key })
-        self.debug = Debug()
         self._prefix = prefix
         self._params = params
+
+    debug = Debug()
 
     @staticmethod
     def _debug(enable=True):

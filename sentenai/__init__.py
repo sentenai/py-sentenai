@@ -1,8 +1,9 @@
-from sentenai.api import API, Credentials
+from sentenai.api import API, Credentials, PANDAS
 from sentenai.stream import Streams, Event
 from sentenai.view import Views
 from sentenai.pattern import Patterns
 from sentenai.pattern.expression import InCircle
+if PANDAS: import pandas as pd
 
 from threading import Thread
 import time
@@ -10,64 +11,9 @@ from queue import Queue, Empty
 
 __all__ = ['Client', 'Event']
 
-class Logger(object):
-    def __init__(self, queue):
-        self._queue = queue
-
-    def __call__(self, stream, event):
-        self._queue.put((stream, event), block=False)
-
-
-class Async(object):
-    def __init__(self, workers=4):
-        self._queue = Queue()
-        self._workers = workers
-        self._enabled = False
-        self._threads = None
-
-    def __enter__(self):
-        self._threads = [Thread(target=self._logger, daemon=True) for x in range(self._workers if 0 < self._workers <= 32 else 4)]
-        self.start()
-        return Logger(self._queue)
-
-    def __exit__(self, et, ev, tb):
-        self.stop()
-
-    def __call__(self, workers):
-        self._workers = workers
-        return self
-
-    def __bool__(self):
-        return self._enabled
-
-    def start(self):
-        self._enabled = True
-        for t in self._threads:
-            t.start()
-
-    def stop(self):
-        while not self._queue.empty():
-            time.sleep(.1)
-        self._enabled = False
-        for t in self._threads:
-            t.join()
-
-    def _logger(self):
-        while self._enabled:
-            try:
-                stream, event = self._queue.get(timeout=1/4)
-            except Empty:
-                continue
-            retries = 0
-            while retries < 5:
-                try:
-                    result = stream.insert(event)
-                except:
-                    print("failed")
-                    retries += 1
-                    time.sleep(retries)
-                else:
-                    break
+if PANDAS:
+    def df(events):
+        return pd.DataFrame([x.as_record() for x in events])
 
 
 
@@ -86,11 +32,6 @@ class Client(API):
             return time.time() - t0
         else:
             raise Exception(r.status_code)
-
-    @property
-    def logger(self):
-        """Async: get an asynchronous pool."""
-        return Async()
 
     @property
     def streams(self):

@@ -1,5 +1,5 @@
 from sentenai.stream.metadata import Metadata
-from sentenai.stream.events import Events
+from sentenai.stream.events import Events, Event
 from sentenai.stream.fields import Fields, Field
 from sentenai.api import API, iso8601, SentenaiEncoder, PANDAS
 if PANDAS:
@@ -7,6 +7,12 @@ if PANDAS:
 from datetime import datetime
 import simplejson as JSON
 import re, io
+
+# Optional for parquet handling
+try:
+    import pyarrow
+except:
+    pass
 
 
 class Streams(API):
@@ -49,8 +55,10 @@ class Streams(API):
             if not re.search(name, item['name']):
                 continue
             for k, v in kwargs.items():
-                if k in item['meta'] and item['meta'][k] == v:
-                    ss.append(item)
+                if k not in item['meta'] or not re.search(v, item['meta'][k]):
+                    break
+            else:
+                ss.append(item)
         return iter([(x['name'], Stream(self, name=x['name'])) for x in ss])
         
         
@@ -85,6 +93,36 @@ class Stream(API):
                 r = self._post(json=f.read(), headers=hdr)
         elif isinstance(events, io.IOBase):
             r = self._post(json=events.read(), headers=hdr)
+        elif isinstance(events, pyarrow.Table):
+            cnames = list(map(str.lower, events.column_names))
+            if 'ts' in cnames:
+                ts_ix = cnames.index('ts')
+            elif 'timestamp' in cnames:
+                ts_ix = cnames.index('timestamp')
+            else:
+                raise ValueError("Needs timestamp column")
+            if 'duration' in cnames:
+                td_ix = cnames.index('ts')
+            else:
+                td_ix = None
+
+            def iterate():
+                for n in range(len(events)):
+                    e = Event(ts=events[ts_ix][n].as_py(), duration=events[td_ix][n].as_py() if td_ix else None, data={})
+                    for i, c in enumerate(events.column_names):
+                        if i in [td_ix, ts_ix]:
+                            continue
+                        e.data[events.column_names[i]] = events[i][n].as_py()
+                    yield (
+                        JSON.dumps({
+                            "id": e.id,
+                            "ts": e.ts,
+                            "duration": e.duration,
+                            "event": e.data
+                            }, ignore_nan=True, cls=SentenaiEncoder
+                        ) + '\n'
+                    ).encode()
+            r = self._post(json=iterate())
         else:
             r = self._post(json=((JSON.dumps({"id": e.id, "ts": e.ts, "duration": e.duration, "event": e.data}, ignore_nan=True, cls=SentenaiEncoder)+"\n").encode() for e in events), headers=hdr)
         if r.status_code not in range(200, 300):
@@ -155,6 +193,8 @@ class Stream(API):
 
     def values(self, at=None):
         params = {}
+        if self._anchor:
+            params['t0'] = iso8601(self._anchor)
         if at:
             if self.t0:
                 params['at'] = iso8601(at)
