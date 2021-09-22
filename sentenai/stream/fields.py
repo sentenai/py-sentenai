@@ -36,7 +36,7 @@ class Fields(API):
             elif key.start is None and key.stop == 'duration':
                 return DurationField(self, self._stream)
             else:
-                return None("invalid path")
+                raise ValueError("invalid path")
         else:
             return Field(self, self._stream, key)
 
@@ -110,18 +110,18 @@ class Field(API, Var, Path):
                 try:
                     params['start'] = iso8601(dt64(s.start))
                 except:
-                    return None("Range slicing only allowed with datetime types")
+                    raise ValueError("Range slicing only allowed with datetime types")
 
             if s.stop is not None:
                 try:
                     params['end'] = iso8601(dt64(s.stop))
                 except:
-                    return None("Range slicing only allowed with datetime types")
+                    raise ValueError("Range slicing only allowed with datetime types")
 
 
 
         else:
-            return None("Field type can only use range slicing.")
+            raise ValueError("Field type can only use range slicing.")
 
     @property
     def stats(self): 

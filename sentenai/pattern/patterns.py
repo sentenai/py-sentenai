@@ -42,6 +42,8 @@ class Patterns(API):
     def __call__(self, definition):
         if isinstance(definition, str):
             sj = definition
+        elif isinstance(definition, bytes):
+            sj = definition.decode('utf-8')
         else:
             sj = {'select': definition.json()}
         resp = self._post(json={"pattern": sj})
