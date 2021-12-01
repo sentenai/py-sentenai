@@ -61,7 +61,7 @@ class Events(API):
                 try:
                     ts = int(res.headers['timestamp'])
                 except:
-                    ts = res.headeres['timestamp']
+                    ts = res.headers['timestamp']
                 return Event(id=i, ts=ts, duration=res.headers.get('duration'), data=ej)
             elif res.status_code == 404:
                 raise KeyError("Events does not exist")
