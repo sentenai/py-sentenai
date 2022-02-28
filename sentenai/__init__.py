@@ -1,4 +1,4 @@
-from sentenai.api import API, Credentials, PANDAS
+from sentenai.api import API, Credentials, PANDAS, iso8601, dt64
 from sentenai.stream import Streams, Event
 from sentenai.view import Views
 from sentenai.pattern import Patterns
@@ -24,6 +24,9 @@ class Client(API):
     def __repr__(self):
         return "Client(auth_key=\"{}\", host=\"{}\")".format(self._credentials.auth_key, self._credentials.host)
 
+    def __call__(self, tspl):
+        return View(self, tspl)
+
     def ping(self):
         """float: Ping Sentenai cluster's health check and get back response time in seconds."""
         t0 = time.time()
@@ -38,19 +41,57 @@ class Client(API):
         """Streams: the sub-api for streams."""
         return Streams(self)
 
-    @property
-    def views(self):
-        """Views: the sub-api for views."""
-        return Views(self)
-
-    @property
-    def patterns(self):
-        """Patterns: the sub-api for patterns."""
-        return Patterns(self)
 
 
 
+class View(API):
+    def __init__(self, parent, tspl):
+        self._parent = parent
+        API.__init__(self, parent._credentials, *parent._prefix, "patterns")
+        self._tspl = tspl
+
+    def __repr__(self):
+        return self._tspl
+
+    def __getitem__(self, i):
+        params = {}
+
+        if isinstance(i, slice):
+            params['sort'] = 'asc'
+
+            if i.start is None:
+                pass
+            elif type(i.start) is int:
+                params['start'] = int(i.start)
+            else:
+                params['start'] = iso8601(i.start)
+
+            if i.stop is None:
+                pass
+            elif type(i.stop) is int:
+                params['end'] = int(i.stop)
+            else:
+                params['end'] = iso8601(i.stop)
+
+            if i.step is not None:
+                params['limit'] = abs(i.step)
+                if i.step < 0:
+                    params['sort'] = 'desc'
+
+            data = self._post("umbra/exec", json=f'{self._tspl}', params=params).json()
+            if isinstance(data, list):
+                return [{
+                    'value': evt['value'],
+                    'start': dt64(evt['start']),
+                    'end': dt64(evt['end'])
+                } for evt in data ]
+            else:
+                print(data)
+                raise Exception(data)
 
 
+        else:
+            raise Exception("wrong type")
+    
 
 
