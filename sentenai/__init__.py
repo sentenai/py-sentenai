@@ -80,11 +80,11 @@ class View(API):
 
             data = self._post("umbra/exec", json=f'{self._tspl}', params=params).json()
             if isinstance(data, list):
-                return [{
-                    'value': evt['value'],
-                    'start': dt64(evt['start']),
-                    'end': dt64(evt['end'])
-                } for evt in data ]
+                for evt in data:
+                    evt['start'] = dt64(evt['start'])
+                    evt['end'] = dt64(evt['end'])
+                return data
+
             else:
                 print(data)
                 raise Exception(data)
