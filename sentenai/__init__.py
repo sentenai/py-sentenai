@@ -40,18 +40,25 @@ class Client(API):
     def streams(self):
         """Streams: the sub-api for streams."""
         return Streams(self)
-
+    
+    if PANDAS:
+        def df(self, tspl):
+            return View(self, tspl, True)
 
 
 
 class View(API):
-    def __init__(self, parent, tspl):
+    def __init__(self, parent, tspl, df=False):
         self._parent = parent
         API.__init__(self, parent._credentials, *parent._prefix, "patterns")
         self._tspl = tspl
+        self._df = df
 
     def __repr__(self):
         return self._tspl
+    
+    def explain(self):
+        return self._post("umbra/plan", json=f'{self._tspl}').json()
 
     def __getitem__(self, i):
         params = {}
@@ -83,7 +90,10 @@ class View(API):
                 for evt in data:
                     evt['start'] = dt64(evt['start'])
                     evt['end'] = dt64(evt['end'])
-                return data
+                if self._df:
+                    return pd.DataFrame(data)
+                else:
+                    return data
 
             else:
                 print(data)
