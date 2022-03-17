@@ -1,12 +1,13 @@
 from sentenai.stream.metadata import Metadata
 from sentenai.stream.events import Events, Event
 from sentenai.stream.fields import Fields, Field
-from sentenai.api import API, iso8601, SentenaiEncoder, PANDAS
+from sentenai.api import *
 if PANDAS:
     import pandas as pd
 from datetime import datetime
 import simplejson as JSON
 import re, io
+from collections import namedtuple
 
 # Optional for parquet handling
 try:
@@ -14,167 +15,123 @@ try:
 except:
     pass
 
+from queue import Queue
+from threading import Thread
 
-class Streams(API):
-    def __init__(self, parent):
-        self._parent = parent
-        API.__init__(self, parent._credentials, *parent._prefix, "streams")
+Update = namedtuple('Update', ['id', 'start', 'end', 'data'])
 
-
-    if PANDAS:
-        def _repr_html_(self):
-            data = list(self)
-            return pd.DataFrame([{'name': k, 't0': s.t0} for k, s in data])._repr_html_()
-
-    def __repr__(self):
-        return "{}.streams".format(repr(self._parent))
-
-    def __getitem__(self, key):
-        if type(key) is tuple:
-            k, a = key
-            return Stream(self, name=k, anchor=a)
-        else:
-            return Stream(self, name=key)
-
-    def __len__(self):
-        return len(self._get().json())
-
-    def __delitem__(self, key):
-        x = self[key]
-        if x:
-            x.delete()
-        else:
-            raise KeyError("Stream does not exist")
+class WQueue(Queue):
+    def write(self, data):
+        if data:
+            j = {}
+            if data.id:
+                j['id'] = id
+            if not data.start:
+                j['ts'] = dt64(datetime.utcnow())
+            else:
+                j['ts'] = data.start
+            if data.end:
+                j['duration'] = data.end - j['ts']
+            j['event'] = data.data
+            self.put((JSON.dumps(j, ignore_nan=True, cls=SentenaiEncoder) + "\n").encode('utf-8'))
 
     def __iter__(self):
-        return iter([(x['name'], Stream(self, name=x['name'], anchor=x.get('t0'))) for x in self._get().json()])
-    
-    def __call__(self, name=".*", **kwargs):
-        ss = []
-        for item in self._get().json():
-            if not re.search(name, item['name']):
-                continue
-            for k, v in kwargs.items():
-                if k not in item['meta'] or not re.search(v, item['meta'][k]):
-                    break
+        return iter(self.get, None)
+
+    def gen(self):
+        while True:
+            x = self.get()
+            if x is None:
+                break
             else:
-                ss.append(item)
-        return iter([(x['name'], Stream(self, name=x['name'])) for x in ss])
-        
-        
+                yield x
 
 
+    def close(self):
+        self.put(None)
+
+class Log(Thread):
+    def __init__(self, parent):
+        self._queue = WQueue(1000)
+        self._parent = parent
+        self._thread = Thread(target=self._post)
+        self._thread.start()
+
+    def _post(self):
+        self._parent._post(json=self._queue.gen())
+
+    def __setitem__(self, item, data):
+        if isinstance(item, slice):
+            if item.start is None:
+                raise ValueError("start time must be specified")
+            elif item.stop and item.start >= item.stop:
+                raise ValueError("end time must be after start time")
+            else:
+                self._queue.write(Update(start=item.start, end=item.stop, id=item.step, data=data))
+        else:
+            raise ValueError("Must be a slice of the form `start : end* : id*`, where `*` indicates optional)")
 
 
-class Stream(API):
-    def __init__(self, parent, name, filters=None, anchor=None):
-        p = {'filters': filters.json()} if filters else {}
-        API.__init__(self, parent._credentials, *parent._prefix, name, params=p)
+class Streams(API):
+    def __init__(self, parent, name):
         self._parent = parent
         self._name = name
-        self._filters = filters
-        self._anchor = anchor
+        self._origin = None
+        API.__init__(self, parent._credentials, *parent._prefix, "streams", name)
+        self._log = None
 
-    def init(self, t0="now"):
-        if t0 == "now":
-            r = self._put(headers={'t0': iso8601(datetime.utcnow())}, json=None)
-        elif t0 == None:
-            r = self._put()
+
+    def __enter__(self):
+        self._log = Log(self)
+        return self._log
+
+    def __exit__(self, x, y, z):
+        self._log._queue.close()
+        self._log._thread.join()
+        self._log = None
+
+
+
+    def __getitem__(self, key):
+        if isinstance(key, tuple):
+            return Stream(self, *key)
         else:
-            r = self._put(headers={'t0': iso8601(t0)}, json=None)
-        if r.status_code != 201:
-            raise Exception(r.status_code)
+            return Stream(self, key)
 
-    def upload(self, events):
-        r = None
-        hdr = {'content-type': 'application/x-ndjson'}
-        if isinstance(events, str):
-            with open(events) as f:
-                r = self._post(json=f.read(), headers=hdr)
-        elif isinstance(events, io.IOBase):
-            r = self._post(json=events.read(), headers=hdr)
-        elif isinstance(events, pyarrow.Table):
-            cnames = list(map(str.lower, events.column_names))
-            if 'ts' in cnames:
-                ts_ix = cnames.index('ts')
-            elif 'timestamp' in cnames:
-                ts_ix = cnames.index('timestamp')
+    def __setitem__(self, item, data):
+        hdrs = {'content-type': 'application/json'}
+        if isinstance(item, slice):
+            if item.start is None:
+                raise ValueError("start time must be specified")
+            elif item.stop and item.start >= item.stop:
+                raise ValueError("end time must be after start time")
             else:
-                raise ValueError("Needs timestamp column")
-            if 'duration' in cnames:
-                td_ix = cnames.index('ts')
-            else:
-                td_ix = None
-
-            def iterate():
-                for n in range(len(events)):
-                    e = Event(ts=events[ts_ix][n].as_py(), duration=events[td_ix][n].as_py() if td_ix else None, data={})
-                    for i, c in enumerate(events.column_names):
-                        if i in [td_ix, ts_ix]:
-                            continue
-                        e.data[events.column_names[i]] = events[i][n].as_py()
-                    yield (
-                        JSON.dumps({
-                            "id": e.id,
-                            "ts": e.ts,
-                            "duration": e.duration,
-                            "event": e.data
-                            }, ignore_nan=True, cls=SentenaiEncoder
-                        ) + '\n'
-                    ).encode()
-            r = self._post(json=iterate())
+                if item.start is not None and item.stop is None:
+                    hdrs["timestamp"] = iso8601(item.start)
+                elif evt.stop is not None:
+                    hdrs['start'] = iso8601(item.start)
+                    hdrs["end"] = iso8601(item.stop)
+                if item.step is None:
+                    r = self._post("events", headers=hdrs, json=data)
+                else:
+                    r = self._put("events", item.step, headers=hdrs, json=data)
+                if 300 > r.status_code >= 200:
+                    return None
+                else:
+                    raise Exception(r.status_code)
         else:
-            r = self._post(json=((JSON.dumps({"id": e.id, "ts": e.ts, "duration": e.duration, "event": e.data}, ignore_nan=True, cls=SentenaiEncoder)+"\n").encode() for e in events), headers=hdr)
-        if r.status_code not in range(200, 300):
-            raise Exception(r.status_code)
+            raise ValueError("Must be a slice of the form `start : end* : id*`, where `*` indicates optional)")
 
     def __repr__(self):
-        return 'Stream(name={!r})'.format(self._name)
+        return f"Streams({self._parent!r}, \"{self._name}\")"
 
-    def __delattr__(self, name):
-        if name == 'metadata':
-            self.metadata.clear()
-        else:
-            raise TypeError("cannot delete `{}`".format(name))
-
-    def where(self, *filters):
-        if len(filters) < 1:
-            fs = self._filters
-        elif self._filters:
-            fs = self._filters & filters[0]
-        else:
-            fs = filters[0]
-        for f in filters[1:]:
-            fs &= f
-        return Stream(self._parent, self._name, fs, self._anchor)
-            
-    def json(self):
-        d = {'name': self._name}
-        if self._anchor:
-            d['t0'] = self._anchor
-        if 'filters' in self._params:
-            d['filter'] = self._params['filters']
-        return d
+    def __str__(self):
+        return str(self._name)
 
     @property
-    def metadata(self):
-        return Metadata(self)
-
-    @property
-    def events(self):
-        return Events(self)
-
-    @property
-    def bounds(self):
-        try:
-            return self.events[::1][0].ts, self.events[::-1][0].ts
-        except:
-            return (None, None)
-
-    @property
-    def t0(self):
-        if self._anchor:
-            return self._anchor
+    def origin(self):
+        if self._origin:
+            return self._origin
         else:
             return self._head().headers.get('t0')
 
@@ -182,77 +139,116 @@ class Stream(API):
     def name(self):
         return self._name
 
-    def update(self, evt):
-        return self.events.update(evt)
+    @property
+    def streams(self):
+        r = self._get("fields")
+        if r.status_code != 200:
+            raise SentenaiError("invalid response")
+        data = r.json()
+        return [Stream(self, *x) for x in sorted([f['path'] for f in data])]
 
-    def insert(self, evt):
-        return self.events.insert(evt)
 
-    def remove(self, evt):
-        return self.events.delete(evt)
 
-    def values(self, at=None):
-        params = {}
-        if self._anchor:
-            params['t0'] = iso8601(self._anchor)
-        if at:
-            if self.t0:
-                params['at'] = iso8601(at)
-            else:
-                params['at'] = at
+        
 
-        res = self._get(params=params)
-        if res.status_code == 200:
-            vs = res.json()
-            return dict([(tuple(x['path']) if len(x['path']) > 1 else x['path'][0], x['value']) for x in vs])
-        elif res.status_code == 404:
-            raise ValueError("stream not found")
-        else:
-            raise Exception(res.status_code)
-
-    def __matmul__(self, ts):
-        return self.values(ts)
-
-    def delete(self):
-        r = self._delete()
-        if r.status_code == 204:
-            return None
-        else:
-            raise Exception("Couldn't delete")
-
-    def __bool__(self):
-        r = self._head()
-        if r.status_code == 404:
-            return False
-        elif r.status_code == 200:
-            return True
-        else:
-            raise Exception(r.status_code)
-
-    def __nonzero__(self):
-        r = self._head()
-        if r.status_code == 404:
-            return False
-        elif r.status_code == 200:
-            return True
-        else:
-            raise NotImplemented
-
-    def __str__(self):
-        return f'stream "{self._name!s}"'
+class Stream(API):
+    def __init__(self, parent, *path):
+        self._parent = parent
+        self._path = path
+        API.__init__(self, parent._credentials, *parent._prefix)
 
     @property
-    def fields(self):
-        return Fields(self)
+    def type(self):
+        return self._get('type', *self._path).json()['type']
 
-    def __iter__(self):
-        return iter(Fields(self))
+    def __repr__(self):
+        z = ", ".join(map(repr, self._path))
+        return f"Stream({self._parent!r}, {z})"
+
+    def __str__(self):
+        return "/".join((self._parent.name,) + self._path)
 
     def __getitem__(self, key):
-        return Fields(self)[(key,) if type(key) != tuple else key]
+        if isinstance(key, tuple):
+            return Stream(self._parent, self._path + key)
+        else:
+            return Stream(self._parent, self._path + (key,))
+   
+    @property
+    def data(self):
+        return StreamData(self)
 
-    def __setitem__(self, key, val):
-        raise NotImplemented("What would it do?")
+    @property
+    def first(self):
+        try:
+            return self.data[::1][0]
+        except KeyError:
+            return None
+
+    @property
+    def head(self, n=20):
+        if n <= 0: return None
+        return self.data[::n]
+    
+    @property
+    def tail(self, n=20):
+        if n <= 0: return None
+        return self.data[::-n]
+
+    @property
+    def last(self):
+        try:
+            return self.data[::-1][0]
+        except KeyError:
+            return None
+    
+class StreamData(object):
+    def __init__(self, parent):
+        self._parent = parent
+
+    def __getitem__(self, tr):
+        if isinstance(tr, tuple):
+            if len(tr) == 2:
+                s, o = tr
+                t = self._parent.type
+            elif len(tr) == 3:
+                s, o, t = tr
+            else:
+                raise ValueError("invalid arguments to .data")
+        else:
+            s = tr
+            o = None
+            t = self._parent.type
+
+        ps = {'t0': self._parent._parent.origin if o is None else iso8601(o)}
+        if s.start is not None:
+            ps['start'] = iso8601(s.start)
+        if s.stop is not None:
+            ps['end'] = iso8601(s.stop)
+        if s.step is not None:
+            ps['limit'] = int(s.step)
+        
+        r = self._parent._get('data', "/".join(self._parent._path) + "." + t, params=ps)
+        data = r.json()
+        if isinstance(data, list):
+            for evt in data:
+                evt['start'] = dt64(evt['start'])
+                evt['end'] = dt64(evt['end'])
+                if t != 'event':
+                    evt['value'] = fromJSON(t, evt['value'])
+            return data
+        else:
+            raise Exception(data)
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -8,7 +8,7 @@ import sys
 import time, types
 import dateutil
 import dateutil.tz
-from datetime import datetime, timedelta, tzinfo
+from datetime import date, time, datetime, timedelta, tzinfo
 import datetime as dt
 
 import http.client as http_client
@@ -26,6 +26,25 @@ except:
 
 def base64json(x):
     return base64.urlsafe_b64encode(bytes(JSON.dumps(x, ignore_nan=True, cls=SentenaiEncoder), 'UTF-8'))
+
+def fromJSON(vtype, x):
+    if vtype == "int":
+        return int(x)
+    elif vtype == "int":
+        return float(x)
+    elif vtype == "datetime":
+        return dt64(x)
+    elif vtype == "timedelta":
+        return td64(x)
+    elif vtype == "timedelta":
+        return td64(x)
+    elif vtype == "date":
+        return date.fromisoformat(x)
+    elif vtype == "time":
+        return time.fromisoformat(x[:15])
+    else:
+        return x
+
 
 class UTC(tzinfo):
     """A timezone class for UTC."""
@@ -203,16 +222,25 @@ class API(object):
                 ps[k] = params[k]
         if self.debug.debugging:
             print("----------\n")
-        if data is None:
-            r = method("/".join([self._credentials.host]+list(self._prefix)+list(parts)), params=ps, headers=headers)
-        elif isinstance(data, types.GeneratorType):
-            r = method("/".join([self._credentials.host]+list(self._prefix)+list(parts)), params=ps, headers=headers, data=data)
-        else:
-            r = method("/".join([self._credentials.host]+list(self._prefix)+list(parts)), params=ps, headers=headers, data=JSON.dumps(data, ignore_nan=True, cls=SentenaiEncoder))
+        try:
+            if data is None:
+                r = method("/".join([self._credentials.host]+list(self._prefix)+list(parts)), params=ps, headers=headers)
+            elif isinstance(data, types.GeneratorType):
+                r = method("/".join([self._credentials.host]+list(self._prefix)+list(parts)), params=ps, headers=headers, data=data)
+            else:
+                r = method("/".join([self._credentials.host]+list(self._prefix)+list(parts)), params=ps, headers=headers, data=JSON.dumps(data, ignore_nan=True, cls=SentenaiEncoder))
+        except requests.ConnectionError:
+            raise ConnectionError(f"Could not connect to sentenai repository at: `{self._credentials.host}`") from None
 
         resp = self.debug.cache(r)
-        if resp.status_code == 403:
-            raise AccessDenied
+
+        if resp.status_code == 400:
+            x = "/".join(list(self._prefix)+list(parts))
+            raise BadRequest(f"invalid parameters for request ({x}): {ps!r} {resp.json()}")
+        elif resp.status_code == 403:
+            raise AccessDenied("Invalid credentials")
+        elif resp.status_code >= 500:
+            raise SentenaiError(f"Server error ({resp.status_code}): `{self._credentials.host}`")
         else:
             return resp
 
@@ -235,9 +263,11 @@ class API(object):
         return self._req(self._session.head, parts, params, headers)
 
 
-
-class AccessDenied(Exception): pass
-
+class SentenaiException(Exception): pass
+class AccessDenied(SentenaiException): pass
+class ConnectionError(SentenaiException): pass
+class SentenaiError(SentenaiException): pass
+class BadRequest(SentenaiException): pass
 
 
 

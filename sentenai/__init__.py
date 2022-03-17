@@ -1,9 +1,10 @@
-from sentenai.api import API, Credentials, PANDAS, iso8601, dt64
+from sentenai.api import *
 from sentenai.stream import Streams, Event
 from sentenai.view import Views
 from sentenai.pattern import Patterns
 from sentenai.pattern.expression import InCircle
 if PANDAS: import pandas as pd
+from datetime import datetime
 
 from threading import Thread
 import time
@@ -15,34 +16,58 @@ if PANDAS:
     def df(events):
         return pd.DataFrame([x.as_record() for x in events])
 
-
-
-class Client(API):
-    def __init__(self, host, auth_key=""):
-        API.__init__(self, Credentials(host, auth_key))
+class Sentenai(API):
+    def __init__(self, host="http://localhost:3333"):
+        API.__init__(self, Credentials(host, ""))
+        if self.ping() > 0.5:
+            print("warning: connection to this repository may be high latency or unstable.")
 
     def __repr__(self):
-        return "Client(auth_key=\"{}\", host=\"{}\")".format(self._credentials.auth_key, self._credentials.host)
+        return "Sentenai(host=\"{}\")".format(self._credentials.host)
 
     def __call__(self, tspl):
         return View(self, tspl)
 
+    def __iter__(self):
+        r = self._get('streams')
+
+        return iter(s['name'] for s in r.json())
+            
+
+    def init(self, name, origin=datetime(1970,1,1,0,0)):
+        """Initialize a new stream database. The origin is the earliest
+        point in time storable in the database. Data may not come before that time.
+        If `None` is provided, then all updates must be logged with integer timestamps
+        representing nanoseconds since the origin `0`.
+        """
+        if origin == None:
+            r = self._put(name)
+        else:
+            r = self._put("streams", name, headers={'t0': iso8601(origin)}, json=None)
+        if r.status_code != 201:
+            raise Exception("Could not initialize")
+        return self[name]
+
     def ping(self):
-        """float: Ping Sentenai cluster's health check and get back response time in seconds."""
+        """Ping Sentenai get back response time in seconds."""
         t0 = time.time()
         r = self._get()
-        if r.status_code == 200:
-            return time.time() - t0
-        else:
-            raise Exception(r.status_code)
+        return time.time() - t0
 
-    @property
-    def streams(self):
-        """Streams: the sub-api for streams."""
-        return Streams(self)
+    def __delitem__(self, name):
+        """Delete a stream database"""
+        self[name]._delete()
+
+    def __getitem__(self, db):
+        """Get a stream database."""
+        x = self._head('streams', db)
+        if x.status_code != 200:
+            raise KeyError(f"`{db}` not found in {self!r}.")
+        return Streams(self, db)
     
     if PANDAS:
         def df(self, tspl):
+            """Dataframe"""
             return View(self, tspl, True)
 
 
@@ -62,6 +87,8 @@ class View(API):
 
     def __getitem__(self, i):
         params = {}
+        if isinstance(i, tuple):
+            i, o = isinstance
 
         if isinstance(i, slice):
             params['sort'] = 'asc'
@@ -85,13 +112,23 @@ class View(API):
                 if i.step < 0:
                     params['sort'] = 'desc'
 
-            data = self._post("umbra/exec", json=f'{self._tspl}', params=params).json()
+            resp = self._post("umbra/exec", json=f'{self._tspl}', params=params)
+                
+            t = resp.headers['type']
+            data = resp.json()
             if isinstance(data, list):
                 for evt in data:
                     evt['start'] = dt64(evt['start'])
                     evt['end'] = dt64(evt['end'])
+                    if t != "event":
+                        evt['value'] = fromJSON(t, evt['value'])
+                    if self._df:
+                        evt['duration'] = evt['end'] - evt['start']
                 if self._df:
-                    return pd.DataFrame(data)
+                    if t == "event":
+                        return pd.DataFrame(data, columns=["start", "end", "duration"])
+                    else:
+                        return pd.DataFrame(data, columns=["start", "end", "duration", "value"])
                 else:
                     return data
 
