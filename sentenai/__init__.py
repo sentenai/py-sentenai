@@ -91,7 +91,7 @@ class View(API):
             i, o = isinstance
 
         if isinstance(i, slice):
-            params['sort'] = 'asc'
+            #params['sort'] = 'asc'
 
             if i.start is None:
                 pass
@@ -109,8 +109,8 @@ class View(API):
 
             if i.step is not None:
                 params['limit'] = abs(i.step)
-                if i.step < 0:
-                    params['sort'] = 'desc'
+                #if i.step < 0:
+                #    params['sort'] = 'desc'
 
             resp = self._post("umbra/exec", json=f'{self._tspl}', params=params)
                 

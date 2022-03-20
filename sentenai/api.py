@@ -3,6 +3,7 @@ import logging
 import pytz
 import copy
 import re
+import io
 import requests
 import sys
 import time, types
@@ -202,7 +203,7 @@ class API(object):
         params = copy.copy(params)
         params.update(self._params)
         if data:
-            if isinstance(data, types.GeneratorType):
+            if isinstance(data, types.GeneratorType) or isinstance(data, io.IOBase):
                 headers['Content-Type'] = 'application/x-ndjson'
             else:
                 headers['Content-Type'] = 'application/json'
@@ -225,7 +226,7 @@ class API(object):
         try:
             if data is None:
                 r = method("/".join([self._credentials.host]+list(self._prefix)+list(parts)), params=ps, headers=headers)
-            elif isinstance(data, types.GeneratorType):
+            elif isinstance(data, types.GeneratorType) or isinstance(data, io.IOBase):
                 r = method("/".join([self._credentials.host]+list(self._prefix)+list(parts)), params=ps, headers=headers, data=data)
             else:
                 r = method("/".join([self._credentials.host]+list(self._prefix)+list(parts)), params=ps, headers=headers, data=JSON.dumps(data, ignore_nan=True, cls=SentenaiEncoder))
@@ -236,7 +237,7 @@ class API(object):
 
         if resp.status_code == 400:
             x = "/".join(list(self._prefix)+list(parts))
-            raise BadRequest(f"invalid parameters for request ({x}): {ps!r} {resp.json()}")
+            raise BadRequest(f"invalid request: {resp.json()}")
         elif resp.status_code == 403:
             raise AccessDenied("Invalid credentials")
         elif resp.status_code >= 500:

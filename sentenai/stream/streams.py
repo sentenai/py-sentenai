@@ -80,6 +80,8 @@ class Streams(API):
         API.__init__(self, parent._credentials, *parent._prefix, "streams", name)
         self._log = None
 
+    def load(self, file):
+        self._post(file)
 
     def __enter__(self):
         self._log = Log(self)
@@ -89,8 +91,6 @@ class Streams(API):
         self._log._queue.close()
         self._log._thread.join()
         self._log = None
-
-
 
     def __getitem__(self, key):
         if isinstance(key, tuple):
@@ -130,10 +130,9 @@ class Streams(API):
 
     @property
     def origin(self):
-        if self._origin:
-            return self._origin
-        else:
-            return self._head().headers.get('t0')
+        if not self._origin:
+            self._origin = dt64(self._head().headers.get('t0'))
+        return self._origin
 
     @property
     def name(self):
@@ -201,6 +200,100 @@ class Stream(API):
             return self.data[::-1][0]
         except KeyError:
             return None
+    @property
+    def stats(self):
+        return StreamStats(self)
+
+    
+class StreamStats(object):
+    def __init__(self, parent, start=None, end=None, origin=None, vtype=None, ro=False):
+        self._parent = parent
+        self._start = start
+        self._end = end
+        self._type = vtype
+        self._origin = origin
+        self._read_only = ro
+
+    def __getitem__(self, tr):
+        if self._read_only:
+            raise TypeError("Stream stats already has a time range")
+
+        if isinstance(tr, tuple):
+            if len(tr) == 2:
+                s, o = tr
+                t = self._type
+            elif len(tr) == 3:
+                s, o, t = tr
+            else:
+                raise ValueError("invalid arguments to .data")
+            o = iso8601(o)
+        else:
+            s = tr
+            o = self._origin
+            t = self._type
+
+        if s.start is not None:
+            self._start = s.start
+        if s.stop is not None:
+            self._end = s.stop
+
+        self._read_only = True
+        return self
+
+
+    def _stat(self, stat):
+        origin = self._origin or self._parent._parent.origin or dt64("1970-01-01T00:00:00")
+        start = self._start or origin
+        end = self._end or origin + td64(2 ** 63 - 1)
+        try:
+            return self._parent._parent._parent(f"""
+                {stat}({self._parent})
+                    when interval({iso8601(start)}, {iso8601(end)})
+                    origin {iso8601(origin)}
+            """)[::1][0]['value']
+        except BadRequest:
+            raise TypeError from None
+        except IndexError:
+            return None
+        except KeyError:
+            return None
+
+    @property
+    def count(self):
+        return self._stat('count')
+
+    @property
+    def mean(self):
+        return self._stat('mean')
+
+    @property
+    def min(self):
+        return self._stat('min')
+
+    @property
+    def max(self):
+        return self._stat('max')
+
+    @property
+    def sum(self):
+        return self._stat('sum')
+
+    @property
+    def std(self):
+        return self._stat('std')
+
+    @property
+    def top(self):
+        return self._stat('top')
+
+    @property
+    def any(self):
+        return self._stat('any')
+
+    @property
+    def all(self):
+        return self._stat('all')
+
     
 class StreamData(object):
     def __init__(self, parent):
