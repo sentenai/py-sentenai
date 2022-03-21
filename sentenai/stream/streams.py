@@ -80,6 +80,14 @@ class Streams(API):
         API.__init__(self, parent._credentials, *parent._prefix, "streams", name)
         self._log = None
 
+    def __iter__(self):
+        r = self._get("fields")
+        if r.status_code != 200:
+            raise SentenaiError("invalid response")
+        data = r.json()
+        return iter([Stream(self, *x) for x in sorted([f['path'] for f in data])])
+
+
     def load(self, file):
         self._post(file)
 
@@ -138,13 +146,6 @@ class Streams(API):
     def name(self):
         return self._name
 
-    @property
-    def streams(self):
-        r = self._get("fields")
-        if r.status_code != 200:
-            raise SentenaiError("invalid response")
-        data = r.json()
-        return [Stream(self, *x) for x in sorted([f['path'] for f in data])]
 
 
 
@@ -158,7 +159,11 @@ class Stream(API):
 
     @property
     def type(self):
-        return self._get('type', *self._path).json()['type']
+        r = self._get('type', *self._path)
+        if r.status_code == 200:
+            return r.json()['type']
+        else:
+            return None
 
     def __repr__(self):
         z = ", ".join(map(repr, self._path))
@@ -313,7 +318,7 @@ class StreamData(object):
             o = None
             t = self._parent.type
 
-        ps = {'t0': self._parent._parent.origin if o is None else iso8601(o)}
+        ps = {'t0': iso8601(o or self._parent._parent.origin)}
         if s.start is not None:
             ps['start'] = iso8601(s.start)
         if s.stop is not None:
