@@ -261,7 +261,7 @@ class API(object):
         return self._req(requests.patch, parts, params, headers, data=json)
 
     def _head(self, *parts, params={}, headers={}, json={}):
-        return self._req(self.head, parts, params, headers)
+        return self._req(requests.head, parts, params, headers)
 
 
 class SentenaiException(Exception): pass
