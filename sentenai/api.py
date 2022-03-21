@@ -246,22 +246,22 @@ class API(object):
             return resp
 
     def _get(self, *parts, params={}, headers={}):
-        return self._req(self._session.get, parts, params, headers)
+        return self._req(requests.get, parts, params, headers)
 
     def _put(self, *parts, params={}, headers={}, json={}):
-        return self._req(self._session.put, parts, params, headers, data=json)
+        return self._req(requests.put, parts, params, headers, data=json)
 
     def _post(self, *parts, params={}, headers={}, json={}):
-        return self._req(self._session.post, parts, params, headers, data=json)
+        return self._req(requests.post, parts, params, headers, data=json)
 
     def _delete(self, *parts, params={}, headers={}):
-        return self._req(self._session.delete, parts, params, headers)
+        return self._req(requests.delete, parts, params, headers)
 
     def _patch(self, *parts, params={}, headers={}, json={}):
-        return self._req(self._session.patch, parts, params, headers, data=json)
+        return self._req(requests.patch, parts, params, headers, data=json)
 
     def _head(self, *parts, params={}, headers={}, json={}):
-        return self._req(self._session.head, parts, params, headers)
+        return self._req(self.head, parts, params, headers)
 
 
 class SentenaiException(Exception): pass
