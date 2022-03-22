@@ -80,6 +80,9 @@ class Streams(API):
         API.__init__(self, parent._credentials, *parent._prefix, "streams", name)
         self._log = None
 
+    def __len__(self):
+        return int(self._head('events').headers['events'])
+
     def __iter__(self):
         r = self._get("fields")
         if r.status_code != 200:
@@ -209,6 +212,8 @@ class Stream(API):
     def stats(self):
         return StreamStats(self)
 
+    def __len__(self):
+        return StreamStats(self, vtype="event", ro=True).count
     
 class StreamStats(object):
     def __init__(self, parent, start=None, end=None, origin=None, vtype=None, ro=False):
