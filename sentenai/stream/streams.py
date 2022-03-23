@@ -88,7 +88,7 @@ class Streams(API):
         if r.status_code != 200:
             raise SentenaiError("invalid response")
         data = r.json()
-        return iter([Stream(self, *x) for x in sorted([f['path'] for f in data])])
+        return iter(sorted([f[0] for f in data if len(f) == 1]))
 
 
     def load(self, file):
@@ -160,6 +160,14 @@ class Stream(API):
         self._path = path
         API.__init__(self, parent._credentials, *parent._prefix)
 
+    def __iter__(self):
+        r = self._get("fields")
+        if r.status_code != 200:
+            raise SentenaiError("invalid response")
+        data = r.json()
+        pl = len(self._path)
+        return iter(sorted(f[pl] for f in data if self._path == tuple(f[:pl]) and len(f) == pl + 1))
+
     @property
     def type(self):
         r = self._get('type', *self._path)
@@ -177,9 +185,9 @@ class Stream(API):
 
     def __getitem__(self, key):
         if isinstance(key, tuple):
-            return Stream(self._parent, self._path + key)
+            return Stream(self._parent, *(self._path + key))
         else:
-            return Stream(self._parent, self._path + (key,))
+            return Stream(self._parent, *(self._path + (key,)))
    
     @property
     def data(self):
