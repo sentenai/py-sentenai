@@ -264,6 +264,16 @@ class Stream(API):
         else:
             return None
 
+    @property
+    def range(self):
+        r = self._get('range', *self._path)
+        if r.status_code == 200:
+            e = r.json()
+            return (e['start'], e['end'])
+        else:
+            return None
+
+
     def __repr__(self):
         z = ", ".join(map(repr, self._path))
         return f"Stream({self._parent!r}, {z})"
