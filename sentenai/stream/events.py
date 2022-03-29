@@ -16,13 +16,10 @@ def flatten(d, parent_key='', sep='_'):
             items.append((new_key, v))
     return dict(items)
 
-class Events(API):
+class Updates(API):
     def __init__(self, parent):
         API.__init__(self, parent._credentials, *parent._prefix, "events", params=parent._params)
         self._parent = parent
-
-    def __repr__(self):
-        return repr(self._parent) + ".events"
 
     def __iter__(self):
         i = 0
@@ -64,7 +61,7 @@ class Events(API):
                     ts = res.headers['timestamp']
                 return Event(id=i, ts=ts, duration=res.headers.get('duration'), data=ej)
             elif res.status_code == 404:
-                raise KeyError("Events does not exist")
+                raise KeyError("Updates does not exist")
             else:
                 raise Exception(res.status_code)
 
@@ -153,75 +150,5 @@ class Events(API):
 
     def remove(self, evt):
         del self[evt.id]
-
-
-
-class Event(object):
-    def __init__(self, id=None, ts=None, duration=None, data=None):
-        self.id = str(id) if id is not None else None
-        self.ts = dt64(ts) if ts is not None else None
-        self.duration = td64(duration) if duration is not None else None
-        self.data = data
-
-    def as_record(self):
-        return flatten({'id': self.id, 'ts': self.ts, 'duration': self.duration, 'event': self.data}, '', '/')
-
-    def __getitem__(self, pth):
-        if isinstance(pth, str):
-            return self.data[pth]
-        else:
-            d = self.data
-            for s in pth:
-                d = d[s]
-            return d
-
-    def __repr__(self):
-        x = ["{}={}".format(k, repr(getattr(self, k)))
-                for k in ("id", "ts", "duration", "data")
-                if getattr(self, k) is not None]
-        return "Event({})".format(", ".join(x))
-
-    def __len__(self):
-        return self.duration
-
-    @property
-    def start(self):
-        if self.ts and self.duration:
-            return self.ts
-
-    @property
-    def end(self):
-        if self.ts and self.duration:
-            return self.ts + self.duration
-
-    def __lt__(self, other):
-        if not isinstance(other, Event):
-            raise TypeError("Can only compare events.")
-        return self.ts < (other.ts or datetime.max) or self.ts == other.ts and self.duration < other.duration
-
-    def __le__(self, other):
-        if not isinstance(other, Event):
-            raise TypeError("Can only compare events.")
-        return self.ts < other.ts or self.ts == other.ts and self.duration <= other.duration
-
-    def __eq__(self, other):
-        if not isinstance(other, Event):
-            raise TypeError("Can only compare events.")
-        return self.ts == other.ts and self.duration == other.duration
-
-    def __gt__(self, other):
-        if not isinstance(other, Event):
-            raise TypeError("Can only compare events.")
-        return self.ts > other.ts or self.ts == other.ts and self.duration > other.duration
-
-    def __ge__(self, other):
-        if not isinstance(other, Event):
-            raise TypeError("Can only compare events.")
-        return self.ts > other.ts or self.ts == other.ts and self.duration >= other.duration
-
-    def __ne__(self, other):
-        if not isinstance(other, Event):
-            raise TypeError("Can only compare events.")
-        return self.ts != other.ts or self.duration != other.duration
 
 

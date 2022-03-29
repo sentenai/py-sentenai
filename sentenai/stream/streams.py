@@ -1,6 +1,5 @@
 from sentenai.stream.metadata import Metadata
-from sentenai.stream.events import Events, Event
-from sentenai.stream.fields import Fields, Field
+from sentenai.stream.events import Updates
 from sentenai.api import *
 if PANDAS:
     import pandas as pd
@@ -9,11 +8,6 @@ import simplejson as JSON
 import re, io
 from collections import namedtuple
 
-# Optional for parquet handling
-try:
-    import pyarrow
-except:
-    pass
 
 from queue import Queue
 from threading import Thread
@@ -46,7 +40,6 @@ class WQueue(Queue):
             else:
                 yield x
 
-
     def close(self):
         self.put(None)
 
@@ -72,42 +65,11 @@ class Log(Thread):
             raise ValueError("Must be a slice of the form `start : end* : id*`, where `*` indicates optional)")
 
 
-class Streams(API):
-    def __init__(self, parent, name):
+class Updates(API):
+    def __init__(self, parent):
+        API.__init__(self, parent._credentials, *parent._prefix, "events")
+        self._log = None
         self._parent = parent
-        self._name = name
-        self._origin = None
-        API.__init__(self, parent._credentials, *parent._prefix, "streams", name)
-        self._log = None
-
-    def __len__(self):
-        return int(self._head('events').headers['events'])
-
-    def __iter__(self):
-        r = self._get("fields")
-        if r.status_code != 200:
-            raise SentenaiError("invalid response")
-        data = r.json()
-        return iter(sorted([f[0] for f in data if len(f) == 1]))
-
-
-    def load(self, file):
-        self._post(file)
-
-    def __enter__(self):
-        self._log = Log(self)
-        return self._log
-
-    def __exit__(self, x, y, z):
-        self._log._queue.close()
-        self._log._thread.join()
-        self._log = None
-
-    def __getitem__(self, key):
-        if isinstance(key, tuple):
-            return Stream(self, *key)
-        else:
-            return Stream(self, key)
 
     def __setitem__(self, item, data):
         hdrs = {'content-type': 'application/json'}
@@ -119,19 +81,138 @@ class Streams(API):
             else:
                 if item.start is not None and item.stop is None:
                     hdrs["timestamp"] = iso8601(item.start)
-                elif evt.stop is not None:
+                elif item.stop is not None:
                     hdrs['start'] = iso8601(item.start)
                     hdrs["end"] = iso8601(item.stop)
                 if item.step is None:
-                    r = self._post("events", headers=hdrs, json=data)
+                    r = self._post(headers=hdrs, json=data)
                 else:
-                    r = self._put("events", item.step, headers=hdrs, json=data)
+                    r = self._put(item.step, headers=hdrs, json=data)
                 if 300 > r.status_code >= 200:
                     return None
                 else:
                     raise Exception(r.status_code)
         else:
             raise ValueError("Must be a slice of the form `start : end* : id*`, where `*` indicates optional)")
+
+    def __enter__(self):
+        self._log = Log(self._parent)
+        return self._log
+
+    def __exit__(self, x, y, z):
+        self._log._queue.close()
+        self._log._thread.join()
+        self._log = None
+
+    def __delitem__(self, item):
+        if isinstance(item, slice):
+            raise TypeError("slice not supported for deleting updates.")
+        else:
+            r = self._delete(item)
+            if r.status_code == 204:
+                return None
+            else:
+                raise Exception(r.status_code)
+
+
+    def __getitem__(self, item):
+        if isinstance(item, slice):
+            params = {}
+            if item.start is not None:
+                params['start'] = iso8601(item.start)
+            if item.stop is not None:
+                params['end'] = iso8601(item.stop)
+            if item.step is not None:
+                params['limit'] = abs(item.step)
+                if item.step < 0:
+                    params['sort'] = 'desc'
+            r = self._get(params=params)
+            if r.status_code == 200:
+                data = []
+                for line in r.json():
+                    data.append({
+                        'start': dt64(line['ts']),
+                        'end': dt64(line['ts']) + td64(line['duration']) if line['duration'] else None,
+                        'data': line['event'],
+                    })
+                return data
+            else:
+                raise Exception(r.json())
+        else:
+            r = self._get(item)
+            if r.status_code == 404:
+                raise KeyError(f"Update with id `{item}` not found.")
+            else:
+                return r.json()
+
+
+
+
+class Streams(API):
+    def __init__(self, parent, name):
+        self._parent = parent
+        self._name = name
+        self._origin = None
+        API.__init__(self, parent._credentials, *parent._prefix, "streams", name)
+
+    @property
+    def log(self):
+        return Updates(self)
+
+    def __len__(self):
+        return int(self._head('events').headers['events'])
+
+    def __iter__(self):
+        r = self._get("fields")
+        if r.status_code != 200:
+            raise sentenaierror("invalid response")
+        data = r.json()
+        return iter(sorted([f[0] for f in data if len(f) == 1]))
+
+    def keys(self):
+        return iter(self)
+   
+    def items(self):
+        return iter([(k, self[k]) for k in self])
+
+    def values(self):
+        return iter([self[k] for k in self])
+
+    @property
+    def graph(self):
+        import treelib
+        t = treelib.Tree()
+        root = t.create_node(self.name, self.name)
+        r = self._get("fields")
+        if r.status_code != 200:
+            raise sentenaierror("invalid response")
+        data = r.json()
+        for node in sorted(data):
+            parent = root
+            x = [self._name]
+            for link in node:
+                x.append(link)
+                nid = "/".join(x)
+                if nid in t:
+                    continue
+                else:
+                    pid = "/".join(x[:-1]) 
+                    t.create_node(link, nid, parent=pid)
+        return t
+
+
+    @property
+    def meta(self):
+        return Metadata(self)
+
+    def load(self, file):
+        self._post(file)
+
+    def __getitem__(self, key):
+        if isinstance(key, tuple):
+            return Stream(self, *key)
+        else:
+            return Stream(self, key)
 
     def __repr__(self):
         return f"Streams({self._parent!r}, \"{self._name}\")"
@@ -141,8 +222,7 @@ class Streams(API):
 
     @property
     def origin(self):
-        if not self._origin:
-            self._origin = dt64(self._head().headers.get('t0'))
+        self._origin = dt64(self._head().headers.get('t0'))
         return self._origin
 
     @property
@@ -167,6 +247,14 @@ class Stream(API):
         data = r.json()
         pl = len(self._path)
         return iter(sorted(f[pl] for f in data if self._path == tuple(f[:pl]) and len(f) == pl + 1))
+
+    @property
+    def graph(self):
+        return self._parent.graph.subtree(str(self))
+
+    @property
+    def meta(self):
+        return Metadata(self)
 
     @property
     def type(self):

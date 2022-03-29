@@ -1,8 +1,5 @@
 from sentenai.api import *
-from sentenai.stream import Streams, Event
-from sentenai.view import Views
-from sentenai.pattern import Patterns
-from sentenai.pattern.expression import InCircle
+from sentenai.stream import Streams
 if PANDAS: import pandas as pd
 from datetime import datetime
 
@@ -17,8 +14,17 @@ if PANDAS:
         return pd.DataFrame([x.as_record() for x in events])
 
 class Sentenai(API):
-    def __init__(self, host="http://localhost:3333"):
-        API.__init__(self, Credentials(host, ""))
+    def __init__(self, host=None, port=None, protocol=None):
+        ## We do this so we can programmatically pass in host/port
+        if host is None:
+            host = 'localhost'
+        if port is None:
+            port = 3333
+        if protocol is None:
+            protocol = 'http://'
+
+        h = f"{protocol}{host}:{port}"
+        API.__init__(self, Credentials(h, ""))
         if self.ping() > 0.5:
             print("warning: connection to this repository may be high latency or unstable.")
 
@@ -30,9 +36,16 @@ class Sentenai(API):
 
     def __iter__(self):
         r = self._get('streams')
+        return iter(sorted(s['name'] for s in r.json()))
 
-        return iter(s['name'] for s in r.json())
-            
+    def keys(self):
+        return iter(self)
+   
+    def items(self):
+        return iter([(k, self[k]) for k in self])
+
+    def values(self):
+        return iter([self[k] for k in self])
 
     def init(self, name, origin=datetime(1970,1,1,0,0)):
         """Initialize a new stream database. The origin is the earliest
@@ -64,6 +77,7 @@ class Sentenai(API):
         if x.status_code != 200:
             raise KeyError(f"`{db}` not found in {self!r}.")
         return Streams(self, db)
+
     
     if PANDAS:
         def df(self, tspl):
