@@ -23,9 +23,9 @@ class WQueue(Queue):
             if not data.start:
                 j['ts'] = dt64(datetime.utcnow())
             else:
-                j['ts'] = data.start
+                j['ts'] = dt64(data.start)
             if data.end:
-                j['duration'] = data.end - j['ts']
+                j['duration'] = int((dt64(data.end) - dt64(j['ts'])).astype('timedelta64[ns]'))
             j['event'] = data.data
             self.put((JSON.dumps(j, ignore_nan=True, cls=SentenaiEncoder) + "\n").encode('utf-8'))
 
@@ -222,8 +222,11 @@ class Streams(API):
 
     @property
     def origin(self):
-        self._origin = dt64(self._head().headers.get('t0'))
-        return self._origin
+        try:
+            self._origin = dt64(self._head().headers.get('t0'))
+            return self._origin
+        except TypeError:
+            self._origin = None
 
     @property
     def name(self):

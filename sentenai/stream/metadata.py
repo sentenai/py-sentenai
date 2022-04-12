@@ -8,12 +8,12 @@ class Metadata(API):
     def __init__(self, parent, metadata=None):
         API.__init__(self, parent._credentials, *parent._prefix, 'metadata')
         self._parent = parent
-        self._meta_prefix = base64.urlsafe_b64encode("/".join(parent._prefix).replace('#','&sect;&sect;').encode('utf-8')).decode('utf-8').replace("=",'')
-        self._meta_cache = metadata
+        if hasattr(parent, '_path'):
+            self._meta_prefix = "/" + base64.urlsafe_b64encode("/".join(parent._path).replace('#','&sect;&sect;').encode('utf-8')).decode('utf-8').replace("=",'')
+        else:
+            self._meta_prefix = ""
 
-    def clear(self):
-        for k, v in self.items():
-            self[k] = None
+        self._meta_cache = metadata
 
     def __iter__(self):
         return iter(k for k, v in self.items())
@@ -69,7 +69,7 @@ class Metadata(API):
     if PANDAS:
         def _repr_html_(self):
             return pd.DataFrame([
-                {'key': n, 'value': v} for n, v in iter(self)
+                {'key': n, 'value': v} for n, v in self.items()
             ])._repr_html_()
 
 
@@ -85,9 +85,15 @@ class Metadata(API):
             return "String"
 
     def __getitem__(self, key):
-        return dict(self)[key]
+        print(key)
+        for k, v in self.items():
+            if k == key:
+                return v
+        else:
+            raise KeyError("metadata key not found")
 
     def __setitem__(self, key, val):
+        self._meta_cache = None
         resp = self._patch(json={f"{self._meta_prefix}#{key}": val})
         if resp.status_code not in [200, 201, 204]:
             raise Exception(resp.status_code)

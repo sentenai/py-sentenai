@@ -3,18 +3,16 @@ from sentenai.stream import Streams
 if PANDAS: import pandas as pd
 from datetime import datetime
 
-from threading import Thread
 import time
-from queue import Queue, Empty
 
-__all__ = ['Client', 'Event']
+__all__ = ['Sentenai']
 
 if PANDAS:
     def df(events):
         return pd.DataFrame([x.as_record() for x in events])
 
 class Sentenai(API):
-    def __init__(self, host=None, port=None, protocol=None):
+    def __init__(self, host=None, port=None, protocol=None, check=True):
         ## We do this so we can programmatically pass in host/port
         if host is None:
             host = 'localhost'
@@ -25,7 +23,7 @@ class Sentenai(API):
 
         h = f"{protocol}{host}:{port}"
         API.__init__(self, Credentials(h, ""))
-        if self.ping() > 0.5:
+        if check and self.ping() > 0.5:
             print("warning: connection to this repository may be high latency or unstable.")
 
     def __repr__(self):
