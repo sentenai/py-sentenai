@@ -57,6 +57,8 @@ class UTC(tzinfo):
         return timedelta()
 
 def dt64(dt):
+    if dt is None:
+        return None
     if isinstance(dt, str):
         if dt.endswith("Z"):
             return np.datetime64(dt[:-1])
