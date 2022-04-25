@@ -167,7 +167,7 @@ class Streams(API):
         if r.status_code != 200:
             raise sentenaierror("invalid response")
         data = r.json()
-        return iter(sorted([f[0] for f in data if len(f) == 1]))
+        return iter(sorted([f['path'][0] for f in data if len(f['path']) == 1]))
 
     def keys(self):
         return iter(self)
@@ -182,22 +182,22 @@ class Streams(API):
     def graph(self):
         import treelib
         t = treelib.Tree()
-        root = t.create_node(self.name, self.name)
+        root = t.create_node(self.name, self.name, data={})
         r = self._get("fields")
         if r.status_code != 200:
-            raise sentenaierror("invalid response")
+            raise SentenaiError("Invalid Response")
         data = r.json()
-        for node in sorted(data):
+        for node in sorted(data, key=lambda x: x['path']):
             parent = root
             x = [self._name]
-            for link in node:
+            for link in node['path']:
                 x.append(link)
                 nid = "/".join(x)
                 if nid in t:
                     continue
                 else:
                     pid = "/".join(x[:-1]) 
-                    t.create_node(link, nid, parent=pid)
+                    t.create_node(link, nid, parent=pid, data={'type': node['type']})
         return t
 
 
@@ -432,7 +432,7 @@ class StreamData(object):
             o = None
             t = self._parent.type
 
-        ps = {'t0': iso8601(o or self._parent._parent.origin)}
+        ps = {'origin': iso8601(o or self._parent._parent.origin)}
         if s.start is not None:
             ps['start'] = iso8601(s.start)
         if s.stop is not None:
