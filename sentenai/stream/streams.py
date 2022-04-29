@@ -223,7 +223,7 @@ class Streams(API):
     @property
     def origin(self):
         try:
-            self._origin = dt64(self._head().headers.get('t0'))
+            self._origin = dt64(self._head().headers.get('origin'))
             return self._origin
         except TypeError:
             self._origin = None

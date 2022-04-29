@@ -52,9 +52,9 @@ class Sentenai(API):
         representing nanoseconds since the origin `0`.
         """
         if origin == None:
-            r = self._put(name)
+            r = self._put("streams", name)
         else:
-            r = self._put("streams", name, headers={'t0': iso8601(origin)}, json=None)
+            r = self._put("streams", name, headers={'origin': iso8601(origin)}, json=None)
         if r.status_code != 201:
             raise Exception("Could not initialize")
         return self[name]
@@ -90,12 +90,39 @@ class View(API):
         API.__init__(self, parent._credentials, *parent._prefix, "patterns")
         self._tspl = tspl
         self._df = df
-
+        self._info = None
     def __repr__(self):
         return self._tspl
     
     def explain(self):
         return self._post("umbra/plan", json=f'{self._tspl}').json()
+
+    @property
+    def range(self):
+        if self._info:
+            return {'start': dt64(self._info['start']), 'end': dt64(self._info['end'])}
+        else:
+            self._info = self._post("umbra/range", json=f'{self._tspl}').json()
+            return self.range
+
+    @property
+    def origin(self):
+        if self._info:
+            return dt64(self._info.get('origin'))
+        else:
+            self._info = self._post("umbra/range", json=f'{self._tspl}').json()
+            return self.origin
+
+    @property
+    def type(self):
+        if self._info:
+            return self._info.get('type')
+        else:
+            self._info = self._post("umbra/range", json=f'{self._tspl}').json()
+            return self.type
+
+
+
 
     def __getitem__(self, i):
         params = {}
