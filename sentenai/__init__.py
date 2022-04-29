@@ -147,7 +147,7 @@ class View(API):
                 params['end'] = iso8601(i.stop)
 
             if i.step is not None:
-                params['limit'] = abs(i.step)
+                params['limit'] = i.step
                 #if i.step < 0:
                 #    params['sort'] = 'desc'
 
