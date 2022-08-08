@@ -43,19 +43,29 @@ class WQueue(Queue):
     def close(self):
         self.put(None)
 
-class Log(Thread):
+class Logger(Thread):
+
+    def join(self, timeout=None):
+        super(Log, self).join(timeout)
+        if self._exc: raise self._exc
+
+    def run(self):
+        self._exc = None
+        try:
+            self.ret = self._target(*self._args, **self._kwargs)
+        except BaseException as e:
+            self._exc = e
+
+class Log(object):
     def __init__(self, parent):
         self._queue = WQueue(1000)
         self._parent = parent
-        self._thread = Thread(target=self._post)
+        self._thread = Logger(target=self._post)
         self._thread.start()
         self._exc = None
 
     def _post(self):
-        try:
-            self._parent._post(json=self._queue.gen())
-        except BaseException as e:
-            self._exc = e
+        self._parent._post(json=self._queue.gen())
 
 
     def __setitem__(self, item, data):
@@ -69,9 +79,6 @@ class Log(Thread):
         else:
             raise ValueError("Must be a slice of the form `start : end* : id*`, where `*` indicates optional)")
 
-    def join(self, timeout=None):
-        super(Log, self).join(timeout)
-        if self._exc: raise self._exc
 
 
 
