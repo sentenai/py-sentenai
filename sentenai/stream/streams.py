@@ -49,9 +49,14 @@ class Log(Thread):
         self._parent = parent
         self._thread = Thread(target=self._post)
         self._thread.start()
+        self._exc = None
 
     def _post(self):
-        self._parent._post(json=self._queue.gen())
+        try:
+            self._parent._post(json=self._queue.gen())
+        except BaseException as e:
+            self._exc = e
+
 
     def __setitem__(self, item, data):
         if isinstance(item, slice):
@@ -63,6 +68,11 @@ class Log(Thread):
                 self._queue.write(Update(start=item.start, end=item.stop, id=item.step, data=data))
         else:
             raise ValueError("Must be a slice of the form `start : end* : id*`, where `*` indicates optional)")
+
+    def join(self, timeout=None):
+        super(Log, self).join(timeout)
+        if self._exc: raise self._exc
+
 
 
 class Updates(API):
