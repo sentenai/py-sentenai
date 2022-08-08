@@ -46,7 +46,7 @@ class WQueue(Queue):
 class Logger(Thread):
 
     def join(self, timeout=None):
-        super(Log, self).join(timeout)
+        super(Logger, self).join(timeout)
         if self._exc: raise self._exc
 
     def run(self):
