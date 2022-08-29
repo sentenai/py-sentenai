@@ -182,7 +182,7 @@ class Streams(API):
     def __iter__(self):
         r = self._get("fields")
         if r.status_code != 200:
-            raise sentenaierror("invalid response")
+            raise SentenaiError("invalid response")
         data = r.json()
         return iter(sorted([f['path'][0] for f in data if len(f['path']) == 1]))
 
@@ -266,7 +266,7 @@ class Stream(API):
             raise SentenaiError("invalid response")
         data = r.json()
         pl = len(self._path)
-        return iter(sorted(f[pl] for f in data if self._path == tuple(f[:pl]) and len(f) == pl + 1))
+        return iter(sorted(f['path'][pl] for f in data if self._path == tuple(f['path'][:pl]) and len(f['path']) == pl + 1))
 
     @property
     def graph(self):

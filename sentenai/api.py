@@ -117,6 +117,8 @@ class SentenaiEncoder(JSON.JSONEncoder):
             return iso8601(obj)
         if isinstance(obj, np.timedelta64):
             return str(obj.astype(int))
+        if isinstance(obj, np.int64):
+            return int(obj)
         if isinstance(obj, dt.time):
             return obj.isoformat()
 
