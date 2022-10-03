@@ -163,21 +163,17 @@ class Updates(API):
                 return r.json()
 
 
-
-
 class Streams(API):
     def __init__(self, parent, name):
         self._parent = parent
         self._name = name
         self._origin = None
-        API.__init__(self, parent._credentials, *parent._prefix, "streams", name)
+        API.__init__(self, parent._credentials, *parent._prefix, "db", name)
 
     @property
     def log(self):
+        raise NotImplemented
         return Updates(self)
-
-    def __len__(self):
-        return int(self._head('events').headers['events'])
 
     def __iter__(self):
         r = self._get("fields")
@@ -200,7 +196,7 @@ class Streams(API):
         import treelib
         t = treelib.Tree()
         root = t.create_node(self.name, self.name, data={})
-        r = self._get("fields")
+        r = self._get("graph")
         if r.status_code != 200:
             raise SentenaiError("Invalid Response")
         data = r.json()
@@ -250,23 +246,23 @@ class Streams(API):
         return self._name
 
 
-
-
-        
-
 class Stream(API):
     def __init__(self, parent, *path):
         self._parent = parent
         self._path = path
-        API.__init__(self, parent._credentials, *parent._prefix)
+        r = self._parent._get('paths', *path)
+        if r.status_code == 404:
+            raise KeyError("path does not exist")
+        else:
+            self._node = r.json()['node']
+        API.__init__(self, parent._credentials, *parent._prefix, "nodes", self._node)
 
     def __iter__(self):
-        r = self._get("fields")
+        r = self._get("links")
         if r.status_code != 200:
             raise SentenaiError("invalid response")
         data = r.json()
-        pl = len(self._path)
-        return iter(sorted(f['path'][pl] for f in data if self._path == tuple(f['path'][:pl]) and len(f['path']) == pl + 1))
+        return iter(sorted(data.keys()))
 
     @property
     def graph(self):
@@ -278,21 +274,20 @@ class Stream(API):
 
     @property
     def type(self):
-        r = self._get('type', *self._path)
+        r = self._get('types', *self._path)
         if r.status_code == 200:
-            return r.json()['type']
+            return r.json()[0]
         else:
             return None
 
     @property
     def range(self):
-        r = self._get('range', *self._path)
+        r = self._get('range')
         if r.status_code == 200:
             e = r.json()
             return (e['start'], e['end'])
         else:
             return None
-
 
     def __repr__(self):
         z = ", ".join(map(repr, self._path))
@@ -339,6 +334,7 @@ class Stream(API):
         return StreamStats(self)
 
     def __len__(self):
+        raise NotImplemented
         return StreamStats(self, vtype="event", ro=True).count
     
 class StreamStats(object):
@@ -431,9 +427,10 @@ class StreamStats(object):
         return self._stat('all')
 
     
-class StreamData(object):
-    def __init__(self, parent):
+class StreamData(API):
+    def __init__(self, parent, index):
         self._parent = parent
+        API.__init__(self, parent._credentials, *parent._prefix, "types", index)
 
     def __getitem__(self, tr):
         if isinstance(tr, tuple):

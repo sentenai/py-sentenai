@@ -17,7 +17,7 @@ class Sentenai(API):
         if host is None:
             host = 'localhost'
         if port is None:
-            port = 3333
+            port = 7280
         if protocol is None:
             protocol = 'http://'
 
@@ -33,8 +33,8 @@ class Sentenai(API):
         return View(self, tspl)
 
     def __iter__(self):
-        r = self._get('streams')
-        return iter(sorted(s['name'] for s in r.json()))
+        r = self._get('db')
+        return iter(sorted(s for s in r.json()))
 
     def keys(self):
         return iter(self)
@@ -52,9 +52,9 @@ class Sentenai(API):
         representing nanoseconds since the origin `0`.
         """
         if origin == None:
-            r = self._put("streams", name)
+            r = self._put("db", name)
         else:
-            r = self._put("streams", name, headers={'origin': iso8601(origin)}, json=None)
+            r = self._put("db", name, headers={'origin': iso8601(origin)}, json=None)
         if r.status_code != 201:
             raise Exception("Could not initialize")
         return self[name]
@@ -71,7 +71,7 @@ class Sentenai(API):
 
     def __getitem__(self, db):
         """Get a stream database."""
-        x = self._head('streams', db)
+        x = self._head('db', db)
         if x.status_code != 200:
             raise KeyError(f"`{db}` not found in {self!r}.")
         return Streams(self, db)
@@ -95,14 +95,14 @@ class View(API):
         return self._tspl
     
     def explain(self):
-        return self._post("umbra/plan", json=f'{self._tspl}').json()
+        return self._post("tspl/debug", json=f'{self._tspl}').json()
 
     @property
     def range(self):
         if self._info:
             return {'start': dt64(self._info['start']), 'end': dt64(self._info['end'])}
         else:
-            self._info = self._post("umbra/range", json=f'{self._tspl}').json()
+            self._info = self._post("tspl/range", json=f'{self._tspl}').json()
             return self.range
 
     @property
@@ -110,7 +110,7 @@ class View(API):
         if self._info:
             return dt64(self._info.get('origin'))
         else:
-            self._info = self._post("umbra/range", json=f'{self._tspl}').json()
+            self._info = self._post("tspl/range", json=f'{self._tspl}').json()
             return self.origin
 
     @property
@@ -118,7 +118,7 @@ class View(API):
         if self._info:
             return self._info.get('type')
         else:
-            self._info = self._post("umbra/range", json=f'{self._tspl}').json()
+            self._info = self._post("tspl/range", json=f'{self._tspl}').json()
             return self.type
 
 
@@ -151,7 +151,7 @@ class View(API):
                 #if i.step < 0:
                 #    params['sort'] = 'desc'
 
-            resp = self._post("umbra/exec", json=f'{self._tspl}', params=params)
+            resp = self._post("tspl", json=f'{self._tspl}', params=params)
                 
             t = resp.headers['type']
             data = resp.json()
