@@ -1,5 +1,5 @@
 from sentenai.api import *
-from sentenai.stream import Streams
+from sentenai.stream import Database
 if PANDAS: import pandas as pd
 from datetime import datetime
 
@@ -54,7 +54,7 @@ class Sentenai(API):
         if origin == None:
             r = self._put("db", name)
         else:
-            r = self._put("db", name, headers={'origin': iso8601(origin)}, json=None)
+            r = self._put("db", name, json={'origin': iso8601(origin)})
         if r.status_code != 201:
             raise Exception("Could not initialize")
         return self[name]
@@ -71,10 +71,10 @@ class Sentenai(API):
 
     def __getitem__(self, db):
         """Get a stream database."""
-        x = self._head('db', db)
+        x = self._get('db', db)
         if x.status_code != 200:
             raise KeyError(f"`{db}` not found in {self!r}.")
-        return Streams(self, db)
+        return Database(self, db, dt64(x.json().get('origin')))
 
     
     if PANDAS:
@@ -87,7 +87,7 @@ class Sentenai(API):
 class View(API):
     def __init__(self, parent, tspl, df=False):
         self._parent = parent
-        API.__init__(self, parent._credentials, *parent._prefix, "patterns")
+        API.__init__(self, parent._credentials, *parent._prefix, "tspl")
         self._tspl = tspl
         self._df = df
         self._info = None
@@ -95,14 +95,14 @@ class View(API):
         return self._tspl
     
     def explain(self):
-        return self._post("tspl/debug", json=f'{self._tspl}').json()
+        return self._post("debug", json=self._tspl).json()
 
     @property
     def range(self):
         if self._info:
             return {'start': dt64(self._info['start']), 'end': dt64(self._info['end'])}
         else:
-            self._info = self._post("tspl/range", json=f'{self._tspl}').json()
+            self._info = self._post("range", json=self._tspl).json()
             return self.range
 
     @property
@@ -110,7 +110,7 @@ class View(API):
         if self._info:
             return dt64(self._info.get('origin'))
         else:
-            self._info = self._post("tspl/range", json=f'{self._tspl}').json()
+            self._info = self._post("range", json=self._tspl).json()
             return self.origin
 
     @property
@@ -118,7 +118,7 @@ class View(API):
         if self._info:
             return self._info.get('type')
         else:
-            self._info = self._post("tspl/range", json=f'{self._tspl}').json()
+            self._info = self._post("range", json=self._tspl).json()
             return self.type
 
 
@@ -151,7 +151,7 @@ class View(API):
                 #if i.step < 0:
                 #    params['sort'] = 'desc'
 
-            resp = self._post("tspl", json=f'{self._tspl}', params=params)
+            resp = self._post(json=self._tspl, params=params)
                 
             t = resp.headers['type']
             data = resp.json()

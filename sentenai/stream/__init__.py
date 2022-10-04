@@ -1,1 +1,1 @@
-from sentenai.stream.streams import Stream, Streams
+from sentenai.stream.streams import Stream, Database

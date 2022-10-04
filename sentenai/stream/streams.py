@@ -7,12 +7,30 @@ from datetime import datetime
 import simplejson as JSON
 import re, io
 from collections import namedtuple
-
+from multiprocessing import Pool
+from tqdm import tqdm, tqdm_notebook
+from time import sleep
 
 from queue import Queue
 from threading import Thread
 
 Update = namedtuple('Update', ['id', 'start', 'end', 'data'])
+
+def index_data(args):
+    db, node, index, v = args
+    if index == 'event':
+        return
+    counter = 0
+    while counter < 10:
+        try:
+            resp = db._post('nodes', node, 'types', index, json=v)
+        except:
+            counter += 1
+            sleep(.1)
+        else:
+            break
+    if resp.status_code > 204:
+        raise Exception(f"failed on row {i}, column {k}")
 
 class WQueue(Queue):
     def write(self, data):
@@ -163,24 +181,25 @@ class Updates(API):
                 return r.json()
 
 
-class Streams(API):
-    def __init__(self, parent, name):
+class Database(API):
+    def __init__(self, parent, name, origin):
         self._parent = parent
         self._name = name
-        self._origin = None
+        self._origin = origin
         API.__init__(self, parent._credentials, *parent._prefix, "db", name)
+
 
     @property
     def log(self):
-        raise NotImplemented
+        raise Exception("disabled")
         return Updates(self)
 
     def __iter__(self):
-        r = self._get("fields")
+        r = self._get("links")
         if r.status_code != 200:
             raise SentenaiError("invalid response")
         data = r.json()
-        return iter(sorted([f['path'][0] for f in data if len(f['path']) == 1]))
+        return iter(sorted(data.keys()))
 
     def keys(self):
         return iter(self)
@@ -200,26 +219,27 @@ class Streams(API):
         if r.status_code != 200:
             raise SentenaiError("Invalid Response")
         data = r.json()
-        for node in sorted(data, key=lambda x: x['path']):
+        for node in sorted(data, key=lambda x: x[0]):
             parent = root
             x = [self._name]
-            for link in node['path']:
+            for link in node[0]:
                 x.append(link)
                 nid = "/".join(x)
                 if nid in t:
                     continue
                 else:
                     pid = "/".join(x[:-1]) 
-                    t.create_node(link, nid, parent=pid, data={'type': node['type']})
+                    t.create_node(link, nid, parent=pid, data={'type': node[1]})
         return t
 
 
     @property
     def meta(self):
+        raise NotImplemented("metadata not implemented on databases.")
         return Metadata(self)
 
-    def load(self, file):
-        self._post(file)
+    #def load(self, file):
+    #    self._post(file)
 
     def __getitem__(self, key):
         if isinstance(key, tuple):
@@ -227,24 +247,94 @@ class Streams(API):
         else:
             return Stream(self, key)
 
+    def __setitem__(self, key, df):
+        del self[key]
+        path = key if isinstance(key, tuple) else (key,)
+        nid = self._put('paths', *path).json()['node']
+        self._put('nodes', nid, 'types', 'event')
+        df = df.sort_values(by='start', ignore_index=True)
+        cmap = {'start': nid}
+        tmap = {'start': 'event'}
+        dmap = {'start': []}
+        for cname in df.columns:
+            if cname in ('start', 'end'):
+                continue
+            nid = self._put('paths', *path, cname).json()['node']
+            if df[cname].dtype == np.dtype('float32'):
+                tmap[cname] = 'float'
+            elif df[cname].dtype == np.dtype('float64'):
+                tmap[cname] = 'float'
+            elif df[cname].dtype == np.dtype('int32'):
+                tmap[cname] = 'int'
+            elif df[cname].dtype == np.dtype('int64'):
+                tmap[cname] = 'int'
+            elif df[cname].dtype == bool:
+                tmap[cname] = 'bool'
+            elif df[cname].dtype == np.dtype('datetime64[ns]'):
+                tmap[cname] = 'datetime'
+            elif df[cname].dtype == np.dtype('timedelta64[ns]'):
+                tmap[cname] = 'timedelta'
+            else:
+                tmap[cname] = 'text'
+
+            self._put('nodes', nid, 'types', tmap[cname])
+            cmap[cname] = nid
+            dmap[cname] = []
+
+        origin = self.origin
+        for i, row in tqdm(df.iterrows(), total=len(df), unit='values', unit_scale=len(df.columns) - 1):
+            if origin is not None:
+                ts = (row['start'] - origin).delta
+            else:
+                ts = row['start']
+            try:
+                if 'end' in row and origin is not None:
+                    dur = (row['end'] - row['start']).delta
+                elif origin is not None:
+                    dur = (df['start'].iloc[i+1] - row['start']).delta
+                else:
+                    raise Exception("origin should have been detected.")
+                #elif 'end' in row:
+                #    dur = df['end'] - df['start']
+                #else:
+                #    dur = (df['start'].iloc[i+1] - df['start']) / np.timedelta64(1, 'ns')
+            except IndexError:
+                dur = 1
+            else:
+                if dur <= 0: continue
+                for col, val in dict(row).items():
+                    if col == 'start':
+                        dmap[col].append({'ts': ts, 'duration': dur})
+                    else:
+                        dmap[col].append({'ts': ts, 'duration': dur, 'value': val})
+
+            if len(dmap['start']) >= 1024:
+                with Pool(processes=32) as pool:
+                    pool.map(index_data, [(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
+                for k, v in dmap.items():
+                    dmap[k] = []
+                
+
+
+    def __delitem__(self, key):
+        if isinstance(key, tuple):
+            self._delete('paths', *key)
+        else:
+            self._delete('paths', key)
+
     def __repr__(self):
-        return f"Streams({self._parent!r}, \"{self._name}\")"
+        return f"Database({self._parent!r}, \"{self._name}\")"
 
     def __str__(self):
         return str(self._name)
 
     @property
     def origin(self):
-        try:
-            self._origin = dt64(self._head().headers.get('origin'))
-            return self._origin
-        except TypeError:
-            self._origin = None
+        return self._origin
 
     @property
     def name(self):
         return self._name
-
 
 class Stream(API):
     def __init__(self, parent, *path):
@@ -274,7 +364,7 @@ class Stream(API):
 
     @property
     def type(self):
-        r = self._get('types', *self._path)
+        r = self._get('types')
         if r.status_code == 200:
             return r.json()[0]
         else:
@@ -282,10 +372,15 @@ class Stream(API):
 
     @property
     def range(self):
-        r = self._get('range')
+        if self.type is None:
+            return None
+        r = self._get('types', self.type, 'range')
         if r.status_code == 200:
             e = r.json()
-            return (e['start'], e['end'])
+            if self._parent.origin is None:
+                return (e['start'], e['end'])
+            else:
+                return (self._parent.origin + np.timedelta64(e['start'], 'ns'), self._parent.origin + np.timedelta64(e['end'], 'ns'))
         else:
             return None
 
@@ -304,7 +399,11 @@ class Stream(API):
    
     @property
     def data(self):
-        return StreamData(self)
+        return StreamData(self, self.type, False)
+
+    @property
+    def df(self):
+        return StreamData(self, self.type, True)
 
     @property
     def first(self):
@@ -313,15 +412,19 @@ class Stream(API):
         except KeyError:
             return None
 
-    @property
-    def head(self, n=20):
+    def head(self, n=20, df=True):
         if n <= 0: return None
-        return self.data[::n]
+        if df:
+            return self.df[::n]
+        else:
+            return self.data[::n]
     
-    @property
-    def tail(self, n=20):
+    def tail(self, n=20, df=True):
         if n <= 0: return None
-        return self.data[::-n]
+        if df:
+            return self.df[::-n]
+        else:
+            return self.data[::-n]
 
     @property
     def last(self):
@@ -375,8 +478,10 @@ class StreamStats(object):
 
     def _stat(self, stat):
         origin = self._origin or self._parent._parent.origin or dt64("1970-01-01T00:00:00")
-        start = self._start or origin
-        end = self._end or origin + td64(2 ** 63 - 1)
+        start, end = self._parent.range
+
+        #start = self._start or origin
+        #end = self._end or origin + td64(2 ** 63 - 1)
         try:
             return self._parent._parent._parent(f"""
                 {stat}({self._parent})
@@ -428,54 +533,37 @@ class StreamStats(object):
 
     
 class StreamData(API):
-    def __init__(self, parent, index):
+    def __init__(self, parent, index, df=False, resample=None, rolling=None):
         self._parent = parent
+        self._df = df
+        self._type = index
+        self._resample = resample
+        self._rolling = rolling
         API.__init__(self, parent._credentials, *parent._prefix, "types", index)
 
+    def resample(self, period, aggregator=None):
+        return StreamData(self._parent, self._type, self._df, (period, aggregator), self._rolling)
+
+    def rolling(self, period):
+        return StreamData(self._parent, self._type, self._df, self._resample, (period, "trailing"))
+
+
     def __getitem__(self, tr):
-        if isinstance(tr, tuple):
-            if len(tr) == 2:
-                s, o = tr
-                t = self._parent.type
-            elif len(tr) == 3:
-                s, o, t = tr
+        if self._rolling:
+            r = f'window {self._rolling[0]} {self._rolling[1]}'
+        else:
+            r = ''
+        if self._resample:
+            if self._resample[1]:
+                rs = f'{self._resample[1]}({self._parent!s}) when frequency({self._resample[0]}) {r}'
             else:
-                raise ValueError("invalid arguments to .data")
+                rs = f'{self._parent!s} when frequency({self._resample[0]}) {r}'
         else:
-            s = tr
-            o = None
-            t = self._parent.type
+            rs = f'{self._parent!s} {r}'
 
-        ps = {'origin': iso8601(o or self._parent._parent.origin)}
-        if s.start is not None:
-            ps['start'] = iso8601(s.start)
-        if s.stop is not None:
-            ps['end'] = iso8601(s.stop)
-        if s.step is not None:
-            ps['limit'] = int(s.step)
-        
-        r = self._parent._get('data', "/".join(self._parent._path) + "." + t, params=ps)
-        data = r.json()
-        if isinstance(data, list):
-            for evt in data:
-                evt['start'] = dt64(evt['start'])
-                evt['end'] = dt64(evt['end'])
-                if t != 'event':
-                    evt['value'] = fromJSON(t, evt['value'])
-            return data
+        if self._df:
+            return self._parent._parent._parent.df(rs)[tr]
         else:
-            raise Exception(data)
-
-
-
-
-
-
-
-
-
-
-
-
+            return self._parent._parent._parent(rs)[tr]
 
 

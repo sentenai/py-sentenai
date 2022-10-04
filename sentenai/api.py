@@ -232,6 +232,8 @@ class API(object):
                 r = method("/".join([self._credentials.host]+list(self._prefix)+list(parts)), params=ps, headers=headers)
             elif isinstance(data, types.GeneratorType) or isinstance(data, io.IOBase):
                 r = method("/".join([self._credentials.host]+list(self._prefix)+list(parts)), params=ps, headers=headers, data=data)
+            elif isinstance(data, str):
+                r = method("/".join([self._credentials.host]+list(self._prefix)+list(parts)), params=ps, headers=headers, data=data)
             else:
                 r = method("/".join([self._credentials.host]+list(self._prefix)+list(parts)), params=ps, headers=headers, data=JSON.dumps(data, ignore_nan=True, cls=SentenaiEncoder))
         except requests.ConnectionError:
@@ -241,6 +243,7 @@ class API(object):
 
         if resp.status_code == 400:
             x = "/".join(list(self._prefix)+list(parts))
+            print(x, data)
             raise BadRequest(f"invalid request: {resp.json()}")
         elif resp.status_code == 403:
             raise AccessDenied("Invalid credentials")
