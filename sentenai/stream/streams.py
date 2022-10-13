@@ -18,8 +18,6 @@ Update = namedtuple('Update', ['id', 'start', 'end', 'data'])
 
 def index_data(args):
     db, node, index, v = args
-    if index == 'event':
-        return
     counter = 0
     while counter < 10:
         try:
@@ -309,7 +307,7 @@ class Database(API):
                         dmap[col].append({'ts': ts, 'duration': dur, 'value': val})
 
             if len(dmap['start']) >= 1024:
-                with Pool(processes=32) as pool:
+                with Pool(processes=16) as pool:
                     pool.map(index_data, [(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
                 for k, v in dmap.items():
                     dmap[k] = []
@@ -542,6 +540,8 @@ class StreamData(API):
         API.__init__(self, parent._credentials, *parent._prefix, "types", index)
 
     def resample(self, period, aggregator=None):
+        if self._type == 'event':
+            aggregator = "count"
         return StreamData(self._parent, self._type, self._df, (period, aggregator), self._rolling)
 
     def rolling(self, period):
@@ -559,7 +559,7 @@ class StreamData(API):
             else:
                 rs = f'{self._parent!s} when frequency({self._resample[0]}) {r}'
         else:
-            rs = f'{self._parent!s} {r}'
+            rs = f'{"when " if self._type == "event" else ""}{self._parent!s} {r}'
 
         if self._df:
             return self._parent._parent._parent.df(rs)[tr]
