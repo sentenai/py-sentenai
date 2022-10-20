@@ -161,9 +161,16 @@ class View(API):
                 #if i.step < 0:
                 #    params['sort'] = 'desc'
             results = []
+            if self._when is None and len(self._tspl) > 1:
+                z = []
+                for x in self._tspl.values():
+                    z.append(f'events({x})')
+                self._when = ' or '.join(z)
+
             for name, tspl in self._tspl.items():
                 if self._when is None:
                     resp = self._post(json=tspl, params=params)
+
                 else:
                     resp = self._post(json=f'({tspl}) when {self._when}', params=params)
 
@@ -196,7 +203,10 @@ class View(API):
                 r = results[0]
                 for x in results[1:]:
                     r = pd.merge(r,x.drop(columns=['end', 'duration']),how='outer',left_on='start', right_on='start')
-                return r
+                if i.step:
+                    return r.truncate(after=i.step-1)
+                else:
+                    return r
 
 
         else:
