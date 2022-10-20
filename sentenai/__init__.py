@@ -30,7 +30,7 @@ class Sentenai(API):
         return "Sentenai(host=\"{}\")".format(self._credentials.host)
 
     def __call__(self, tspl):
-        return View(self, tspl)
+        return View(self, {'value': tspl})
 
     def __iter__(self):
         r = self._get('db')
@@ -78,19 +78,31 @@ class Sentenai(API):
 
     
     if PANDAS:
-        def df(self, tspl):
+        def df(self, tspl=None, when=None, **tspls):
             """Dataframe"""
-            return View(self, tspl, True)
+            if not tspl and not tspls:
+                raise Exception("no arguments")
+            if tspl and tspls:
+                raise Exception("can't define both string TSPL and multiple TSPL statements together.")
+            elif tspl:
+                return View(self, {'value': tspl}, when, df=True)
+            else:
+                return View(self, tspls, when, df=True)
 
 
 
 class View(API):
-    def __init__(self, parent, tspl, df=False):
+    def __init__(self, parent, tspl, when, df=False):
         self._parent = parent
         API.__init__(self, parent._credentials, *parent._prefix, "tspl")
+        for key in tspl:
+            if key in ['start', 'end', 'duration']:
+                raise Exception("column may not be named `start`, `end`, or `duration`.")
         self._tspl = tspl
+        self._when = when
         self._df = df
         self._info = None
+
     def __repr__(self):
         return self._tspl
     
@@ -126,8 +138,6 @@ class View(API):
 
     def __getitem__(self, i):
         params = {}
-        if isinstance(i, tuple):
-            i, o = isinstance
 
         if isinstance(i, slice):
             #params['sort'] = 'asc'
@@ -150,30 +160,43 @@ class View(API):
                 params['limit'] = i.step
                 #if i.step < 0:
                 #    params['sort'] = 'desc'
-
-            resp = self._post(json=self._tspl, params=params)
-                
-            t = resp.headers['type']
-            data = resp.json()
-            if isinstance(data, list):
-                for evt in data:
-                    evt['start'] = dt64(evt['start'])
-                    evt['end'] = dt64(evt['end'])
-                    if t != "event":
-                        evt['value'] = fromJSON(t, evt['value'])
-                    if self._df:
-                        evt['duration'] = evt['end'] - evt['start']
-                if self._df:
-                    if t == "event":
-                        return pd.DataFrame(data, columns=["start", "end", "duration"])
-                    else:
-                        return pd.DataFrame(data, columns=["start", "end", "duration", "value"])
+            results = []
+            for name, tspl in self._tspl.items():
+                if self._when is None:
+                    resp = self._post(json=tspl, params=params)
                 else:
-                    return data
+                    resp = self._post(json=f'({tspl}) when {self._when}', params=params)
 
+                    
+                t = resp.headers['type']
+                data = resp.json()
+                if isinstance(data, list):
+                    for evt in data:
+                        evt['start'] = pd.to_datetime(dt64(evt['start']), utc=True)
+                        evt['end'] = pd.to_datetime(dt64(evt['end']), utc=True)
+                        if t != "event":
+                            evt[name] = fromJSON(t, evt['value'])
+                        if self._df:
+                            evt['duration'] = evt['end'] - evt['start']
+                    if self._df:
+                        if t == "event":
+                            results.append(pd.DataFrame(data, columns=["start", "end", "duration"]))
+                        else:
+                            results.append(pd.DataFrame(data, columns=["start", "end", "duration", name]))
+                    else:
+                        return results.append(data)
+                else:
+                    print(data)
+                    raise Exception(data)
+            if len(results) == 0:
+                return None
+            elif len(results) == 1:
+                return results[0]
             else:
-                print(data)
-                raise Exception(data)
+                r = results[0]
+                for x in results[1:]:
+                    r = pd.merge(r,x.drop(columns=['end', 'duration']),how='outer',left_on='start', right_on='start')
+                return r
 
 
         else:
