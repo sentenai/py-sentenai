@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='sentenai',
-    version='1.6.0.0',
+    version='1.6.1.0',
     description='Client library for Sentenai',
     long_description="",
     url='https://github.com/sentenai/py-sentenai',

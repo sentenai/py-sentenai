@@ -11,6 +11,7 @@ import dateutil
 import dateutil.tz
 from datetime import date, time, datetime, timedelta, tzinfo
 import datetime as dt
+from shapely.geometry import Point
 
 import http.client as http_client
 import numpy as np
@@ -31,18 +32,18 @@ def base64json(x):
 def fromJSON(vtype, x):
     if vtype == "int":
         return int(x)
-    elif vtype == "int":
+    elif vtype == "float":
         return float(x)
     elif vtype == "datetime":
         return dt64(x)
-    elif vtype == "timedelta":
-        return td64(x)
     elif vtype == "timedelta":
         return td64(x)
     elif vtype == "date":
         return date.fromisoformat(x)
     elif vtype == "time":
         return time.fromisoformat(x[:15])
+    elif vtype.startswith("point"):
+        return Point(*x)
     else:
         return x
 
@@ -203,10 +204,10 @@ class API(object):
         """Return an unambiguous representation of the object."""
         return "API({})".format(repr(self._credentials))
 
-    def _req(self, method, parts, params={}, headers={}, data=None):
+    def _req(self, method, parts, params={}, headers={}, data=None, raw=False):
         params = copy.copy(params)
         params.update(self._params)
-        if data:
+        if data and not raw:
             if isinstance(data, types.GeneratorType) or isinstance(data, io.IOBase):
                 headers['Content-Type'] = 'application/x-ndjson'
             else:
@@ -234,6 +235,8 @@ class API(object):
                 r = method("/".join([self._credentials.host]+list(self._prefix)+list(parts)), params=ps, headers=headers, data=data)
             elif isinstance(data, str):
                 r = method("/".join([self._credentials.host]+list(self._prefix)+list(parts)), params=ps, headers=headers, data=data)
+            elif isinstance(data, bytes):
+                r = method("/".join([self._credentials.host]+list(self._prefix)+list(parts)), params=ps, headers=headers, data=data)
             else:
                 r = method("/".join([self._credentials.host]+list(self._prefix)+list(parts)), params=ps, headers=headers, data=JSON.dumps(data, ignore_nan=True, cls=SentenaiEncoder))
         except requests.ConnectionError:
@@ -258,8 +261,8 @@ class API(object):
     def _put(self, *parts, params={}, headers={}, json={}):
         return self._req(requests.put, parts, params, headers, data=json)
 
-    def _post(self, *parts, params={}, headers={}, json={}):
-        return self._req(requests.post, parts, params, headers, data=json)
+    def _post(self, *parts, params={}, headers={}, json={}, raw=False):
+        return self._req(requests.post, parts, params, headers, data=json, raw=raw)
 
     def _delete(self, *parts, params={}, headers={}):
         return self._req(requests.delete, parts, params, headers)

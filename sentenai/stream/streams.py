@@ -5,11 +5,13 @@ if PANDAS:
     import pandas as pd
 from datetime import datetime
 import simplejson as JSON
-import re, io
+import re, io, math
 from collections import namedtuple
 from multiprocessing import Pool
 from tqdm import tqdm, tqdm_notebook
 from time import sleep
+import cbor2
+from shapely.geometry import Point
 
 from queue import Queue
 from threading import Thread
@@ -21,14 +23,16 @@ def index_data(args):
     counter = 0
     while counter < 10:
         try:
-            resp = db._post('nodes', node, 'types', index, json=v)
+            resp = db._post('nodes', node, 'types', index,
+                    json=cbor2.dumps(v), headers={'Content-Type': 'application/cbor'}, raw=True)
         except:
+            print(v[:10])
             counter += 1
             sleep(.1)
         else:
+            if resp.status_code > 204:
+                raise Exception(f"failed on row {i}, column {k}")
             break
-    if resp.status_code > 204:
-        raise Exception(f"failed on row {i}, column {k}")
 
 class WQueue(Queue):
     def write(self, data):
@@ -272,6 +276,14 @@ class Database(API):
                 tmap[cname] = 'datetime'
             elif df[cname].dtype == np.dtype('timedelta64[ns]'):
                 tmap[cname] = 'timedelta'
+            elif type(df[cname][0]) == date:
+                tmap[cname] = 'date'
+            elif type(df[cname][0]) == time:
+                tmap[cname] = 'time'
+            elif type(df[cname][0]) == Point and df[cname][0].has_z:
+                tmap[cname] = 'point3'
+            elif type(df[cname][0]) == Point:
+                tmap[cname] = 'point'
             else:
                 tmap[cname] = 'text'
 
@@ -280,6 +292,7 @@ class Database(API):
             dmap[cname] = []
 
         origin = self.origin
+        print(tmap)
         for i, row in tqdm(df.iterrows(), total=len(df), unit='values', unit_scale=len(df.columns) - 1):
             if origin is not None:
                 ts = (row['start'] - origin).delta
@@ -290,23 +303,37 @@ class Database(API):
                     dur = (row['end'] - row['start']).delta
                 elif origin is not None:
                     dur = (df['start'].iloc[i+1] - row['start']).delta
+                elif 'end' in row:
+                    dur = df['end'] - df['start']
                 else:
-                    raise Exception("origin should have been detected.")
-                #elif 'end' in row:
-                #    dur = df['end'] - df['start']
-                #else:
-                #    dur = (df['start'].iloc[i+1] - df['start']) / np.timedelta64(1, 'ns')
+                    dur = (df['start'].iloc[i+1] - df['start']) // np.timedelta64(1, 'ns')
             except IndexError:
                 dur = 1
             else:
                 if dur <= 0: continue
                 for col, val in dict(row).items():
                     if col == 'start':
-                        dmap[col].append({'ts': ts, 'duration': dur})
+                        dmap[col].append((ts, dur))
+                    elif type(val) == float and math.isnan(val): # skip nans
+                        pass
+                    elif val is pd.NaT or val is None:
+                        pass
+                    elif tmap[col] == 'point3':
+                        dmap[col].append((ts, dur, (val.x, val.y, val.z)))
+                    elif tmap[col] == 'point':
+                        dmap[col].append((ts, dur, (val.x, val.y)))
+                    elif tmap[col] == 'date':
+                        dmap[col].append((ts, dur, val.isoformat()))
+                    elif tmap[col] == 'time':
+                        dmap[col].append((ts, dur, val.isoformat()))
+                    elif tmap[col] == 'datetime':
+                        dmap[col].append((ts, dur, iso8601(val)))
+                    elif tmap[col] == 'timedelta':
+                        dmap[col].append((ts, dur, val // np.timedelta64(1, 'ns')))
                     else:
-                        dmap[col].append({'ts': ts, 'duration': dur, 'value': val})
+                        dmap[col].append((ts, dur, val))
 
-            if len(dmap['start']) >= 1024:
+            if len(dmap['start']) >= 4096:
                 with Pool(processes=16) as pool:
                     pool.map(index_data, [(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
                 for k, v in dmap.items():
