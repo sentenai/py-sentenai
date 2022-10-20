@@ -26,7 +26,7 @@ setup(
     keywords='sentenai cloud sensor database',
     packages=['sentenai', 'sentenai.stream'],
 
-    install_requires=['dateutils', 'pytz', 'requests', 'shapely', 'simplejson', 'numpy', 'treelib', 'tqdm'],
+    install_requires=['dateutils', 'pytz', 'requests', 'shapely', 'simplejson', 'numpy', 'treelib', 'tqdm', 'cbor2'],
     extras_require={},
     package_data={},
     data_files=[],
