@@ -30,7 +30,7 @@ class Sentenai(API):
         return "Sentenai(host=\"{}\")".format(self._credentials.host)
 
     def __call__(self, tspl):
-        return View(self, {'value': tspl})
+        return View(self, {'value': tspl}, when=None)
 
     def __iter__(self):
         r = self._get('db')
@@ -92,7 +92,7 @@ class Sentenai(API):
 
 
 class View(API):
-    def __init__(self, parent, tspl, when, df=False):
+    def __init__(self, parent, tspl, when=None, df=False):
         self._parent = parent
         API.__init__(self, parent._credentials, *parent._prefix, "tspl")
         for key in tspl:
@@ -107,14 +107,14 @@ class View(API):
         return self._tspl
     
     def explain(self):
-        return self._post("debug", json=self._tspl).json()
+        return self._post("debug", json=self._tspl['value']).json()
 
     @property
     def range(self):
         if self._info:
             return {'start': dt64(self._info['start']), 'end': dt64(self._info['end'])}
         else:
-            self._info = self._post("range", json=self._tspl).json()
+            self._info = self._post("range", json=self._tspl['value']).json()
             return self.range
 
     @property
@@ -122,7 +122,7 @@ class View(API):
         if self._info:
             return dt64(self._info.get('origin'))
         else:
-            self._info = self._post("range", json=self._tspl).json()
+            self._info = self._post("range", json=self._tspl['value']).json()
             return self.origin
 
     @property
@@ -130,7 +130,7 @@ class View(API):
         if self._info:
             return self._info.get('type')
         else:
-            self._info = self._post("range", json=self._tspl).json()
+            self._info = self._post("range", json=self._tspl['value']).json()
             return self.type
 
 
@@ -191,7 +191,7 @@ class View(API):
                         else:
                             results.append(pd.DataFrame(data, columns=["start", "end", "duration", name]))
                     else:
-                        return results.append(data)
+                        results.append(data)
                 else:
                     print(data)
                     raise Exception(data)

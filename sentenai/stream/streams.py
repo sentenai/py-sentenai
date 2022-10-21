@@ -462,8 +462,7 @@ class Stream(API):
         return StreamStats(self)
 
     def __len__(self):
-        raise NotImplemented
-        return StreamStats(self, vtype="event", ro=True).count
+        return StreamStats(self, vtype=self.type, ro=True).count
     
 class StreamStats(object):
     def __init__(self, parent, start=None, end=None, origin=None, vtype=None, ro=False):
@@ -509,7 +508,7 @@ class StreamStats(object):
         #end = self._end or origin + td64(2 ** 63 - 1)
         try:
             return self._parent._parent._parent(f"""
-                {stat}({self._parent})
+                {stat}({"when " if self._type == 'event' else ''}{self._parent})
                     when interval({iso8601(start)}, {iso8601(end)})
                     origin {iso8601(origin)}
             """)[::1][0]['value']
