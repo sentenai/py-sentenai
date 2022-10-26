@@ -379,6 +379,31 @@ class Stream(API):
         data = r.json()
         return iter(sorted(data.keys()))
 
+    def export(self, start=None, end=None, limit=None):
+        exp = API(self._credentials, "export")
+        o = iso8601(self._parent.origin)[:-1]
+        co = ["start", "end", "duration"] 
+        cols = [f"{self}/{x}" for x in iter(self)]
+        when = str(self)
+        params = {}
+        if limit is not None:
+            params['limit'] = limit
+        if start is not None:
+            params['start'] = iso8601(start)
+        if end is not None:
+            params['end'] = iso8601(end)
+
+        r = exp._post(json={'when': when, 'select': co+cols}, params=params)
+        return pd.DataFrame(
+                r.json(),
+                columns = co + list(self)
+                ).astype({
+                    'start': np.dtype('datetime64[ns]'),
+                    'end': np.dtype('datetime64[ns]'),
+                    'duration': np.dtype('timedelta64[ns]')
+                })
+
+
     @property
     def graph(self):
         return self._parent.graph.subtree(str(self))
@@ -391,7 +416,11 @@ class Stream(API):
     def type(self):
         r = self._get('types')
         if r.status_code == 200:
-            return r.json()[0]
+            ts = r.json()
+            if not ts:
+                return None
+            else:
+                return ts[0]
         else:
             return None
 
