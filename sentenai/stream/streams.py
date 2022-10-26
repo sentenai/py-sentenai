@@ -338,6 +338,11 @@ class Database(API):
                     pool.map(index_data, [(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
                 for k, v in dmap.items():
                     dmap[k] = []
+        if len(dmap['start']) > 0:
+            with Pool(processes=16) as pool:
+                pool.map(index_data, [(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
+            for k, v in dmap.items():
+                dmap[k] = []
                 
 
 
