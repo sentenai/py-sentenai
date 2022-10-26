@@ -26,7 +26,6 @@ def index_data(args):
             resp = db._post('nodes', node, 'types', index,
                     json=cbor2.dumps(v), headers={'Content-Type': 'application/cbor'}, raw=True)
         except:
-            print(v[:10])
             counter += 1
             sleep(.1)
         else:
@@ -292,7 +291,6 @@ class Database(API):
             dmap[cname] = []
 
         origin = self.origin
-        print(tmap)
         for i, row in tqdm(df.iterrows(), total=len(df), unit='values', unit_scale=len(df.columns) - 1):
             if origin is not None:
                 ts = (row['start'] - origin).delta
@@ -314,6 +312,8 @@ class Database(API):
                 for col, val in dict(row).items():
                     if col == 'start':
                         dmap[col].append((ts, dur))
+                    elif col == 'end':
+                        pass
                     elif type(val) == float and math.isnan(val): # skip nans
                         pass
                     elif val is pd.NaT or val is None:
