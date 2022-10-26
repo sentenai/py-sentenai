@@ -431,6 +431,8 @@ class Stream(API):
         r = self._get('types', self.type, 'range')
         if r.status_code == 200:
             e = r.json()
+            if e is None:
+                return None
             if self._parent.origin is None:
                 return (e['start'], e['end'])
             else:
