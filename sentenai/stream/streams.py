@@ -15,6 +15,7 @@ from shapely.geometry import Point
 
 from queue import Queue
 from threading import Thread
+from concurrent.futures import ThreadPoolExecutor
 
 Update = namedtuple('Update', ['id', 'start', 'end', 'data'])
 
@@ -291,58 +292,60 @@ class Database(API):
             dmap[cname] = []
 
         origin = self.origin
-        for i, row in tqdm(df.iterrows(), total=len(df), unit='values', unit_scale=len(df.columns) - 1):
-            if origin is not None:
-                ts = (row['start'] - origin).delta
-            else:
-                ts = row['start']
-            try:
-                if 'end' in row and origin is not None:
-                    dur = (row['end'] - row['start']).delta
-                elif origin is not None:
-                    dur = (df['start'].iloc[i+1] - row['start']).delta
-                elif 'end' in row:
-                    dur = df['end'] - df['start']
+        res = []
+        with ThreadPoolExecutor(max_workers=32) as pool:
+            for i, row in tqdm(df.iterrows(), total=len(df), unit='values', unit_scale=len(df.columns) - 1):
+                if origin is not None:
+                    ts = (row['start'] - origin).delta
                 else:
-                    dur = (df['start'].iloc[i+1] - df['start']) // np.timedelta64(1, 'ns')
-            except IndexError:
-                dur = 1
-            else:
-                if dur <= 0: continue
-                for col, val in dict(row).items():
-                    if col == 'start':
-                        dmap[col].append((ts, dur))
-                    elif col == 'end':
-                        pass
-                    elif type(val) == float and math.isnan(val): # skip nans
-                        pass
-                    elif val is pd.NaT or val is None:
-                        pass
-                    elif tmap[col] == 'point3':
-                        dmap[col].append((ts, dur, (val.x, val.y, val.z)))
-                    elif tmap[col] == 'point':
-                        dmap[col].append((ts, dur, (val.x, val.y)))
-                    elif tmap[col] == 'date':
-                        dmap[col].append((ts, dur, val.isoformat()))
-                    elif tmap[col] == 'time':
-                        dmap[col].append((ts, dur, val.isoformat()))
-                    elif tmap[col] == 'datetime':
-                        dmap[col].append((ts, dur, iso8601(val)))
-                    elif tmap[col] == 'timedelta':
-                        dmap[col].append((ts, dur, val // np.timedelta64(1, 'ns')))
+                    ts = row['start']
+                try:
+                    if 'end' in row and origin is not None:
+                        dur = (row['end'] - row['start']).delta
+                    elif origin is not None:
+                        dur = (df['start'].iloc[i+1] - row['start']).delta
+                    elif 'end' in row:
+                        dur = df['end'] - df['start']
                     else:
-                        dmap[col].append((ts, dur, val))
+                        dur = (df['start'].iloc[i+1] - df['start']) // np.timedelta64(1, 'ns')
+                except IndexError:
+                    dur = 1
+                else:
+                    if dur <= 0: continue
+                    for col, val in dict(row).items():
+                        if col == 'start':
+                            dmap[col].append((ts, dur))
+                        elif col == 'end':
+                            pass
+                        elif type(val) == float and math.isnan(val): # skip nans
+                            pass
+                        elif val is pd.NaT or val is None:
+                            pass
+                        elif tmap[col] == 'point3':
+                            dmap[col].append((ts, dur, (val.x, val.y, val.z)))
+                        elif tmap[col] == 'point':
+                            dmap[col].append((ts, dur, (val.x, val.y)))
+                        elif tmap[col] == 'date':
+                            dmap[col].append((ts, dur, val.isoformat()))
+                        elif tmap[col] == 'time':
+                            dmap[col].append((ts, dur, val.isoformat()))
+                        elif tmap[col] == 'datetime':
+                            dmap[col].append((ts, dur, iso8601(val)))
+                        elif tmap[col] == 'timedelta':
+                            dmap[col].append((ts, dur, val // np.timedelta64(1, 'ns')))
+                        else:
+                            dmap[col].append((ts, dur, val))
 
-            if len(dmap['start']) >= 4096:
-                with Pool(processes=16) as pool:
-                    pool.map(index_data, [(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
+                if len(dmap['start']) >= 4096:
+                    list(res) # force result
+                    res = pool.map(index_data, [(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
+                    for k, v in dmap.items():
+                        dmap[k] = []
+            if len(dmap['start']) > 0:
+                list(res) # force result
+                res = pool.map(index_data, [(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
                 for k, v in dmap.items():
                     dmap[k] = []
-        if len(dmap['start']) > 0:
-            with Pool(processes=16) as pool:
-                pool.map(index_data, [(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
-            for k, v in dmap.items():
-                dmap[k] = []
                 
 
 
