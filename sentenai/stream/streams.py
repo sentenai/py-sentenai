@@ -293,7 +293,7 @@ class Database(API):
 
         origin = self.origin
         res = []
-        with ThreadPoolExecutor(max_workers=32) as pool:
+        with ThreadPoolExecutor(max_workers=64) as pool:
             for i, row in tqdm(df.iterrows(), total=len(df), unit='values', unit_scale=len(df.columns) - 1):
                 if origin is not None:
                     ts = (row['start'] - origin).delta
@@ -305,7 +305,7 @@ class Database(API):
                     elif origin is not None:
                         dur = (df['start'].iloc[i+1] - row['start']).delta
                     elif 'end' in row:
-                        dur = df['end'] - df['start']
+                        dur = (row['end'] - row['start']) // np.timedelta64(1, 'ns')
                     else:
                         dur = (df['start'].iloc[i+1] - df['start']) // np.timedelta64(1, 'ns')
                 except IndexError:

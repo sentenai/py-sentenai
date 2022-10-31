@@ -52,7 +52,7 @@ class Sentenai(API):
         representing nanoseconds since the origin `0`.
         """
         if origin == None:
-            r = self._put("db", name)
+            r = self._put("db", name, json={'origin': None})
         else:
             r = self._put("db", name, json={'origin': iso8601(origin)})
         if r.status_code != 201:
