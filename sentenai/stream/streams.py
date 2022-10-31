@@ -307,7 +307,7 @@ class Database(API):
                     elif 'end' in row:
                         dur = (row['end'] - row['start']) // np.timedelta64(1, 'ns')
                     else:
-                        dur = (df['start'].iloc[i+1] - df['start']) // np.timedelta64(1, 'ns')
+                        dur = (df['start'].iloc[i+1] - row['start']) // np.timedelta64(1, 'ns')
                 except IndexError:
                     dur = 1
                 else:
