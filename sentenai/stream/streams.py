@@ -23,9 +23,10 @@ def index_data(args):
     db, node, index, v = args
     counter = 0
     while counter < 10:
+        data = cbor2.dumps(v)
         try:
             resp = db._post('nodes', node, 'types', index,
-                    json=cbor2.dumps(v), headers={'Content-Type': 'application/cbor'}, raw=True)
+                    json=data, headers={'Content-Type': 'application/cbor'}, raw=True)
         except:
             counter += 1
             sleep(.1)
@@ -298,7 +299,7 @@ class Database(API):
                 if origin is not None:
                     ts = (row['start'] - origin).delta
                 else:
-                    ts = row['start']
+                    ts = row['start'] // np.timedelta64(1, 'ns')
                 try:
                     if 'end' in row and origin is not None:
                         dur = (row['end'] - row['start']).delta
@@ -342,10 +343,10 @@ class Database(API):
                     for k, v in dmap.items():
                         dmap[k] = []
             if len(dmap['start']) > 0:
-                list(res) # force result
                 res = pool.map(index_data, [(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
                 for k, v in dmap.items():
                     dmap[k] = []
+                list(res) # force result
                 
 
 
