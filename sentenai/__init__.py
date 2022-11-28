@@ -188,8 +188,8 @@ class View(API):
                             evt['start'] = pd.to_datetime(dt64(evt['start']), utc=True)
                             evt['end'] = pd.to_datetime(dt64(evt['end']), utc=True)
                         except:
-                            evt['start'] = pd.to_timedelta(dt64(evt['start']), utc=True)
-                            evt['end'] = pd.to_timedelta(dt64(evt['end']), utc=True)
+                            evt['start'] = pd.to_timedelta(evt['start'])
+                            evt['end'] = pd.to_timedelta(evt['end'])
                         if t != "event":
                             evt[name] = fromJSON(t, evt['value'])
                         if self._df:
