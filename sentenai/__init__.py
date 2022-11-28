@@ -109,7 +109,10 @@ class View(API):
         self._info = None
 
     def __repr__(self):
-        return self._tspl
+        if len(self._tspl) == 1:
+            return repr(list(self._tspl.values())[0])
+        else:
+            return "\n".join([f'{key} = {value!r}' for key, value in self._tspl.items()])
     
     def explain(self):
         return self._post("debug", json=self._tspl['value']).json()
