@@ -268,6 +268,7 @@ class Database(API):
         elif type(content) == str:
             nid = self._put('paths', *path, json={'kind': 'virtual', 'tspl': content})
         else:
+            df = content
             nid = self._put('paths', *path).json()['node']
             self._put('nodes', nid, 'types', 'event')
             df = df.sort_values(by='start', ignore_index=True)
