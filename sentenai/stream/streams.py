@@ -213,19 +213,18 @@ class Database(API):
     def values(self):
         return iter([self[k] for k in self])
 
-    @property
-    def graph(self):
+    def graph(self, path=None):
         import treelib
         t = treelib.Tree()
-        root = t.create_node(self.name, self.name, data={})
-        r = self._get("graph")
+        root = t.create_node(path[-1] if path else self.name, path[-1] if path else self.name, data={})
+        r = self._get("graph", *path)
         if r.status_code != 200:
             raise SentenaiError("Invalid Response")
         data = r.json()
         for node in sorted(data, key=lambda x: x[0]):
             parent = root
-            x = [self._name]
-            for link in node[0]:
+            x = [path[-1] if path else self.name]
+            for link in node[0][len(path) - 2 if path else 0:]:
                 x.append(link)
                 nid = "/".join(x)
                 if nid in t:
@@ -250,103 +249,119 @@ class Database(API):
         else:
             return Stream(self, key)
 
-    def __setitem__(self, key, df):
+    def __setitem__(self, key, content):
         del self[key]
-        path = key if isinstance(key, tuple) else (key,)
-        nid = self._put('paths', *path).json()['node']
-        self._put('nodes', nid, 'types', 'event')
-        df = df.sort_values(by='start', ignore_index=True)
-        cmap = {'start': nid}
-        tmap = {'start': 'event'}
-        dmap = {'start': []}
-        for cname in df.columns:
-            if cname in ('start', 'end'):
-                continue
-            nid = self._put('paths', *path, cname).json()['node']
-            if df[cname].dtype == np.dtype('float32'):
-                tmap[cname] = 'float'
-            elif df[cname].dtype == np.dtype('float64'):
-                tmap[cname] = 'float'
-            elif df[cname].dtype == np.dtype('int32'):
-                tmap[cname] = 'int'
-            elif df[cname].dtype == np.dtype('int64'):
-                tmap[cname] = 'int'
-            elif df[cname].dtype == bool:
-                tmap[cname] = 'bool'
-            elif df[cname].dtype == np.dtype('datetime64[ns]'):
-                tmap[cname] = 'datetime'
-            elif df[cname].dtype == np.dtype('timedelta64[ns]'):
-                tmap[cname] = 'timedelta'
-            elif type(df[cname][0]) == date:
-                tmap[cname] = 'date'
-            elif type(df[cname][0]) == time:
-                tmap[cname] = 'time'
-            elif type(df[cname][0]) == Point and df[cname][0].has_z:
-                tmap[cname] = 'point3'
-            elif type(df[cname][0]) == Point:
-                tmap[cname] = 'point'
+        workers = 32
+        if isinstance(key, tuple):
+            if isinstance(key[-1], slice):
+                path = key[:-1]
+                path.append(key[-1].start)
+                workers = key[-1].stop
             else:
-                tmap[cname] = 'text'
+                path = key
+        else:
+            path = (key,)
+        path = key if isinstance(key, tuple) else (key,)
 
-            self._put('nodes', nid, 'types', tmap[cname])
-            cmap[cname] = nid
-            dmap[cname] = []
-
-        origin = self.origin
-        res = []
-        with ThreadPoolExecutor(max_workers=32) as pool:
-            for i, row in tqdm(df.iterrows(), total=len(df), unit='values', unit_scale=len(df.columns) - 1):
-                if origin is not None:
-                    ts = (row['start'] - origin).delta
+        if content is None:
+            nid = self._put('paths', *path, json={'kind': 'directory'})
+        elif type(content) == str:
+            nid = self._put('paths', *path, json={'kind': 'virtual', 'tspl': content})
+        else:
+            nid = self._put('paths', *path).json()['node']
+            self._put('nodes', nid, 'types', 'event')
+            df = df.sort_values(by='start', ignore_index=True)
+            cmap = {'start': nid}
+            tmap = {'start': 'event'}
+            dmap = {'start': []}
+            for cname in df.columns:
+                if cname in ('start', 'end'):
+                    continue
+                nid = self._put('paths', *path, cname).json()['node']
+                if df[cname].dtype == np.dtype('float32'):
+                    tmap[cname] = 'float'
+                elif df[cname].dtype == np.dtype('float64'):
+                    tmap[cname] = 'float'
+                elif df[cname].dtype == np.dtype('int32'):
+                    tmap[cname] = 'int'
+                elif df[cname].dtype == np.dtype('int64'):
+                    tmap[cname] = 'int'
+                elif df[cname].dtype == bool:
+                    tmap[cname] = 'bool'
+                elif df[cname].dtype == np.dtype('datetime64[ns]'):
+                    tmap[cname] = 'datetime'
+                elif df[cname].dtype == np.dtype('timedelta64[ns]'):
+                    tmap[cname] = 'timedelta'
+                elif type(df[cname][0]) == date:
+                    tmap[cname] = 'date'
+                elif type(df[cname][0]) == time:
+                    tmap[cname] = 'time'
+                elif type(df[cname][0]) == Point and df[cname][0].has_z:
+                    tmap[cname] = 'point3'
+                elif type(df[cname][0]) == Point:
+                    tmap[cname] = 'point'
                 else:
-                    ts = row['start'] // np.timedelta64(1, 'ns')
-                try:
-                    if 'end' in row and origin is not None:
-                        dur = (row['end'] - row['start']).delta
-                    elif origin is not None:
-                        dur = (df['start'].iloc[i+1] - row['start']).delta
-                    elif 'end' in row:
-                        dur = (row['end'] - row['start']) // np.timedelta64(1, 'ns')
+                    tmap[cname] = 'text'
+
+                self._put('nodes', nid, 'types', tmap[cname])
+                cmap[cname] = nid
+                dmap[cname] = []
+
+            origin = self.origin
+            res = []
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                for i, row in tqdm(df.iterrows(), total=len(df), unit='values', unit_scale=len(df.columns) - 1):
+                    if origin is not None:
+                        ts = (row['start'] - origin).delta
                     else:
-                        dur = (df['start'].iloc[i+1] - row['start']) // np.timedelta64(1, 'ns')
-                except IndexError:
-                    dur = 1
-                else:
-                    if dur <= 0: continue
-                    for col, val in dict(row).items():
-                        if col == 'start':
-                            dmap[col].append((ts, dur))
-                        elif col == 'end':
-                            pass
-                        elif type(val) == float and math.isnan(val): # skip nans
-                            pass
-                        elif val is pd.NaT or val is None:
-                            pass
-                        elif tmap[col] == 'point3':
-                            dmap[col].append((ts, dur, (val.x, val.y, val.z)))
-                        elif tmap[col] == 'point':
-                            dmap[col].append((ts, dur, (val.x, val.y)))
-                        elif tmap[col] == 'date':
-                            dmap[col].append((ts, dur, val.isoformat()))
-                        elif tmap[col] == 'time':
-                            dmap[col].append((ts, dur, val.isoformat()))
-                        elif tmap[col] == 'datetime':
-                            dmap[col].append((ts, dur, iso8601(val)))
-                        elif tmap[col] == 'timedelta':
-                            dmap[col].append((ts, dur, val // np.timedelta64(1, 'ns')))
+                        ts = row['start'] // np.timedelta64(1, 'ns')
+                    try:
+                        if 'end' in row and origin is not None:
+                            dur = (row['end'] - row['start']).delta
+                        elif origin is not None:
+                            dur = (df['start'].iloc[i+1] - row['start']).delta
+                        elif 'end' in row:
+                            dur = (row['end'] - row['start']) // np.timedelta64(1, 'ns')
                         else:
-                            dmap[col].append((ts, dur, val))
+                            dur = (df['start'].iloc[i+1] - row['start']) // np.timedelta64(1, 'ns')
+                    except IndexError:
+                        dur = 1
+                    else:
+                        if dur <= 0: continue
+                        for col, val in dict(row).items():
+                            if col == 'start':
+                                dmap[col].append((ts, dur))
+                            elif col == 'end':
+                                pass
+                            elif type(val) == float and math.isnan(val): # skip nans
+                                pass
+                            elif val is pd.NaT or val is None:
+                                pass
+                            elif tmap[col] == 'point3':
+                                dmap[col].append((ts, dur, (val.x, val.y, val.z)))
+                            elif tmap[col] == 'point':
+                                dmap[col].append((ts, dur, (val.x, val.y)))
+                            elif tmap[col] == 'date':
+                                dmap[col].append((ts, dur, val.isoformat()))
+                            elif tmap[col] == 'time':
+                                dmap[col].append((ts, dur, val.isoformat()))
+                            elif tmap[col] == 'datetime':
+                                dmap[col].append((ts, dur, iso8601(val)))
+                            elif tmap[col] == 'timedelta':
+                                dmap[col].append((ts, dur, val // np.timedelta64(1, 'ns')))
+                            else:
+                                dmap[col].append((ts, dur, val))
 
-                if len(dmap['start']) >= 4096:
-                    list(res) # force result
+                    if len(dmap['start']) >= 4096:
+                        list(res) # force result
+                        res = pool.map(index_data, [(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
+                        for k, v in dmap.items():
+                            dmap[k] = []
+                if len(dmap['start']) > 0:
                     res = pool.map(index_data, [(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
                     for k, v in dmap.items():
                         dmap[k] = []
-            if len(dmap['start']) > 0:
-                res = pool.map(index_data, [(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
-                for k, v in dmap.items():
-                    dmap[k] = []
-                list(res) # force result
+                    list(res) # force result
                 
 
 
@@ -413,9 +428,8 @@ class Stream(API):
                 })
 
 
-    @property
     def graph(self):
-        return self._parent.graph.subtree(str(self))
+        return self._parent.graph(self._path)
 
     @property
     def meta(self):
