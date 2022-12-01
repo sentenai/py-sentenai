@@ -217,7 +217,7 @@ class Database(API):
         import treelib
         t = treelib.Tree()
         root = t.create_node(path[-1] if path else self.name, path[-1] if path else self.name, data={})
-        r = self._get("graph", *path)
+        r = self._get("graph", *(path or []))
         if r.status_code != 200:
             raise SentenaiError("Invalid Response")
         data = r.json()
