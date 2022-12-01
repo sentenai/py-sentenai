@@ -270,12 +270,12 @@ class Database(API):
         elif isinstance(content, Stream):
             nid = content._node
             if isinstance(key, tuple) and len(key) > 1:
-                src = self[*key[:-1]]
-                self._put('nodes', src._node, 'links', nid)
+                src = self[key[:-1]]
+                self._put('nodes', src._node, 'links', key[-1], nid)
             else:
                 if isinstance(key, tuple) and len(key) > 1:
                     key = key[0]
-                self._put('links', nid)
+                self._put('links', key, nid)
         else:
             df = content
             nid = self._put('paths', *path).json()['node']
