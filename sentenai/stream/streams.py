@@ -322,14 +322,14 @@ class Database(API):
             with ThreadPoolExecutor(max_workers=workers) as pool:
                 for i, row in tqdm(df.iterrows(), total=len(df), unit='values', unit_scale=len(df.columns) - 1):
                     if origin is not None:
-                        ts = (row['start'] - origin).delta
+                        ts = (row['start'] - origin) // np.timedelta64(1, 'ns')
                     else:
                         ts = row['start'] // np.timedelta64(1, 'ns')
                     try:
                         if 'end' in row and origin is not None:
-                            dur = (row['end'] - row['start']).delta
+                            dur = (row['end'] - row['start']) // np.timedelta64(1, 'ns')
                         elif origin is not None:
-                            dur = (df['start'].iloc[i+1] - row['start']).delta
+                            dur = (df['start'].iloc[i+1] - row['start']) // np.timedelta64(1, 'ns')
                         elif 'end' in row:
                             dur = (row['end'] - row['start']) // np.timedelta64(1, 'ns')
                         else:

@@ -187,12 +187,12 @@ class View(API):
                 data = resp.json()
                 if isinstance(data, list):
                     for evt in data:
-                        try:
-                            evt['start'] = pd.to_datetime(dt64(evt['start']), utc=True)
-                            evt['end'] = pd.to_datetime(dt64(evt['end']), utc=True)
-                        except:
+                        if type(evt['start']) is int:
                             evt['start'] = pd.to_timedelta(evt['start'])
                             evt['end'] = pd.to_timedelta(evt['end'])
+                        else:
+                            evt['start'] = pd.Timestamp(evt['start'])
+                            evt['end'] = pd.Timestamp(evt['end'])
                         if t != "event":
                             evt[name] = fromJSON(t, evt['value'])
                         if self._df:
