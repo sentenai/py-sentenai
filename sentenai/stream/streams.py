@@ -276,18 +276,31 @@ class Database(API):
                 if isinstance(key, tuple) and len(key) > 1:
                     key = key[0]
                 self._put('links', key, nid)
+
+
         else:
-            df = content
-            nid = self._put('paths', *path).json()['node']
-            self._put('nodes', nid, 'types', 'event')
+            if isinstance(content, list):
+                cmap = {}
+                tmap = {}
+                dmap = {}
+                df = pd.DataFrame(content).rename(columns={'value': path[-1]})
+                if set(df.columns) != {'start', 'end', path[-1]}:
+                    raise Exception(str(df.columns))
+            else:
+                nid = self._put('paths', *path).json()['node']
+                self._put('nodes', nid, 'types', 'event')
+                cmap = {'start': nid}
+                tmap = {'start': 'event'}
+                dmap = {'start': []}
+                df = content
             df = df.sort_values(by='start', ignore_index=True)
-            cmap = {'start': nid}
-            tmap = {'start': 'event'}
-            dmap = {'start': []}
             for cname in df.columns:
                 if cname in ('start', 'end'):
                     continue
-                nid = self._put('paths', *path, cname).json()['node']
+                if isinstance(content, list):
+                    nid = self._put('paths', *path).json()['node']
+                else:
+                    nid = self._put('paths', *path, cname).json()['node']
                 if df[cname].dtype == np.dtype('float32'):
                     tmap[cname] = 'float'
                 elif df[cname].dtype == np.dtype('float64'):
@@ -339,13 +352,13 @@ class Database(API):
                     else:
                         if dur <= 0: continue
                         for col, val in dict(row).items():
-                            if col == 'start':
+                            if col == 'start' and 'start' in dmap:
                                 dmap[col].append((ts, dur))
-                            elif col == 'end':
-                                pass
                             elif type(val) == float and math.isnan(val): # skip nans
                                 pass
                             elif val is pd.NaT or val is None:
+                                pass
+                            elif col not in tmap:
                                 pass
                             elif tmap[col] == 'point3':
                                 dmap[col].append((ts, dur, (val.x, val.y, val.z)))
@@ -362,12 +375,23 @@ class Database(API):
                             else:
                                 dmap[col].append((ts, dur, val))
 
-                    if len(dmap['start']) >= 4096:
+                    if 'start' in dmap and len(dmap['start']) >= 4096:
                         list(res) # force result
                         res = pool.map(index_data, [(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
                         for k, v in dmap.items():
                             dmap[k] = []
-                if len(dmap['start']) > 0:
+                    elif len(list(dmap.values())[0]) >= 4096:
+                        list(res) # force result
+                        res = pool.map(index_data, [(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
+                        for k, v in dmap.items():
+                            dmap[k] = []
+
+                if 'start' in dmap and len(dmap['start']) > 0:
+                    res = pool.map(index_data, [(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
+                    for k, v in dmap.items():
+                        dmap[k] = []
+                    list(res) # force result
+                elif len(list(dmap.values())[0]) > 0:
                     res = pool.map(index_data, [(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
                     for k, v in dmap.items():
                         dmap[k] = []
@@ -413,11 +437,11 @@ class Stream(API):
         data = r.json()
         return iter(sorted(data.keys()))
 
-    def export(self, start=None, end=None, limit=None):
+    def export(self, start=None, end=None, limit=None, exclude=tuple()):
         exp = API(self._credentials, "export")
         o = iso8601(self._parent.origin)[:-1]
         co = ["start", "end", "duration"] 
-        cols = [f"{self}/{x}" for x in iter(self)]
+        cols = [f"{self}/{x}" for x in iter(self) if x not in exclude]
         when = str(self)
         params = {}
         if limit is not None:
@@ -430,7 +454,7 @@ class Stream(API):
         r = exp._post(json={'when': when, 'select': co+cols}, params=params)
         return pd.DataFrame(
                 r.json(),
-                columns = co + list(self)
+                columns = co + [x for x in list(self) if x not in exclude],
                 ).astype({
                     'start': np.dtype('datetime64[ns]'),
                     'end': np.dtype('datetime64[ns]'),
@@ -525,8 +549,8 @@ class Stream(API):
     def stats(self):
         return StreamStats(self)
 
-    def __len__(self):
-        return StreamStats(self, vtype=self.type, ro=True).count
+    #def __len__(self):
+    #    return StreamStats(self, vtype=self.type, ro=True).count
     
 class StreamStats(object):
     def __init__(self, parent, start=None, end=None, origin=None, vtype=None, ro=False):
