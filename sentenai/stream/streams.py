@@ -430,6 +430,12 @@ class Stream(API):
             self._node = r.json()['node']
         API.__init__(self, parent._credentials, *parent._prefix, "nodes", self._node)
 
+    def __setitem__(self, key, v):
+        if not isinstance(key, tuple):
+            key = (key,)
+
+        self._parent[self._path + key] = v
+
     def __iter__(self):
         r = self._get("links")
         if r.status_code != 200:
@@ -465,9 +471,32 @@ class Stream(API):
     def graph(self):
         return self._parent.graph(self._path)
 
+
+
     @property
     def meta(self):
         return Metadata(self)
+
+    @meta.setter
+    def meta(self, md):
+        payload = {}
+        for key, val in md.items():
+            if isinstance(val, bool):
+                vtype = "bool"
+            elif isinstance(val, datetime) or isinstance(val, np.datetime64):
+                vtype = "datetime"
+                val = dt64(val)
+            elif isinstance(val, int):
+                vtype = "int"
+            elif isinstance(val, float):
+                vtype = "float"
+            else:
+                vtype = "text"
+            payload[key] = {'type': vtype, 'value': val}
+        resp = self._patch('meta', json=payload)
+        if resp.status_code not in [200, 201, 204]:
+            raise Exception(resp.status_code)
+
 
     @property
     def type(self):
@@ -645,13 +674,20 @@ class StreamStats(object):
 
     
 class StreamData(API):
-    def __init__(self, parent, index, df=False, resample=None, rolling=None):
+    def __init__(self, parent, index, df=False, resample=None, rolling=None, origin=''):
         self._parent = parent
         self._df = df
         self._type = index
+        self._origin = origin
         self._resample = resample
         self._rolling = rolling
         API.__init__(self, parent._credentials, *parent._prefix, "types", index)
+
+    def origin(self, o=None):
+        if not o:
+            return StreamData(self._parent, self._type, self._df, self._resample, self._rolling, '')
+        else:
+            return StreamData(self._parent, self._type, self._df, self._resample, self._rolling, 'origin ' + iso8601(o))
 
     def resample(self, period, aggregator=None):
         if self._type == 'event':
@@ -676,8 +712,8 @@ class StreamData(API):
             rs = f'{"when " if self._type == "event" else ""}{self._parent!s} {r}'
 
         if self._df:
-            return self._parent._parent._parent.df(rs)[tr]
+            return self._parent._parent._parent.df(rs + self._origin)[tr]
         else:
-            return self._parent._parent._parent(rs)[tr]
+            return self._parent._parent._parent(rs + self._origin)[tr]
 
 

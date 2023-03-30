@@ -95,8 +95,10 @@ def iso8601(dt):
     """Convert a datetime object to an ISO8601 unix timestamp."""
     if isinstance(dt, np.datetime64):
         return str(dt) + "Z"
-    if isinstance(dt, np.timedelta64):
+    elif isinstance(dt, np.timedelta64):
         return str(int(dt.astype('timedelta64[ns]')))
+    elif PANDAS and isinstance(dt, pd.Timestamp):
+        return dt.isoformat()
     elif isinstance(dt, datetime):
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=None)
@@ -115,6 +117,8 @@ class SentenaiEncoder(JSON.JSONEncoder):
         if isinstance(obj, datetime):
             return iso8601(obj)
         if isinstance(obj, np.datetime64):
+            return iso8601(obj)
+        if PANDAS and isinstance(obj, pd.Timestamp):
             return iso8601(obj)
         if isinstance(obj, np.timedelta64):
             return str(obj.astype(int))
