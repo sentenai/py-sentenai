@@ -250,7 +250,6 @@ class Database(API):
             return Stream(self, key)
 
     def __setitem__(self, key, content):
-        del self[key]
         workers = 32
         if isinstance(key, tuple):
             if isinstance(key[-1], slice):
@@ -259,8 +258,14 @@ class Database(API):
                 workers = key[-1].stop
             else:
                 path = key
+        elif isinstance(key, slice):
+            path = key[:-1]
+            path.append(key[-1].start)
+            workers = key[-1].stop
+
         else:
             path = (key,)
+        del self[path]
         path = key if isinstance(key, tuple) else (key,)
 
         if content is None:
