@@ -254,19 +254,17 @@ class Database(API):
         if isinstance(key, tuple):
             if isinstance(key[-1], slice):
                 path = key[:-1]
-                path.append(key[-1].start)
+                path += key[-1].start
                 workers = key[-1].stop
             else:
                 path = key
         elif isinstance(key, slice):
-            path = key[:-1]
-            path.append(key[-1].start)
-            workers = key[-1].stop
-
+            workers = key.stop
+            path = key.start
         else:
             path = (key,)
+
         del self[path]
-        path = key if isinstance(key, tuple) else (key,)
 
         if content is None:
             nid = self._put('paths', *path, json={'kind': 'directory'})

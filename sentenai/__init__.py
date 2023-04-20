@@ -2,6 +2,9 @@ from sentenai.api import *
 from sentenai.stream import Database
 if PANDAS: import pandas as pd
 from datetime import datetime
+import io
+import uuid
+from pathlib import Path
 
 import time
 
@@ -117,6 +120,32 @@ class View(API):
     def explain(self):
         return self._post("debug", json=self._tspl['value']).json()
 
+    def plan(self):
+        from IPython.display import IFrame
+         
+        def js_ui(data, template, out_fn = None, out_path='.',
+                  width="800px", height="600px", **kwargs):
+            """Generate an IFrame containing a templated javascript package."""
+            if not out_fn:
+                out_fn = Path(f"{uuid.uuid4()}.html")
+                 
+            # Generate the path to the output file
+            out_path = Path(out_path)
+            filepath = out_path / out_fn
+            # Check the required directory path exists
+            filepath.parent.mkdir(parents=True, exist_ok=True)
+         
+            # The open "wt" parameters are: write, text mode;
+            with io.open(filepath, 'wt', encoding='utf8') as outfile:
+                # The data is passed in as a dictionary so we can pass different
+                # arguments to the template
+                outfile.write(template.format(**data))
+         
+            return IFrame(src=filepath, width=width, height=height)
+        
+        return js_ui({'src': self.explain()['tsvm']}, TEMPLATE_MERMAIDJS)
+
+
     @property
     def range(self):
         if self._info:
@@ -226,3 +255,20 @@ class View(API):
     
 
 
+TEMPLATE_MERMAIDJS="""<html>
+    <head>
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.3.0/css/all.min.css">
+    <head>
+    <body>
+        <script type="module">
+            import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+            mermaid.initialize({{ startOnLoad: true }});
+        </script>
+ 
+        <pre class="mermaid">
+            {src}
+        </pre>
+ 
+    </body>
+</html>
+"""
