@@ -352,31 +352,31 @@ class Database(API):
                             dur = (df['start'].iloc[i+1] - row['start']) // np.timedelta64(1, 'ns')
                     except IndexError:
                         dur = 1
-                    else:
-                        if dur <= 0: continue
-                        for col, val in dict(row).items():
-                            if col == 'start' and 'start' in dmap:
-                                dmap[col].append((ts, dur))
-                            elif type(val) == float and math.isnan(val): # skip nans
-                                pass
-                            elif val is pd.NaT or val is None:
-                                pass
-                            elif col not in tmap:
-                                pass
-                            elif tmap[col] == 'point3':
-                                dmap[col].append((ts, dur, (val.x, val.y, val.z)))
-                            elif tmap[col] == 'point':
-                                dmap[col].append((ts, dur, (val.x, val.y)))
-                            elif tmap[col] == 'date':
-                                dmap[col].append((ts, dur, val.isoformat()))
-                            elif tmap[col] == 'time':
-                                dmap[col].append((ts, dur, val.isoformat()))
-                            elif tmap[col] == 'datetime':
-                                dmap[col].append((ts, dur, iso8601(val)))
-                            elif tmap[col] == 'timedelta':
-                                dmap[col].append((ts, dur, val // np.timedelta64(1, 'ns')))
-                            else:
-                                dmap[col].append((ts, dur, val))
+
+                    if dur <= 0: continue
+                    for col, val in dict(row).items():
+                        if col == 'start' and 'start' in dmap:
+                            dmap[col].append((ts, dur))
+                        elif type(val) == float and math.isnan(val): # skip nans
+                            pass
+                        elif val is pd.NaT or val is None:
+                            pass
+                        elif col not in tmap:
+                            pass
+                        elif tmap[col] == 'point3':
+                            dmap[col].append((ts, dur, (val.x, val.y, val.z)))
+                        elif tmap[col] == 'point':
+                            dmap[col].append((ts, dur, (val.x, val.y)))
+                        elif tmap[col] == 'date':
+                            dmap[col].append((ts, dur, val.isoformat()))
+                        elif tmap[col] == 'time':
+                            dmap[col].append((ts, dur, val.isoformat()))
+                        elif tmap[col] == 'datetime':
+                            dmap[col].append((ts, dur, iso8601(val)))
+                        elif tmap[col] == 'timedelta':
+                            dmap[col].append((ts, dur, val // np.timedelta64(1, 'ns')))
+                        else:
+                            dmap[col].append((ts, dur, val))
 
                     if 'start' in dmap and len(dmap['start']) >= 4096:
                         list(res) # force result
