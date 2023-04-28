@@ -19,6 +19,22 @@ from concurrent.futures import ThreadPoolExecutor
 
 Update = namedtuple('Update', ['id', 'start', 'end', 'data'])
 
+
+def worker(q, workers, total):
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        v = 0
+        with tqdm(total=total, unit=" values") as pbar:
+            while True:
+                data = q.get()
+                if not data:
+                    pbar.update(total - v)
+                    break # exit on empty list
+                list(pool.map(index_data, data))
+                n = sum([len(v) for d, n, i, v in data])
+                v += n
+                pbar.update(n)
+
+
 def index_data(args):
     db, node, index, v = args
     counter = 0
@@ -251,15 +267,18 @@ class Database(API):
 
     def __setitem__(self, key, content):
         workers = 32
+        chunksize = 4096
         if isinstance(key, tuple):
             if isinstance(key[-1], slice):
                 path = key[:-1]
                 path += key[-1].start
                 workers = key[-1].stop
+                chunksize = key.step or chunksize
             else:
                 path = key
         elif isinstance(key, slice):
             workers = key.stop
+            chunksize = key.step or chunksize
             path = key.start
         else:
             path = (key,)
@@ -335,70 +354,70 @@ class Database(API):
 
             origin = self.origin
             res = []
-            with ThreadPoolExecutor(max_workers=workers) as pool:
-                for i, row in tqdm(df.iterrows(), total=len(df), unit='values', unit_scale=len(df.columns) - 1):
-                    if origin is not None:
-                        ts = (row['start'] - origin) // np.timedelta64(1, 'ns')
+            q = Queue()
+            Thread(target=worker, args=(q, workers, len(df) * (len(df.columns) - 1))).start()
+
+            for i, row in df.iterrows():
+                if origin is not None:
+                    ts = (row['start'] - origin) // np.timedelta64(1, 'ns')
+                else:
+                    ts = row['start'] // np.timedelta64(1, 'ns')
+                try:
+                    if 'end' in row and origin is not None:
+                        dur = (row['end'] - row['start']) // np.timedelta64(1, 'ns')
+                    elif origin is not None:
+                        dur = (df['start'].iloc[i+1] - row['start']) // np.timedelta64(1, 'ns')
+                    elif 'end' in row:
+                        dur = (row['end'] - row['start']) // np.timedelta64(1, 'ns')
                     else:
-                        ts = row['start'] // np.timedelta64(1, 'ns')
-                    try:
-                        if 'end' in row and origin is not None:
-                            dur = (row['end'] - row['start']) // np.timedelta64(1, 'ns')
-                        elif origin is not None:
-                            dur = (df['start'].iloc[i+1] - row['start']) // np.timedelta64(1, 'ns')
-                        elif 'end' in row:
-                            dur = (row['end'] - row['start']) // np.timedelta64(1, 'ns')
-                        else:
-                            dur = (df['start'].iloc[i+1] - row['start']) // np.timedelta64(1, 'ns')
-                    except IndexError:
-                        dur = 1
+                        dur = (df['start'].iloc[i+1] - row['start']) // np.timedelta64(1, 'ns')
+                except IndexError:
+                    dur = 1
 
-                    if dur <= 0: continue
-                    for col, val in dict(row).items():
-                        if col == 'start' and 'start' in dmap:
-                            dmap[col].append((ts, dur))
-                        elif type(val) == float and math.isnan(val): # skip nans
-                            pass
-                        elif val is pd.NaT or val is None:
-                            pass
-                        elif col not in tmap:
-                            pass
-                        elif tmap[col] == 'point3':
-                            dmap[col].append((ts, dur, (val.x, val.y, val.z)))
-                        elif tmap[col] == 'point':
-                            dmap[col].append((ts, dur, (val.x, val.y)))
-                        elif tmap[col] == 'date':
-                            dmap[col].append((ts, dur, val.isoformat()))
-                        elif tmap[col] == 'time':
-                            dmap[col].append((ts, dur, val.isoformat()))
-                        elif tmap[col] == 'datetime':
-                            dmap[col].append((ts, dur, iso8601(val)))
-                        elif tmap[col] == 'timedelta':
-                            dmap[col].append((ts, dur, val // np.timedelta64(1, 'ns')))
-                        else:
-                            dmap[col].append((ts, dur, val))
+                if dur <= 0: continue
+                for col, val in dict(row).items():
+                    if col == 'start' and 'start' in dmap:
+                        dmap[col].append((ts, dur))
+                    elif type(val) == float and math.isnan(val): # skip nans
+                        pass
+                    elif val is pd.NaT or val is None:
+                        pass
+                    elif col not in tmap:
+                        pass
+                    elif tmap[col] == 'point3':
+                        dmap[col].append((ts, dur, (val.x, val.y, val.z)))
+                    elif tmap[col] == 'point':
+                        dmap[col].append((ts, dur, (val.x, val.y)))
+                    elif tmap[col] == 'date':
+                        dmap[col].append((ts, dur, val.isoformat()))
+                    elif tmap[col] == 'time':
+                        dmap[col].append((ts, dur, val.isoformat()))
+                    elif tmap[col] == 'datetime':
+                        dmap[col].append((ts, dur, iso8601(val)))
+                    elif tmap[col] == 'timedelta':
+                        dmap[col].append((ts, dur, val // np.timedelta64(1, 'ns')))
+                    else:
+                        dmap[col].append((ts, dur, val))
 
-                    if 'start' in dmap and len(dmap['start']) >= 4096:
-                        list(res) # force result
-                        res = pool.map(index_data, [(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
-                        for k, v in dmap.items():
-                            dmap[k] = []
-                    elif len(list(dmap.values())[0]) >= 4096:
-                        list(res) # force result
-                        res = pool.map(index_data, [(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
-                        for k, v in dmap.items():
-                            dmap[k] = []
-
-                if 'start' in dmap and len(dmap['start']) > 0:
-                    res = pool.map(index_data, [(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
+                if 'start' in dmap and len(dmap['start']) >= chunksize:
+                    q.put([(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
                     for k, v in dmap.items():
                         dmap[k] = []
-                    list(res) # force result
-                elif len(list(dmap.values())[0]) > 0:
-                    res = pool.map(index_data, [(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
+                elif len(list(dmap.values())[0]) >= chunksize:
+                    q.put([(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
                     for k, v in dmap.items():
                         dmap[k] = []
-                    list(res) # force result
+
+            if 'start' in dmap and len(dmap['start']) > 0:
+                q.put([(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
+                for k, v in dmap.items():
+                    dmap[k] = []
+            elif len(list(dmap.values())[0]) > 0:
+                q.put([(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
+                for k, v in dmap.items():
+                    dmap[k] = []
+            q.put([])
+            
                 
 
 
