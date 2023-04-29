@@ -20,19 +20,26 @@ from concurrent.futures import ThreadPoolExecutor
 Update = namedtuple('Update', ['id', 'start', 'end', 'data'])
 
 
-def worker(q, workers, total):
+def worker(q, workers, total, progress, position=None):
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        v = 0
-        with tqdm(total=total, unit=" values") as pbar:
+        if progress:
+            v = 0
+            with tqdm(total=total, unit=" values", position=position) as pbar:
+                while True:
+                    data = q.get()
+                    if not data:
+                        pbar.update(total - v)
+                        break # exit on empty list
+                    list(pool.map(index_data, data))
+                    n = sum([len(v) for d, n, i, v in data])
+                    v += n
+                    pbar.update(n)
+        else:
             while True:
                 data = q.get()
                 if not data:
-                    pbar.update(total - v)
                     break # exit on empty list
                 list(pool.map(index_data, data))
-                n = sum([len(v) for d, n, i, v in data])
-                v += n
-                pbar.update(n)
 
 
 def index_data(args):
@@ -48,7 +55,9 @@ def index_data(args):
             sleep(.1)
         else:
             if resp.status_code > 204:
+                resp.close()
                 raise Exception(f"failed on row {i}, column {k}")
+            resp.close()
             break
 
 class WQueue(Queue):
@@ -279,7 +288,7 @@ class Database(API):
         elif isinstance(key, slice):
             workers = key.stop
             chunksize = key.step or chunksize
-            path = key.start
+            path = (key.start,)
         else:
             path = (key,)
 
@@ -355,7 +364,7 @@ class Database(API):
             origin = self.origin
             res = []
             q = Queue()
-            Thread(target=worker, args=(q, workers, len(df) * (len(df.columns) - 1))).start()
+            Thread(target=worker, args=(q, workers, len(df) * (len(df.columns) - 1), self._parent.interactive)).start()
 
             for i, row in df.iterrows():
                 if origin is not None:

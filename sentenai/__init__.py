@@ -15,22 +15,18 @@ if PANDAS:
         return pd.DataFrame([x.as_record() for x in events])
 
 class Sentenai(API):
-    def __init__(self, host=None, port=None, check=True, auth=None):
+    def __init__(self, host=None, port=None, check=True, interactive=True):
         ## We do this so we can programmatically pass in host/port
         if host is None:
             host = 'localhost'
         if port is None:
-            if auth:
-                port = 443
-            else:
-                port = 7280
-        if auth:
-            protocol = 'https://'
-        else:
-            protocol = 'http://'
+            port = 7280
+        protocol = 'http://'
+
+        self.interactive = interactive
 
         h = f"{protocol}{host}:{port}"
-        API.__init__(self, Credentials(h, auth))
+        API.__init__(self, Credentials(h, None))
         if check and self.ping() > 0.5:
             print("warning: connection to this repository may be high latency or unstable.")
 

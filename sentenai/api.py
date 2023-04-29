@@ -181,13 +181,9 @@ class Credentials(object):
 class API(object):
     def __init__(self, credentials, *prefix, params={}):
         self._credentials = credentials
-        if credentials.auth_key:
-            self._session = requests.Session()
-            for auth in credentials.auth_key.items():
-                self._session.auth = auth
-                break
-        else:
-            self._session = requests
+        self._session = requests.Session()
+        a = requests.adapters.HTTPAdapter(pool_connections=100, pool_maxsize=100)
+        self._session.mount('', a)
         self._prefix = prefix
         self._params = params
 
