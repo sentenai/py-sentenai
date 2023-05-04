@@ -56,7 +56,7 @@ def index_data(args):
         else:
             if resp.status_code > 204:
                 resp.close()
-                raise Exception(f"failed on row {i}, column {k}")
+                raise Exception(f"failed on index")
             resp.close()
             break
 
