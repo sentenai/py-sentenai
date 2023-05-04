@@ -152,11 +152,7 @@ class View(API):
 
     @property
     def origin(self):
-        if self._info:
-            return dt64(self._info.get('origin'))
-        else:
-            self._info = self._post("range", json=self._tspl['value']).json()
-            return self.origin
+        return dt64(self.explain()['origin'])
 
     @property
     def type(self):
