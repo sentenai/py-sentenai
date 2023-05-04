@@ -60,154 +60,6 @@ def index_data(args):
             resp.close()
             break
 
-class WQueue(Queue):
-    def write(self, data):
-        if data:
-            j = {}
-            if data.id:
-                j['id'] = id
-            if not data.start:
-                j['ts'] = dt64(datetime.utcnow())
-            else:
-                j['ts'] = dt64(data.start)
-            if data.end:
-                j['duration'] = int((dt64(data.end) - dt64(j['ts'])).astype('timedelta64[ns]'))
-            j['event'] = data.data
-            self.put((JSON.dumps(j, ignore_nan=True, cls=SentenaiEncoder) + "\n").encode('utf-8'))
-
-    def __iter__(self):
-        return iter(self.get, None)
-
-    def gen(self):
-        while True:
-            x = self.get()
-            if x is None:
-                break
-            else:
-                yield x
-
-    def close(self):
-        self.put(None)
-
-class Logger(Thread):
-
-    def join(self, timeout=None):
-        super(Logger, self).join(timeout)
-        if self._exc: raise self._exc
-
-    def run(self):
-        self._exc = None
-        try:
-            self.ret = self._target(*self._args, **self._kwargs)
-        except BaseException as e:
-            self._exc = e
-
-class Log(object):
-    def __init__(self, parent):
-        self._queue = WQueue(1000)
-        self._parent = parent
-        self._thread = Logger(target=self._post)
-        self._thread.start()
-        self._exc = None
-
-    def _post(self):
-        self._parent._post(json=self._queue.gen())
-
-
-    def __setitem__(self, item, data):
-        if isinstance(item, slice):
-            if item.start is None:
-                raise ValueError("start time must be specified")
-            elif item.stop and item.start >= item.stop:
-                raise ValueError("end time must be after start time")
-            else:
-                self._queue.write(Update(start=item.start, end=item.stop, id=item.step, data=data))
-        else:
-            raise ValueError("Must be a slice of the form `start : end* : id*`, where `*` indicates optional)")
-
-
-
-
-class Updates(API):
-    def __init__(self, parent):
-        API.__init__(self, parent._credentials, *parent._prefix, "events")
-        self._log = None
-        self._parent = parent
-
-    def __setitem__(self, item, data):
-        hdrs = {'content-type': 'application/json'}
-        if isinstance(item, slice):
-            if item.start is None:
-                raise ValueError("start time must be specified")
-            elif item.stop and item.start >= item.stop:
-                raise ValueError("end time must be after start time")
-            else:
-                if item.start is not None and item.stop is None:
-                    hdrs["timestamp"] = iso8601(item.start)
-                elif item.stop is not None:
-                    hdrs['start'] = iso8601(item.start)
-                    hdrs["end"] = iso8601(item.stop)
-                if item.step is None:
-                    r = self._post(headers=hdrs, json=data)
-                else:
-                    r = self._put(item.step, headers=hdrs, json=data)
-                if 300 > r.status_code >= 200:
-                    return None
-                else:
-                    raise Exception(r.status_code)
-        else:
-            raise ValueError("Must be a slice of the form `start : end* : id*`, where `*` indicates optional)")
-
-    def __enter__(self):
-        self._log = Log(self._parent)
-        return self._log
-
-    def __exit__(self, x, y, z):
-        self._log._queue.close()
-        self._log._thread.join()
-        self._log = None
-
-    def __delitem__(self, item):
-        if isinstance(item, slice):
-            raise TypeError("slice not supported for deleting updates.")
-        else:
-            r = self._delete(item)
-            if r.status_code == 204:
-                return None
-            else:
-                raise Exception(r.status_code)
-
-
-    def __getitem__(self, item):
-        if isinstance(item, slice):
-            params = {}
-            if item.start is not None:
-                params['start'] = iso8601(item.start)
-            if item.stop is not None:
-                params['end'] = iso8601(item.stop)
-            if item.step is not None:
-                params['limit'] = abs(item.step)
-                if item.step < 0:
-                    params['sort'] = 'desc'
-            r = self._get(params=params)
-            if r.status_code == 200:
-                data = []
-                for line in r.json():
-                    data.append({
-                        'start': dt64(line['ts']),
-                        'end': dt64(line['ts']) + td64(line['duration']) if line['duration'] else None,
-                        'data': line['event'],
-                    })
-                return data
-            else:
-                raise Exception(r.json())
-        else:
-            r = self._get(item)
-            if r.status_code == 404:
-                raise KeyError(f"Update with id `{item}` not found.")
-            else:
-                return r.json()
-
 
 class Database(API):
     def __init__(self, parent, name, origin):
@@ -449,6 +301,15 @@ class Database(API):
     @property
     def name(self):
         return self._name
+
+class Node(API):
+    def __init__(self, db, node):
+        self._node = node
+        API.__init__(self, db._credentials, *db._prefix, "nodes", self._node)
+
+    @property
+    def meta(self):
+        return Metadata(self)
 
 class Stream(API):
     def __init__(self, parent, *path):
