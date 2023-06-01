@@ -177,41 +177,52 @@ class Database(API):
                 dmap = {'start': []}
                 df = content
             df = df.sort_values(by='start', ignore_index=True)
-            for cname in df.columns:
-                if cname in ('start', 'end'):
-                    continue
+
+
+
+            def add(cname):
                 if isinstance(content, list):
                     nid = self._put('paths', *path).json()['node']
                 else:
                     nid = self._put('paths', *path, cname).json()['node']
                 if df[cname].dtype == np.dtype('float32'):
-                    tmap[cname] = 'float'
+                    tm = 'float'
                 elif df[cname].dtype == np.dtype('float64'):
-                    tmap[cname] = 'float'
+                    tm = 'float'
                 elif df[cname].dtype == np.dtype('int32'):
-                    tmap[cname] = 'int'
+                    tm = 'int'
                 elif df[cname].dtype == np.dtype('int64'):
-                    tmap[cname] = 'int'
+                    tm = 'int'
                 elif df[cname].dtype == bool:
-                    tmap[cname] = 'bool'
+                    tm = 'bool'
                 elif df[cname].dtype == np.dtype('datetime64[ns]'):
-                    tmap[cname] = 'datetime'
+                    tm = 'datetime'
                 elif df[cname].dtype == np.dtype('timedelta64[ns]'):
-                    tmap[cname] = 'timedelta'
+                    tm = 'timedelta'
                 elif type(df[cname][0]) == date:
-                    tmap[cname] = 'date'
+                    tm = 'date'
                 elif type(df[cname][0]) == time:
-                    tmap[cname] = 'time'
+                    tm = 'time'
                 elif type(df[cname][0]) == Point and df[cname][0].has_z:
-                    tmap[cname] = 'point3'
+                    tm = 'point3'
                 elif type(df[cname][0]) == Point:
-                    tmap[cname] = 'point'
+                    tm = 'point'
                 else:
-                    tmap[cname] = 'text'
+                    tm = 'text'
 
-                self._put('nodes', nid, 'types', tmap[cname])
-                cmap[cname] = nid
-                dmap[cname] = []
+                self._put('nodes', nid, 'types', tm)
+                #cmap[cname] = nid
+                #dmap[cname] = []
+                #tmap[cname] = tm
+                return (cname, nid, tm)
+
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                res = pool.map(add, [x for x in df.columns if x not in ['start', 'end']])
+                for cname, nid, tm in res:
+                    cmap[cname] = nid
+                    dmap[cname] = []
+                    tmap[cname] = tm
+
 
             origin = self.origin
             res = []
