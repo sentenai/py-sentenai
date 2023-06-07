@@ -1,9 +1,8 @@
 from sentenai.stream.metadata import Metadata
-from sentenai.stream.events import Updates
 from sentenai.api import *
 if PANDAS:
     import pandas as pd
-from datetime import datetime
+from datetime import datetime, time, date
 import simplejson as JSON
 import re, io, math
 from collections import namedtuple
@@ -17,7 +16,6 @@ from queue import Queue
 from threading import Thread
 from concurrent.futures import ThreadPoolExecutor
 
-Update = namedtuple('Update', ['id', 'start', 'end', 'data'])
 
 
 def worker(q, workers, total, progress, position=None):
@@ -69,10 +67,6 @@ class Database(API):
         API.__init__(self, parent._credentials, *parent._prefix, "db", name)
 
 
-    @property
-    def log(self):
-        raise Exception("disabled")
-        return Updates(self)
 
     def __iter__(self):
         r = self._get("links")
@@ -148,8 +142,44 @@ class Database(API):
 
         if content is None:
             nid = self._put('paths', *path, json={'kind': 'directory'})
+        elif PANDAS and isinstance(content, pd.DataFrame):
+            nid = self._put('paths', *path).json()['node']
+            self._put('nodes', nid, 'types', 'event')
+            cmap = {'start': nid}
+            tmap = {'start': 'event'}
+            dmap = {'start': []}
+            df = content.sort_values(by='start', ignore_index=True)
         elif type(content) == str:
             nid = self._put('paths', *path, json={'kind': 'virtual', 'tspl': content})
+            return
+        elif content == float:
+            nid = self._put('paths', *path).json()['node']
+            self._put('nodes', nid, 'types', 'float')
+            return
+        elif content == int:
+            nid = self._put('paths', *path).json()['node']
+            self._put('nodes', nid, 'types', 'int')
+            return
+        elif content == bool:
+            nid = self._put('paths', *path).json()['node']
+            self._put('nodes', nid, 'types', 'bool')
+            return
+        elif content == datetime:
+            nid = self._put('paths', *path).json()['node']
+            self._put('nodes', nid, 'types', 'datetime')
+            return
+        elif content == date:
+            nid = self._put('paths', *path).json()['node']
+            self._put('nodes', nid, 'types', 'date')
+            return
+        elif content == time:
+            nid = self._put('paths', *path).json()['node']
+            self._put('nodes', nid, 'types', 'time')
+            return
+        elif content == str:
+            nid = self._put('paths', *path).json()['node']
+            self._put('nodes', nid, 'types', 'text')
+            return
         elif isinstance(content, Stream):
             nid = content._node
             if isinstance(key, tuple) and len(key) > 1:
@@ -159,138 +189,139 @@ class Database(API):
                 if isinstance(key, tuple) and len(key) > 1:
                     key = key[0]
                 self._put('links', key, nid)
-
-
-        else:
-            if isinstance(content, list):
+            return
+        elif isinstance(content, list):
                 cmap = {}
                 tmap = {}
                 dmap = {}
                 df = pd.DataFrame(content).rename(columns={'value': path[-1]})
                 if set(df.columns) != {'start', 'end', path[-1]}:
                     raise Exception(str(df.columns))
-            else:
-                nid = self._put('paths', *path).json()['node']
-                self._put('nodes', nid, 'types', 'event')
-                cmap = {'start': nid}
-                tmap = {'start': 'event'}
-                dmap = {'start': []}
-                df = content
-            df = df.sort_values(by='start', ignore_index=True)
+                df = df.sort_values(by='start', ignore_index=True)
+        else:
+            raise TypeError("invalid assignment type")
 
 
 
-            def add(cname):
-                if isinstance(content, list):
-                    nid = self._put('paths', *path).json()['node']
-                else:
-                    nid = self._put('paths', *path, cname).json()['node']
-                if df[cname].dtype == np.dtype('float32'):
-                    tm = 'float'
-                elif df[cname].dtype == np.dtype('float64'):
-                    tm = 'float'
-                elif df[cname].dtype == np.dtype('int32'):
-                    tm = 'int'
-                elif df[cname].dtype == np.dtype('int64'):
-                    tm = 'int'
-                elif df[cname].dtype == bool:
-                    tm = 'bool'
-                elif df[cname].dtype == np.dtype('datetime64[ns]'):
-                    tm = 'datetime'
-                elif df[cname].dtype == np.dtype('timedelta64[ns]'):
-                    tm = 'timedelta'
-                elif type(df[cname][0]) == date:
-                    tm = 'date'
-                elif type(df[cname][0]) == time:
-                    tm = 'time'
-                elif type(df[cname][0]) == Point and df[cname][0].has_z:
-                    tm = 'point3'
-                elif type(df[cname][0]) == Point:
-                    tm = 'point'
-                else:
-                    tm = 'text'
-
-                self._put('nodes', nid, 'types', tm)
-                #cmap[cname] = nid
-                #dmap[cname] = []
-                #tmap[cname] = tm
-                return (cname, nid, tm)
-
-            with ThreadPoolExecutor(max_workers=8) as pool:
-                res = pool.map(add, [x for x in df.columns if x not in ['start', 'end']])
-                for cname, nid, tm in res:
-                    cmap[cname] = nid
-                    dmap[cname] = []
-                    tmap[cname] = tm
-
-
-            origin = self.origin
-            res = []
-            q = Queue()
-            Thread(target=worker, args=(q, workers, len(df) * (len(df.columns) - 1), self._parent.interactive)).start()
-
-            for i, row in df.iterrows():
-                if origin is not None:
-                    ts = (row['start'] - origin) // np.timedelta64(1, 'ns')
-                else:
-                    ts = row['start'] // np.timedelta64(1, 'ns')
+        def add(cname):
+            retries = 10
+            while retries > 0:
                 try:
-                    if 'end' in row and origin is not None:
-                        dur = (row['end'] - row['start']) // np.timedelta64(1, 'ns')
-                    elif origin is not None:
-                        dur = (df['start'].iloc[i+1] - row['start']) // np.timedelta64(1, 'ns')
-                    elif 'end' in row:
-                        dur = (row['end'] - row['start']) // np.timedelta64(1, 'ns')
+                    if isinstance(content, list):
+                        nid = self._put('paths', *path).json()['node']
                     else:
-                        dur = (df['start'].iloc[i+1] - row['start']) // np.timedelta64(1, 'ns')
-                except IndexError:
-                    dur = 1
-
-                if dur <= 0: continue
-                for col, val in dict(row).items():
-                    if col == 'start' and 'start' in dmap:
-                        dmap[col].append((ts, dur))
-                    elif type(val) == float and math.isnan(val): # skip nans
-                        pass
-                    elif val is pd.NaT or val is None:
-                        pass
-                    elif col not in tmap:
-                        pass
-                    elif tmap[col] == 'point3':
-                        dmap[col].append((ts, dur, (val.x, val.y, val.z)))
-                    elif tmap[col] == 'point':
-                        dmap[col].append((ts, dur, (val.x, val.y)))
-                    elif tmap[col] == 'date':
-                        dmap[col].append((ts, dur, val.isoformat()))
-                    elif tmap[col] == 'time':
-                        dmap[col].append((ts, dur, val.isoformat()))
-                    elif tmap[col] == 'datetime':
-                        dmap[col].append((ts, dur, iso8601(val)))
-                    elif tmap[col] == 'timedelta':
-                        dmap[col].append((ts, dur, val // np.timedelta64(1, 'ns')))
+                        nid = self._put('paths', *path, cname).json()['node']
+                    if df[cname].dtype == np.dtype('float32'):
+                        tm = 'float'
+                    elif df[cname].dtype == np.dtype('float64'):
+                        tm = 'float'
+                    elif df[cname].dtype == np.dtype('int32'):
+                        tm = 'int'
+                    elif df[cname].dtype == np.dtype('int64'):
+                        tm = 'int'
+                    elif df[cname].dtype == bool:
+                        tm = 'bool'
+                    elif df[cname].dtype == np.dtype('datetime64[ns]'):
+                        tm = 'datetime'
+                    elif df[cname].dtype == np.dtype('timedelta64[ns]'):
+                        tm = 'timedelta'
+                    elif type(df[cname][0]) == date:
+                        tm = 'date'
+                    elif type(df[cname][0]) == time:
+                        tm = 'time'
+                    elif type(df[cname][0]) == Point and df[cname][0].has_z:
+                        tm = 'point3'
+                    elif type(df[cname][0]) == Point:
+                        tm = 'point'
                     else:
-                        dmap[col].append((ts, dur, val))
+                        tm = 'text'
 
-                if 'start' in dmap and len(dmap['start']) >= chunksize:
-                    q.put([(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
-                    for k, v in dmap.items():
-                        dmap[k] = []
-                elif len(list(dmap.values())[0]) >= chunksize:
-                    q.put([(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
-                    for k, v in dmap.items():
-                        dmap[k] = []
+                    self._put('nodes', nid, 'types', tm)
+                    #cmap[cname] = nid
+                    #dmap[cname] = []
+                    #tmap[cname] = tm
+                    return (cname, nid, tm)
+                except:
+                    retries -= 1
+                    time.sleep(0.2)
+                    raise Exception("failed to create node/index")
 
-            if 'start' in dmap and len(dmap['start']) > 0:
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            res = pool.map(add, [x for x in df.columns if x not in ['start', 'end']])
+            for cname, nid, tm in res:
+                cmap[cname] = nid
+                dmap[cname] = []
+                tmap[cname] = tm
+
+
+        origin = self.origin
+        res = []
+        q = Queue()
+        Thread(target=worker, args=(q, workers, len(df) * (len(df.columns) - 1), self._parent.interactive)).start()
+
+        for i, row in df.iterrows():
+            if origin is not None:
+                ts = (row['start'] - origin) // np.timedelta64(1, 'ns')
+            else:
+                ts = row['start'] // np.timedelta64(1, 'ns')
+            try:
+                if 'end' in row and origin is not None:
+                    dur = (row['end'] - row['start']) // np.timedelta64(1, 'ns')
+                elif origin is not None:
+                    dur = (df['start'].iloc[i+1] - row['start']) // np.timedelta64(1, 'ns')
+                elif 'end' in row:
+                    dur = (row['end'] - row['start']) // np.timedelta64(1, 'ns')
+                else:
+                    dur = (df['start'].iloc[i+1] - row['start']) // np.timedelta64(1, 'ns')
+            except IndexError:
+                dur = 1
+
+            if dur <= 0: continue
+            for col, val in dict(row).items():
+                if col == 'start' and 'start' in dmap:
+                    dmap[col].append((ts, dur))
+                elif type(val) == float and math.isnan(val): # skip nans
+                    pass
+                elif val is pd.NaT or val is None:
+                    pass
+                elif col not in tmap:
+                    pass
+                elif tmap[col] == 'point3':
+                    dmap[col].append((ts, dur, (val.x, val.y, val.z)))
+                elif tmap[col] == 'point':
+                    dmap[col].append((ts, dur, (val.x, val.y)))
+                elif tmap[col] == 'date':
+                    dmap[col].append((ts, dur, val.isoformat()))
+                elif tmap[col] == 'time':
+                    dmap[col].append((ts, dur, val.isoformat()))
+                elif tmap[col] == 'datetime':
+                    dmap[col].append((ts, dur, iso8601(val)))
+                elif tmap[col] == 'timedelta':
+                    dmap[col].append((ts, dur, val // np.timedelta64(1, 'ns')))
+                else:
+                    dmap[col].append((ts, dur, val))
+
+            if 'start' in dmap and len(dmap['start']) >= chunksize:
                 q.put([(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
                 for k, v in dmap.items():
                     dmap[k] = []
-            elif len(list(dmap.values())[0]) > 0:
+            elif len(list(dmap.values())[0]) >= chunksize:
                 q.put([(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
                 for k, v in dmap.items():
                     dmap[k] = []
-            q.put([])
+
+        if 'start' in dmap and len(dmap['start']) > 0:
+            q.put([(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
+            for k, v in dmap.items():
+                dmap[k] = []
+        elif len(list(dmap.values())[0]) > 0:
+            q.put([(self, cmap[k], tmap[k], dmap[k]) for k, v in dmap.items()])
+            for k, v in dmap.items():
+                dmap[k] = []
+        q.put([])
+        
             
-                
 
 
     def __delitem__(self, key):
@@ -345,6 +376,29 @@ class Stream(API):
             raise SentenaiError("invalid response")
         data = r.json()
         return iter(sorted(data.keys()))
+
+    def insert(self, values):
+        vs = []
+        origin = self._parent.origin
+        if origin is not None:
+            for v in values:
+                start = (dt64(v['start']) - origin) // np.timedelta64(1, 'ns')
+                end = (dt64(v['end']) - origin) // np.timedelta64(1, 'ns')
+                if 'value' in v:
+                    vs.append((int(start), int(end - start), v['value']))
+                else:
+                    vs.append((int(start), int(end - start)))
+        else:
+            for v in values:
+                start = dt64(v['start']) // np.timedelta64(1, 'ns')
+                end = dt64(v['end']) // np.timedelta64(1, 'ns')
+                if 'value' in v:
+                    vs.append((int(start), int(end - start), v['value']))
+                else:
+                    vs.append((int(start), int(end - start)))
+        print(vs)
+        self._post('types', self.type,
+                json=cbor2.dumps(vs), headers={'Content-Type': 'application/cbor'}, raw=True)
 
     def export(self, start=None, end=None, limit=None, exclude=tuple()):
         exp = API(self._credentials, "export")
