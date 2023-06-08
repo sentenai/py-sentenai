@@ -243,8 +243,8 @@ class Database(API):
                     return (cname, nid, tm)
                 except:
                     retries -= 1
-                    time.sleep(0.2)
-                    raise Exception("failed to create node/index")
+                    sleep(0.2)
+            raise Exception("failed to create node/index")
 
 
         with ThreadPoolExecutor(max_workers=8) as pool:
