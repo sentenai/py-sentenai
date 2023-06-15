@@ -201,10 +201,11 @@ class Database(API):
         else:
             raise TypeError("invalid assignment type")
 
-
+        if len(df) == 0:
+            raise ValueError("Cannot index empty dataset")
 
         def add(cname):
-            retries = 10
+            retries = 100
             while retries > 0:
                 try:
                     if isinstance(content, list):
@@ -241,9 +242,9 @@ class Database(API):
                     #dmap[cname] = []
                     #tmap[cname] = tm
                     return (cname, nid, tm)
-                except:
+                except Exception as e:
                     retries -= 1
-                    sleep(0.2)
+                    sleep(0.5)
             raise Exception("failed to create node/index")
 
 
@@ -258,7 +259,8 @@ class Database(API):
         origin = self.origin
         res = []
         q = Queue()
-        Thread(target=worker, args=(q, workers, len(df) * (len(df.columns) - 1), self._parent.interactive)).start()
+        wt = Thread(target=worker, args=(q, workers, len(df) * (len(df.columns) - 1), self._parent.interactive))
+        wt.start()
 
         for i, row in df.iterrows():
             if origin is not None:
@@ -320,6 +322,7 @@ class Database(API):
             for k, v in dmap.items():
                 dmap[k] = []
         q.put([])
+        wt.join()
         
             
 
@@ -390,13 +393,12 @@ class Stream(API):
                     vs.append((int(start), int(end - start)))
         else:
             for v in values:
-                start = dt64(v['start']) // np.timedelta64(1, 'ns')
-                end = dt64(v['end']) // np.timedelta64(1, 'ns')
+                start = td64(v['start']) // np.timedelta64(1, 'ns')
+                end = td64(v['end']) // np.timedelta64(1, 'ns')
                 if 'value' in v:
                     vs.append((int(start), int(end - start), v['value']))
                 else:
                     vs.append((int(start), int(end - start)))
-        print(vs)
         self._post('types', self.type,
                 json=cbor2.dumps(vs), headers={'Content-Type': 'application/cbor'}, raw=True)
 

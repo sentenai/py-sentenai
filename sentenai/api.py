@@ -251,12 +251,12 @@ class API(object):
 
         if resp.status_code == 400:
             x = "/".join(list(self._prefix)+list(parts))
-            print(x, data)
+            print("bad request:", x, data)
             raise BadRequest(f"invalid request: {resp.json()}")
         elif resp.status_code == 403:
             raise AccessDenied("Invalid credentials")
         elif resp.status_code >= 500:
-            raise SentenaiError(f"Server error ({resp.status_code}): `{self._credentials.host}`")
+            raise SentenaiError(f"Server error ({resp.status_code}): `{self._credentials.host}`\nMessage: {resp.text}")
         else:
             return resp
 
