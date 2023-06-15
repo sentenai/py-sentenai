@@ -142,6 +142,7 @@ class Database(API):
 
         if content is None:
             nid = self._put('paths', *path, json={'kind': 'directory'})
+            return
         elif PANDAS and isinstance(content, pd.DataFrame):
             nid = self._put('paths', *path).json()['node']
             self._put('nodes', nid, 'types', 'event')
