@@ -52,18 +52,21 @@ class Metadata(API):
             raise KeyError("metadata key not found")
 
     def __setitem__(self, key, val):
-        if isinstance(val, bool):
-            vtype = "bool"
-        elif isinstance(val, datetime) or isinstance(val, np.datetime64):
-            vtype = "datetime"
-            val = dt64(val)
-        elif isinstance(val, int):
-            vtype = "int"
-        elif isinstance(val, float):
-            vtype = "float"
+        if val is None:
+            resp = self._delete(key)
         else:
-            vtype = "text"
-        resp = self._patch(json={key: {'type': vtype, 'value': val}})
+            if isinstance(val, bool):
+                vtype = "bool"
+            elif isinstance(val, datetime) or isinstance(val, np.datetime64):
+                vtype = "datetime"
+                val = dt64(val)
+            elif isinstance(val, int):
+                vtype = "int"
+            elif isinstance(val, float):
+                vtype = "float"
+            else:
+                vtype = "text"
+            resp = self._patch(json={key: {'type': vtype, 'value': val}})
         if resp.status_code not in [200, 201, 204]:
             raise Exception(resp.status_code)
 
