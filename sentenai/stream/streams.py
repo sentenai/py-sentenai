@@ -44,7 +44,13 @@ def index_data(args):
     db, node, index, v = args
     counter = 0
     while counter < 10:
-        data = cbor2.dumps(v)
+        try:
+            data = cbor2.dumps(v)
+        except Exception as e:
+            print(e)
+            print(db, node, index)
+            print(v[-1])
+
         try:
             resp = db._post('nodes', node, 'types', index,
                     json=data, headers={'Content-Type': 'application/cbor'}, raw=True)
@@ -249,7 +255,7 @@ class Database(API):
             raise Exception("failed to create node/index")
 
 
-        with ThreadPoolExecutor(max_workers=8) as pool:
+        with ThreadPoolExecutor(max_workers=1) as pool:
             res = pool.map(add, [x for x in df.columns if x not in ['start', 'end']])
             for cname, nid, tm in res:
                 cmap[cname] = nid
@@ -265,18 +271,18 @@ class Database(API):
 
         for i, row in df.iterrows():
             if origin is not None:
-                ts = (row['start'] - origin) // np.timedelta64(1, 'ns')
+                ts = int((dt64(row['start']) - origin) // np.timedelta64(1, 'ns'))
             else:
-                ts = row['start'] // np.timedelta64(1, 'ns')
+                ts = int(td64(row['start']) // np.timedelta64(1, 'ns'))
             try:
                 if 'end' in row and origin is not None:
-                    dur = (row['end'] - row['start']) // np.timedelta64(1, 'ns')
+                    dur = int((dt64(row['end']) - dt64(row['start'])) // np.timedelta64(1, 'ns'))
                 elif origin is not None:
-                    dur = (df['start'].iloc[i+1] - row['start']) // np.timedelta64(1, 'ns')
+                    dur = int((dt64(df['start'].iloc[i+1]) - dt64(row['start'])) // np.timedelta64(1, 'ns'))
                 elif 'end' in row:
-                    dur = (row['end'] - row['start']) // np.timedelta64(1, 'ns')
+                    dur = int((td64(row['end']) - td64(row['start'])) // np.timedelta64(1, 'ns'))
                 else:
-                    dur = (df['start'].iloc[i+1] - row['start']) // np.timedelta64(1, 'ns')
+                    dur = int((td64(df['start'].iloc[i+1]) - td64(row['start'])) // np.timedelta64(1, 'ns'))
             except IndexError:
                 dur = 1
 
@@ -403,19 +409,21 @@ class Stream(API):
         self._post('types', self.type,
                 json=cbor2.dumps(vs), headers={'Content-Type': 'application/cbor'}, raw=True)
 
-    def export(self, start=None, end=None, limit=None, exclude=tuple()):
+    def export(self, start=None, end=None, limit=None, exclude=tuple(), origin=datetime(1970,1,1)):
         exp = API(self._credentials, "export")
-        o = iso8601(self._parent.origin)[:-1]
-        co = ["start", "end", "duration"] 
+        o = iso8601(self._parent.origin or origin)[:-1] + 'Z'
+        co = ["start", "end"] 
         cols = [f"{self}/{x}" for x in iter(self) if x not in exclude]
         when = str(self)
         params = {}
         if limit is not None:
             params['limit'] = limit
         if start is not None:
-            params['start'] = iso8601(start)
+            params['start'] = iso8601(start) if o else int(start)
         if end is not None:
-            params['end'] = iso8601(end)
+            params['end'] = iso8601(end) if o else int(end) 
+        if o is not None:
+            params['origin'] = o
 
         r = exp._post(json={'when': when, 'select': co+cols}, params=params)
         return pd.DataFrame(
@@ -423,8 +431,7 @@ class Stream(API):
                 columns = co + [x for x in list(self) if x not in exclude],
                 ).astype({
                     'start': np.dtype('datetime64[ns]'),
-                    'end': np.dtype('datetime64[ns]'),
-                    'duration': np.dtype('timedelta64[ns]')
+                    'end': np.dtype('datetime64[ns]')
                 })
 
 
