@@ -505,7 +505,12 @@ class Stream(API):
             return Stream(self._parent, *(self._path + key))
         else:
             return Stream(self._parent, *(self._path + (key,)))
-   
+  
+    @property
+    def raw(self):
+        return RawData(self)
+
+
     @property
     def data(self):
         return StreamData(self, self.type, False)
@@ -682,5 +687,41 @@ class StreamData(API):
             return self._parent._parent._parent.df(rs + self._origin)[tr]
         else:
             return self._parent._parent._parent(rs + self._origin)[tr]
+
+
+
+class RawData(API):
+    def __init__(self, parent):
+        self._parent = parent
+
+    def __getitem__(self, i):
+        params = {}
+        if isinstance(i, slice):
+
+            if i.start is None:
+                pass
+            elif type(i.start) is int:
+                params['start'] = int(i.start)
+            else:
+                params['start'] = iso8601(i.start)
+
+            if i.stop is None:
+                pass
+            elif type(i.stop) is int:
+                params['end'] = int(i.stop)
+            else:
+                params['end'] = iso8601(i.stop)
+
+            if i.step is not None:
+                params['limit'] = i.step
+        if self._parent.type == 'event':
+            resp = self._parent._parent._parent._post('tspl', json=f'when {self._parent!s}', params=params, headers={'Accept': 'application/cbor'})
+        else:
+            resp = self._parent._parent._parent._post('tspl', json=str(self._parent), params=params, headers={'Accept': 'application/cbor'})
+        if 'content-type' in resp.headers and resp.headers['content-type'] == 'application/cbor':
+            return cbor2.loads(resp.content)
+        else:
+            return resp.json()
+
 
 

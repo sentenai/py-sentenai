@@ -4,6 +4,7 @@ if PANDAS: import pandas as pd
 from datetime import datetime
 import io
 import uuid
+import cbor2
 from pathlib import Path
 
 import time
@@ -198,36 +199,54 @@ class View(API):
 
             for name, tspl in self._tspl.items():
                 if self._when is None:
-                    resp = self._post(json=tspl, params=params)
+                    resp = self._post(json=tspl, params=params, headers={'Accept': 'application/cbor'})
 
                 else:
-                    resp = self._post(json=f'({tspl}) when {self._when}', params=params)
+                    resp = self._post(json=f'({tspl}) when {self._when}', params=params, headers={'Accept': 'application/cbor'})
 
                     
                 t = resp.headers['type']
-                data = resp.json()
-                if isinstance(data, list):
-                    for evt in data:
-                        if type(evt['start']) is int:
-                            evt['start'] = np.timedelta64(evt['start'], 'ns')
-                            evt['end'] = np.timedelta64(evt['end'], 'ns')
-                        else:
-                            evt['start'] = np.datetime64(evt['start'][:-1], 'ns')
-                            evt['end'] = np.datetime64(evt['end'][:-1], 'ns')
-                        if t != "event":
-                            evt[name] = fromJSON(t, evt['value'])
-                        if self._df:
-                            evt['duration'] = evt['end'] - evt['start']
-                    if self._df:
-                        if t == "event":
-                            results.append(pd.DataFrame(data, columns=["start", "end", "duration"]))
-                        else:
-                            results.append(pd.DataFrame(data, columns=["start", "end", "duration", name]))
+                if resp.headers['content-type'] == 'application/cbor':
+                    o = 0
+                    if 'origin' in resp.headers:
+                        o = int(np.datetime64(resp.headers['origin'][:-1], 'ns').astype(int))
+                    d = cbor2.loads(resp.content)
+                    data = []
+                    if t != 'event':
+                        for evt in d:
+                            ts =  np.datetime64(o + evt[0], 'ns')
+                            end = np.datetime64(o + evt[0] + evt[1], 'ns')
+                            data.append({'start': ts, 'end': end, 'value': evt[2]})
                     else:
-                        results.append(data)
+                        for evt in d:
+                            ts =  np.datetime64(o + evt[0], 'ns')
+                            end = np.datetime64(o + evt[0] + evt[1], 'ns')
+                            data.append({'start': ts, 'end': end})
+                    results.append(data)
                 else:
-                    print(data)
-                    raise Exception(data)
+                    data = resp.json()
+                    if isinstance(data, list):
+                        for evt in data:
+                            if type(evt['start']) is int:
+                                evt['start'] = np.timedelta64(evt['start'], 'ns')
+                                evt['end'] = np.timedelta64(evt['end'], 'ns')
+                            else:
+                                evt['start'] = np.datetime64(evt['start'][:-1], 'ns')
+                                evt['end'] = np.datetime64(evt['end'][:-1], 'ns')
+                            if t != "event":
+                                evt[name] = fromJSON(t, evt['value'])
+                            if self._df:
+                                evt['duration'] = evt['end'] - evt['start']
+                        if self._df:
+                            if t == "event":
+                                results.append(pd.DataFrame(data, columns=["start", "end", "duration"]))
+                            else:
+                                results.append(pd.DataFrame(data, columns=["start", "end", "duration", name]))
+                        else:
+                            results.append(data)
+                    else:
+                        print(data)
+                        raise Exception(data)
             if len(results) == 0:
                 return None
             elif len(results) == 1:
