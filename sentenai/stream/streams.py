@@ -380,6 +380,15 @@ class Stream(API):
 
         self._parent[self._path + key] = v
 
+    @property
+    def links(self):
+        return iter(self)
+
+    @property
+    def children(self):
+        return iter((self[k] for k in self.links))
+
+
     def __iter__(self):
         r = self._get("links")
         if r.status_code != 200:
@@ -437,6 +446,17 @@ class Stream(API):
 
     def graph(self):
         return self._parent.graph(self._path)
+
+    @property
+    def source(self):
+        r = self._get()
+        if r.status_code == 200:
+            info = r.json()
+            if not info:
+                return None
+            return info.get('tspl')
+        else:
+            return None
 
 
 
