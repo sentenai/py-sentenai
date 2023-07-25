@@ -208,20 +208,34 @@ class View(API):
                 t = resp.headers['type']
                 if resp.headers['content-type'] == 'application/cbor':
                     o = 0
+                    hasOrigin = False
                     if 'origin' in resp.headers:
                         o = int(np.datetime64(resp.headers['origin'][:-1], 'ns').astype(int))
+                        hasOrigin = True
                     d = cbor2.loads(resp.content)
                     data = []
-                    if t != 'event':
-                        for evt in d:
-                            ts =  np.datetime64(o + evt[0], 'ns')
-                            end = np.datetime64(o + evt[0] + evt[1], 'ns')
-                            data.append({'start': ts, 'end': end, 'value': evt[2]})
+                    if hasOrigin:
+                        if t != 'event':
+                            for evt in d:
+                                ts =  np.datetime64(o + evt[0], 'ns')
+                                end = np.datetime64(o + evt[0] + evt[1], 'ns')
+                                data.append({'start': ts, 'end': end, 'value': evt[2]})
+                        else:
+                            for evt in d:
+                                ts =  np.datetime64(o + evt[0], 'ns')
+                                end = np.datetime64(o + evt[0] + evt[1], 'ns')
+                                data.append({'start': ts, 'end': end})
                     else:
-                        for evt in d:
-                            ts =  np.datetime64(o + evt[0], 'ns')
-                            end = np.datetime64(o + evt[0] + evt[1], 'ns')
-                            data.append({'start': ts, 'end': end})
+                        if t != 'event':
+                            for evt in d:
+                                ts =  np.timedelta64(evt[0], 'ns')
+                                end = np.timedelta64(evt[0] + evt[1], 'ns')
+                                data.append({'start': ts, 'end': end, 'value': evt[2]})
+                        else:
+                            for evt in d:
+                                ts =  np.timedelta64(evt[0], 'ns')
+                                end = np.timedelta64(evt[0] + evt[1], 'ns')
+                                data.append({'start': ts, 'end': end})
                     results.append(data)
                 else:
                     data = resp.json()
