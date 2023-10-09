@@ -90,11 +90,14 @@ class Database(API):
     def values(self):
         return iter([self[k] for k in self])
 
-    def graph(self, path=None):
+    def graph(self, path=None, limit=-1):
         import treelib
         t = treelib.Tree()
         root = t.create_node(path[-1] if path else self.name, path[-1] if path else self.name, data={})
-        r = self._get("graph", *(path or []))
+        ps = {}
+        if limit >= 0:
+            ps['limit'] = limit
+        r = self._get("graph", *(path or []), params=ps)
         if r.status_code != 200:
             raise SentenaiError("Invalid Response")
         data = r.json()
@@ -108,7 +111,7 @@ class Database(API):
                     continue
                 else:
                     pid = "/".join(x[:-1]) 
-                    t.create_node(link, nid, parent=pid, data={'type': node[1]})
+                    t.create_node(link, nid, parent=pid, data={'id': node[1], 'type': node[2], 'children': node[3], 'indexes': node[4]})
         return t
 
 
@@ -418,12 +421,12 @@ class Stream(API):
         self._post('types', self.type,
                 json=cbor2.dumps(vs), headers={'Content-Type': 'application/cbor'}, raw=True)
 
-    def export(self, start=None, end=None, limit=None, exclude=tuple(), origin=datetime(1970,1,1)):
+    def export(self, start=None, end=None, limit=None, exclude=tuple(), origin=datetime(1970,1,1), when=None):
         exp = API(self._credentials, "export")
         o = iso8601(self._parent.origin or origin)[:-1] + 'Z'
         co = ["start", "end"] 
         cols = [f"{self}/{x}" for x in iter(self) if x not in exclude]
-        when = str(self)
+        when = when or str(self)
         params = {}
         if limit is not None:
             params['limit'] = limit
@@ -444,8 +447,8 @@ class Stream(API):
                 })
 
 
-    def graph(self):
-        return self._parent.graph(self._path)
+    def graph(self, limit=-1):
+        return self._parent.graph(self._path, limit)
 
     @property
     def source(self):
