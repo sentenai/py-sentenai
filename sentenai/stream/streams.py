@@ -205,7 +205,11 @@ class Database(API):
                 tmap = {}
                 dmap = {}
                 df = pd.DataFrame(content).rename(columns={'value': path[-1]})
-                if set(df.columns) != {'start', 'end', path[-1]}:
+                if set(df.columns) == {'start', 'end', path[-1]}:
+                    pass
+                elif set(df.columns) == {'start', 'end'}:
+                    dmap = {'start': []}
+                else:
                     raise Exception(str(df.columns))
                 df = df.sort_values(by='start', ignore_index=True)
         else:
