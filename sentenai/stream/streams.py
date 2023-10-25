@@ -428,7 +428,7 @@ class Stream(API):
     def export(self, start=None, end=None, limit=None, exclude=tuple(), origin=datetime(1970,1,1), when=None):
         exp = API(self._credentials, "export")
         o = iso8601(self._parent.origin or origin)[:-1] + 'Z'
-        co = ["start", "end"] 
+        co = ["start", "end"]
         cols = [f"{self}/{x}" for x in iter(self) if x not in exclude]
         when = when or str(self)
         params = {}
@@ -437,19 +437,15 @@ class Stream(API):
         if start is not None:
             params['start'] = iso8601(start) if o else int(start)
         if end is not None:
-            params['end'] = iso8601(end) if o else int(end) 
+            params['end'] = iso8601(end) if o else int(end)
         if o is not None:
             params['origin'] = o
 
         r = exp._post(json={'when': when, 'select': co+cols}, params=params)
-        return pd.DataFrame(
-                r.json(),
-                columns = co + [x for x in list(self) if x not in exclude],
-                ).astype({
-                    'start': np.dtype('datetime64[ns]'),
-                    'end': np.dtype('datetime64[ns]')
-                })
-
+        df = pd.DataFrame( r.json(), columns = co + [x for x in list(self) if x not in exclude])
+        df.start = df.start.apply(pd.Timestamp)
+        df.end = df.end.apply(pd.Timestamp)
+        return df
 
     def graph(self, limit=-1):
         return self._parent.graph(self._path, limit)
