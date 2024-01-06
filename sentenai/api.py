@@ -85,6 +85,12 @@ def td64(td):
         return np.timedelta64(td)
     elif isinstance(td, np.timedelta64):
         return np.timedelta64(td)
+    # IRIG J2
+    elif isinstance(td, str) and re.match('\d{3}:\d{2}:\d{2}:\d{2}.\d{0,6}', td):
+        return np.timedelta64(datetime.strptime(td, '%j:%H:%M:%S.%f') - datetime(1900,1,1))
+    # IRIG J1
+    elif isinstance(td, str) and re.match('\d{3}:\d{2}:\d{2}:\d{2}', td):
+        return np.timedelta64(datetime.strptime(td, '%j:%H:%M:%S') - datetime(1900,1,1))
     elif isinstance(td, str):
         return np.timedelta64(int(td), 'ns')
     else:
