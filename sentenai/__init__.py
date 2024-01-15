@@ -149,7 +149,7 @@ class View(API):
             return {'start': dt64(self._info['start']), 'end': dt64(self._info['end'])}
         else:
             self._info = self._post("range", json=self._tspl['value']).json()
-            return self.range
+            return {'start': dt64(self._info['start']), 'end': dt64(self._info['end'])}
 
     @property
     def origin(self):
@@ -220,23 +220,41 @@ class View(API):
                                 ts =  np.datetime64(o + evt[0], 'ns')
                                 end = np.datetime64(o + evt[0] + evt[1], 'ns')
                                 data.append({'start': ts, 'end': end, 'value': evt[2]})
+                                if self._df:
+                                    evt = data[-1]
+                                    evt['duration'] = evt['end'] - evt['start']
                         else:
                             for evt in d:
                                 ts =  np.datetime64(o + evt[0], 'ns')
                                 end = np.datetime64(o + evt[0] + evt[1], 'ns')
                                 data.append({'start': ts, 'end': end})
+                                if self._df:
+                                    evt = data[-1]
+                                    evt['duration'] = evt['end'] - evt['start']
                     else:
                         if t != 'event':
                             for evt in d:
                                 ts =  np.timedelta64(evt[0], 'ns')
                                 end = np.timedelta64(evt[0] + evt[1], 'ns')
                                 data.append({'start': ts, 'end': end, 'value': evt[2]})
+                                if self._df:
+                                    evt = data[-1]
+                                    evt['duration'] = evt['end'] - evt['start']
                         else:
                             for evt in d:
                                 ts =  np.timedelta64(evt[0], 'ns')
                                 end = np.timedelta64(evt[0] + evt[1], 'ns')
                                 data.append({'start': ts, 'end': end})
-                    results.append(data)
+                                if self._df:
+                                    evt = data[-1]
+                                    evt['duration'] = evt['end'] - evt['start']
+                    if self._df:
+                        if t == "event":
+                            results.append(pd.DataFrame(data, columns=["start", "end", "duration"]))
+                        else:
+                            results.append(pd.DataFrame(data, columns=["start", "end", "duration", name]))
+                    else:
+                        results.append(data)
                 else:
                     data = resp.json()
                     if isinstance(data, list):
