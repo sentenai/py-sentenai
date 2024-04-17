@@ -280,9 +280,15 @@ class Database(API):
             if origin is not None:
                 ts = int((dt64(row['start']) - origin) // np.timedelta64(1, 'ns'))
             else:
-                ts = int(td64(row['start']) // np.timedelta64(1, 'ns'))
+                try:
+                    ts = int(td64(row['start']) // np.timedelta64(1, 'ns'))
+                except:
+                    print(row['start'], row['start'].dtype)
+                    raise
             try:
-                if 'end' in row and origin is not None:
+                if 'duration' in row:
+                    dur = int(row['duration'])
+                elif 'end' in row and origin is not None:
                     dur = int((dt64(row['end']) - dt64(row['start'])) // np.timedelta64(1, 'ns'))
                 elif origin is not None:
                     dur = int((dt64(df['start'].iloc[i+1]) - dt64(row['start'])) // np.timedelta64(1, 'ns'))
@@ -493,6 +499,7 @@ class Stream(API):
         r = self._get('types')
         if r.status_code == 200:
             ts = r.json()
+            print(ts)
             if not ts:
                 return None
             else:
@@ -503,6 +510,7 @@ class Stream(API):
     @property
     def range(self):
         if self.type is None:
+            print("NO INDEXES")
             return None
         r = self._get('types', self.type, 'range')
         if r.status_code == 200:

@@ -75,8 +75,8 @@ def dt64(dt):
         raise TypeError("Cannot convert `{}` to datetime64".format(type(dt)))
 
 def td64(td):
-    if isinstance(dt, float):
-        return np.timedelta64(int(round(td*1000000000)), 'ns')
+    if isinstance(td, float):
+        return np.timedelta64(int(round(td)), 'ns')
     elif isinstance(td, np.timedelta64):
         return td
     elif isinstance(td, int):
@@ -92,6 +92,8 @@ def td64(td):
     elif isinstance(td, str) and re.match('\d{3}:\d{2}:\d{2}:\d{2}', td):
         return np.timedelta64(datetime.strptime(td, '%j:%H:%M:%S') - datetime(1900,1,1))
     elif isinstance(td, str):
+        return np.timedelta64(int(td), 'ns')
+    elif isinstance(td, np.int64):
         return np.timedelta64(int(td), 'ns')
     else:
         raise TypeError("Cannot convert `{}` to timedelta64".format(type(td)))
@@ -257,7 +259,7 @@ class API(object):
 
         if resp.status_code == 400:
             x = "/".join(list(self._prefix)+list(parts))
-            print("bad request:", x, data)
+            #print("bad request:", x, data)
             raise BadRequest(f"invalid request: {resp.json()}")
         elif resp.status_code == 403:
             raise AccessDenied("Invalid credentials")

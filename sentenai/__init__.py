@@ -19,7 +19,7 @@ class Sentenai(API):
     def __init__(self, host=None, port=None, check=True, interactive=True):
         ## We do this so we can programmatically pass in host/port
         if host is None:
-            host = 'localhost'
+            host = 'sentenai'
         if port is None:
             port = 7280
         protocol = 'http://'
@@ -145,10 +145,12 @@ class View(API):
 
     @property
     def range(self):
-        if self._info:
+        print("RANGE")
+        if self._info and False:
             return {'start': dt64(self._info['start']), 'end': dt64(self._info['end'])}
         else:
             self._info = self._post("range", json=self._tspl['value']).json()
+            print(self._info)
             return {'start': dt64(self._info['start']), 'end': dt64(self._info['end'])}
 
     @property
