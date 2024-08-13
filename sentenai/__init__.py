@@ -247,8 +247,8 @@ class View(API):
                                 nd = st + evt[1]
                                 if st > maxBound: st = maxBound
                                 if nd > maxBound: nd = maxBound
-                                ts =  np.datetime64(st, 'ns')
-                                end = np.datetime64(nd, 'ns')
+                                ts =  np.timedelta64(st, 'ns')
+                                end = np.timedelta64(nd, 'ns')
                                 data.append({'start': ts, 'end': end, 'value': evt[2]})
                                 if self._df:
                                     evt = data[-1]
@@ -259,8 +259,8 @@ class View(API):
                                 nd = st + evt[1]
                                 if st > maxBound: st = maxBound
                                 if nd > maxBound: nd = maxBound
-                                ts =  np.datetime64(st, 'ns')
-                                end = np.datetime64(nd, 'ns')
+                                ts =  np.timedelta64(st, 'ns')
+                                end = np.timedelta64(nd, 'ns')
                                 data.append({'start': ts, 'end': end})
                                 if self._df:
                                     evt = data[-1]
