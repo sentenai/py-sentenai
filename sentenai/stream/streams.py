@@ -287,7 +287,7 @@ class Database(API):
                     raise
             try:
                 if 'duration' in row:
-                    dur = int(row['duration'])
+                    dur = td64(row['duration']) // np.timedelta64(1, 'ns')
                 elif 'end' in row and origin is not None:
                     dur = int((dt64(row['end']) - dt64(row['start'])) // np.timedelta64(1, 'ns'))
                 elif origin is not None:

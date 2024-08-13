@@ -10,6 +10,7 @@ from pathlib import Path
 import time
 
 __all__ = ['Sentenai']
+maxBound = 0x7FFF_FFFF_FFFF_FFFF
 
 if PANDAS:
     def df(events):
@@ -132,11 +133,9 @@ class View(API):
             # Check the required directory path exists
             filepath.parent.mkdir(parents=True, exist_ok=True)
          
-            # The open "wt" parameters are: write, text mode;
-            with io.open(filepath, 'wt', encoding='utf8') as outfile:
-                # The data is passed in as a dictionary so we can pass different
-                # arguments to the template
-                outfile.write(template.format(**data))
+            # The data is passed in as a dictionary so we can pass different
+            # arguments to the template
+            outfile.write(template.format(**data))
          
             return IFrame(src=filepath, width=width, height=height)
         
@@ -219,16 +218,24 @@ class View(API):
                     if hasOrigin:
                         if t != 'event':
                             for evt in d:
-                                ts =  np.datetime64(o + evt[0], 'ns')
-                                end = np.datetime64(o + evt[0] + evt[1], 'ns')
+                                st = o + evt[0]
+                                nd = st + evt[1]
+                                if st > maxBound: st = maxBound
+                                if nd > maxBound: nd = maxBound
+                                ts =  np.datetime64(st, 'ns')
+                                end = np.datetime64(nd, 'ns')
                                 data.append({'start': ts, 'end': end, 'value': evt[2]})
                                 if self._df:
                                     evt = data[-1]
                                     evt['duration'] = evt['end'] - evt['start']
                         else:
                             for evt in d:
-                                ts =  np.datetime64(o + evt[0], 'ns')
-                                end = np.datetime64(o + evt[0] + evt[1], 'ns')
+                                st = o + evt[0]
+                                nd = st + evt[1]
+                                if st > maxBound: st = maxBound
+                                if nd > maxBound: nd = maxBound
+                                ts =  np.datetime64(st, 'ns')
+                                end = np.datetime64(nd, 'ns')
                                 data.append({'start': ts, 'end': end})
                                 if self._df:
                                     evt = data[-1]
@@ -236,16 +243,24 @@ class View(API):
                     else:
                         if t != 'event':
                             for evt in d:
-                                ts =  np.timedelta64(evt[0], 'ns')
-                                end = np.timedelta64(evt[0] + evt[1], 'ns')
+                                st = evt[0]
+                                nd = st + evt[1]
+                                if st > maxBound: st = maxBound
+                                if nd > maxBound: nd = maxBound
+                                ts =  np.datetime64(st, 'ns')
+                                end = np.datetime64(nd, 'ns')
                                 data.append({'start': ts, 'end': end, 'value': evt[2]})
                                 if self._df:
                                     evt = data[-1]
                                     evt['duration'] = evt['end'] - evt['start']
                         else:
                             for evt in d:
-                                ts =  np.timedelta64(evt[0], 'ns')
-                                end = np.timedelta64(evt[0] + evt[1], 'ns')
+                                st = evt[0]
+                                nd = st + evt[1]
+                                if st > maxBound: st = maxBound
+                                if nd > maxBound: nd = maxBound
+                                ts =  np.datetime64(st, 'ns')
+                                end = np.datetime64(nd, 'ns')
                                 data.append({'start': ts, 'end': end})
                                 if self._df:
                                     evt = data[-1]

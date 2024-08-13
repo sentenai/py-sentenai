@@ -92,7 +92,13 @@ def td64(td):
     elif isinstance(td, str) and re.match('\d{3}:\d{2}:\d{2}:\d{2}', td):
         return np.timedelta64(datetime.strptime(td, '%j:%H:%M:%S') - datetime(1900,1,1))
     elif isinstance(td, str):
-        return np.timedelta64(int(td), 'ns')
+        try:
+            return np.timedelta64(int(td), 'ns')
+        except ValueError:
+            if PANDAS:
+                return pd.Timedelta(td)
+            else:
+                raise
     elif isinstance(td, np.int64):
         return np.timedelta64(int(td), 'ns')
     else:
