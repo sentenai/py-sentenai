@@ -298,6 +298,7 @@ class Database(API):
                     dur = int((td64(df['start'].iloc[i+1]) - td64(row['start'])) // np.timedelta64(1, 'ns'))
             except IndexError:
                 dur = 1
+            print(row, dur)
 
             if dur <= 0: continue
             for col, val in dict(row).items():
@@ -529,7 +530,7 @@ class Stream(API):
         return f"Stream({self._parent!r}, {z})"
 
     def __str__(self):
-        return "/".join((self._parent.name,) + self._path)
+        return "/".join((self._parent.name,) + self._path).replace(' ', '\\ ')
 
     def __getitem__(self, key):
         if isinstance(key, tuple):
@@ -748,7 +749,7 @@ class RawData(API):
         if self._parent.type == 'event':
             resp = self._parent._parent._parent._post('tspl', json=f'when {self._parent!s}', params=params, headers={'Accept': 'application/cbor'})
         else:
-            resp = self._parent._parent._parent._post('tspl', json=str(self._parent), params=params, headers={'Accept': 'application/cbor'})
+            resp = self._parent._parent._parent._post('tspl', json=str(self._parent).replace(' ', '\\ '), params=params, headers={'Accept': 'application/cbor'})
         if 'content-type' in resp.headers and resp.headers['content-type'] == 'application/cbor':
             return cbor2.loads(resp.content)
         else:
