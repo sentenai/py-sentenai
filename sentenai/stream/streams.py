@@ -54,7 +54,9 @@ def index_data(args):
         try:
             resp = db._post('nodes', node, 'types', index,
                     json=data, headers={'Content-Type': 'application/cbor'}, raw=True)
-        except:
+        except Exception as e:
+            print(e)
+            
             counter += 1
             sleep(.1)
         else:
@@ -298,7 +300,6 @@ class Database(API):
                     dur = int((td64(df['start'].iloc[i+1]) - td64(row['start'])) // np.timedelta64(1, 'ns'))
             except IndexError:
                 dur = 1
-            print(row, dur)
 
             if dur <= 0: continue
             for col, val in dict(row).items():

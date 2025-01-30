@@ -69,22 +69,36 @@ class Tempest(object):
         return API(Credentials(h, None))
 
     def __getitem__(self, k):
-        r = tempest.api._get('db', k)
-        return DB(k)
+        return DB(self.api, k)
 
+    @property
+    def dbs(self):
+        return [DB(db, dt64(o)) for db, o in sorted(self.api._get('db').json().items())]
+
+    def tspl(self, tspl):
+        return TSPL(self.api, tspl)
 
 tempest = Tempest()
 
-
-def databases():
-    return [DB(db) for db in sorted(tempest.api._get('db').json())]
-
 class DB:
-    def __init__(self, name):
+    def __init__(self, api, name, origin=False):
         self.name = name
+        self.api = api
+        self._origin = origin
 
     def __repr__(self):
         return self.name
+
+    @property
+    def origin(self):
+        if self._origin == False:
+            r = self.api._get("db", self.name)
+            o = r.json()['origin']
+            if o is not None:
+                self._origin = dt64(o)
+            else:
+                self._origin = None
+        return self._origin
 
     @property
     def links(self):
@@ -94,12 +108,15 @@ class DB:
     def paths(self):
         return Paths(self)
 
+    @property
+    def graph(self):
+        return Graph(self)
 
     def init(self, origin=datetime(1970,1,1)):
         if origin == None:
-            r = tempest.api._put("db", self.name, json={'origin': None})
+            r = self.api._put("db", self.name, json={'origin': None})
         else:
-            r = tempest.api._put("db", self.name, json={'origin': iso8601(origin)})
+            r = self.api._put("db", self.name, json={'origin': iso8601(origin)})
         if r.status_code != 201:
             raise Exception("Could not initialize")
 
@@ -109,7 +126,8 @@ epoch = datetime(1970, 1, 1)
 CACHE_DURATION = 1
 
 class TSPL:
-    def __init__(self, src):
+    def __init__(self, api, src):
+        self.api = api
         self._src = src
         self._explain = None
 
@@ -122,17 +140,17 @@ class TSPL:
             params['end'] = s.stop
         if s.step:
             params['limit'] = s.step
-        return tempest.api._post('tspl', json=self._src, params=params).json()
+        return self.api._post('tspl', json=self._src, params=params).json()
 
     @property
     def explain(self):
         if not self._explain:
-            self._explain = tempest.api._post('tspl/debug', json=self._src).json()
+            self._explain = self.api._post('tspl/debug', json=self._src).json()
         return self._explain
 
     @property
     def range(self):
-        return tempest.api._post('tspl/range', json=self._src).json()
+        return self.api._post('tspl/range', json=self._src).json()
 
     @property
     def tsvm(self):
@@ -216,12 +234,28 @@ class Paths:
         self.db = db
 
     def __getitem__(self, *path):
-        resp = tempest.api._get('db', self.db.name, 'paths', *path).json()
+        resp = self.db.api._get('db', self.db.name, 'paths', *path).json()
         return Node(self.db, resp['node'])
     
     def __setitem__(self, path, p):
-        tempest.api._put("db", self.db.name, 'paths', path, json=p.json())
+        self.db.api._put("db", self.db.name, 'paths', path, json=p.json())
         
+class Graph:
+    def __init__(self, db):
+        self.db = db
+        self._path = []
+
+    def __getitem__(self, *path):
+        self._path = path
+        return self
+    
+
+    def tree(self, limit=None):
+        p = {'view': 'tree'}
+        if limit is not None:
+            p['limit'] = limit
+        return self.db.api._get('db', self.db.name, 'graph', *self._path, params=p).json()
+
 
 
 class Node(object):
@@ -254,11 +288,27 @@ class Meta(dict):
     def _md(self):
         now = time.time()
         if now - self._age > CACHE_DURATION:
-            self._meta = {k: v['value'] for k, v in tempest.api._get('db', self.node.db.name, 'nodes', self.node.id, 'meta').json().items()}
+            self._meta = {k: v['value'] for k, v in self.db._get('db', self.node.db.name, 'nodes', self.node.id, 'meta').json().items()}
         return self._meta
 
-    def __setitem__(self, key, item):
-        raise NotImplemented
+    def __setitem__(self, key, val):
+        if val is None:
+            resp = self.node.db.api._delete('db', self.node.db.name, 'nodes', self.node.id, 'meta', key)
+        else:
+            if isinstance(val, bool):
+                vtype = "bool"
+            elif isinstance(val, datetime) or isinstance(val, np.datetime64):
+                vtype = "datetime"
+                val = dt64(val)
+            elif isinstance(val, int):
+                vtype = "int"
+            elif isinstance(val, float):
+                vtype = "float"
+            else:
+                vtype = "text"
+            resp = self.node.db.api._patch('db', self.node.db.name, 'nodes', self.node.id, 'meta', json={key: {'type': vtype, 'value': val}})
+        if resp.status_code not in [200, 201, 204]:
+            raise Exception(resp.status_code)
 
     def __getitem__(self, key):
         return self._md[key]
@@ -317,7 +367,7 @@ class Stream(object):
         self.node = node
 
     def __len__(self):
-        resp = tempest.api._head('db', self.node.db.name, 'nodes', self.node.id, 'types', self.type.value)
+        resp = self.node.db.api._head('db', self.node.db.name, 'nodes', self.node.id, 'types', self.type.value)
         if resp.status_code == 200:
             return int(resp.headers['Count'])
         else:
@@ -328,13 +378,17 @@ class Stream(object):
         cbor = None
         if self.type == Type.Float:
             cbor = cbor2.dumps([(int(np.timedelta64(v.offset, 'ns')), int(np.timedelta64(v.duration, 'ns')), float(v.value)) for v in data])
+        elif self.type == Type.Text:
+            cbor = cbor2.dumps([(int(np.timedelta64(v.offset, 'ns')), int(np.timedelta64(v.duration, 'ns')), v.value) for v in data])
+        elif self.type == Type.Bool:
+            cbor = cbor2.dumps([(int(np.timedelta64(v.offset, 'ns')), int(np.timedelta64(v.duration, 'ns')), v.value) for v in data])
         else:
             cbor = cbor2.dumps([(int(np.timedelta64(v.offset, 'ns')), int(np.timedelta64(v.duration, 'ns')), tuple(map(float, v.value))) for v in data])
-        resp = tempest.api._post('db', self.node.db.name, 'nodes', self.node.id, 'types', self.type.value,
+        resp = self.node.db.api._post('db', self.node.db.name, 'nodes', self.node.id, 'types', self.type.value,
                     json=cbor, headers={'Content-Type': 'application/cbor'}, raw=True)
 
     def __getitem__(self, params):
-        resp = tempest.api._get('db', self.node.db.name, 'nodes', self.node.id, 'types', self.type.value,
+        resp = self.node.db.api._get('db', self.node.db.name, 'nodes', self.node.id, 'types', self.type.value,
                     headers={'Accept': 'application/cbor'}, params=params)
         if self.type == Type.Event:
             return [Event(np.timedelta64(x['ts'], 'ns'), np.timedelta64(x['duration'], 'ns')) for x in resp.json()]
@@ -351,7 +405,7 @@ class Stream(object):
 
     @property 
     def range(self):
-        resp = tempest.api._get('db', self.node.db.name, 'nodes', self.node.id, 'types', self.type.value, 'range')
+        resp = self.node.db.api._get('db', self.node.db.name, 'nodes', self.node.id, 'types', self.type.value, 'range')
         return resp.json()
         
 
@@ -365,7 +419,7 @@ class Types(dict):
         return Stream(self.node, type)
 
     def attach(self, type):
-        resp = tempest.api._put('db', self.node.db.name, 'nodes', self.node.id, 'types', type.value)
+        resp = self.node.db.api._put('db', self.node.db.name, 'nodes', self.node.id, 'types', type.value)
         return Stream(self.node, type)
 
 
@@ -373,7 +427,7 @@ class Types(dict):
     def _ts(self):
         now = time.time()
         if now - self._age > CACHE_DURATION:
-            ls = tempest.api._get('db', self.node.db.name, 'nodes', self.node.id, 'types').json()
+            ls = self.node.db.api._get('db', self.node.db.name, 'nodes', self.node.id, 'types').json()
             self._types = {Type(k) : Stream(self.node, Type(k)) for k in ls}
         return self._types
 
@@ -439,10 +493,10 @@ class Links(dict):
         now = time.time()
         if False or now - self._age > CACHE_DURATION:
             if isinstance(self.node, DB):
-                ls = tempest.api._get('db', self.node.name, 'links').json()
+                ls = self.node.db.api._get('db', self.node.name, 'links').json()
                 self._links = {k : Node(self.node, nid) for k, nid in ls.items()}
             else:
-                ls = tempest.api._get('db', self.node.db.name, 'nodes', self.node.id, 'links').json()
+                ls = self.node.db.api._get('db', self.node.db.name, 'nodes', self.node.id, 'links').json()
                 self._links = {k : Node(self.node.db, nid) for k, nid in ls.items()}
         return self._links
 
@@ -460,9 +514,9 @@ class Links(dict):
 
     def __delitem__(self, name):
         if isinstance(self.node, DB):
-            tempest.api._delete('db', self.node.name, 'links', name)
+            self.node.db.api._delete('db', self.node.name, 'links', name)
         else:
-            tempest.api._delete('db', self.node.db, 'nodes', self.node.id, 'links', name)
+            self.node.db.api._delete('db', self.node.db, 'nodes', self.node.id, 'links', name)
     
     def clear(self):
         raise NotImplemented
