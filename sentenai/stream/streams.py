@@ -47,16 +47,12 @@ def index_data(args):
         try:
             data = cbor2.dumps(v)
         except Exception as e:
-            print(e)
-            print(db, node, index)
-            print(v[-1])
+            pass
 
         try:
             resp = db._post('nodes', node, 'types', index,
                     json=data, headers={'Content-Type': 'application/cbor'}, raw=True)
         except Exception as e:
-            print(e)
-            
             counter += 1
             sleep(.1)
         else:
@@ -277,6 +273,7 @@ class Database(API):
         q = Queue()
         wt = Thread(target=worker, args=(q, workers, len(df) * (len(df.columns) - 1), self._parent.interactive))
         wt.start()
+        invalid_rows = []
 
         for i, row in df.iterrows():
             if origin is not None:
@@ -285,8 +282,9 @@ class Database(API):
                 try:
                     ts = int(td64(row['start']) // np.timedelta64(1, 'ns'))
                 except:
-                    print(row['start'], row['start'].dtype)
                     raise
+
+
             try:
                 if 'duration' in row:
                     dur = td64(row['duration']) // np.timedelta64(1, 'ns')
@@ -301,7 +299,11 @@ class Database(API):
             except IndexError:
                 dur = 1
 
-            if dur <= 0: continue
+            # catch invalid rows and don't process them.
+            if ts < 0 or dur <= 0:
+                invalid_rows.append((i, row))
+                continue
+
             for col, val in dict(row).items():
                 if col == 'start' and 'start' in dmap:
                     dmap[col].append((ts, dur))
@@ -320,7 +322,7 @@ class Database(API):
                 elif tmap[col] == 'time':
                     dmap[col].append((ts, dur, val.isoformat()))
                 elif tmap[col] == 'datetime':
-                    dmap[col].append((ts, dur, iso8601(val)))
+                    dmap[col].append((ts, dur, iso8601(val) + 'Z'))
                 elif tmap[col] == 'timedelta':
                     dmap[col].append((ts, dur, val // np.timedelta64(1, 'ns')))
                 else:
@@ -345,6 +347,8 @@ class Database(API):
                 dmap[k] = []
         q.put([])
         wt.join()
+        if invalid_rows:
+            raise InvalidRows(invalid_rows)
         
             
 
@@ -501,7 +505,6 @@ class Stream(API):
         r = self._get('types')
         if r.status_code == 200:
             ts = r.json()
-            print(ts)
             if not ts:
                 return None
             else:
@@ -512,7 +515,6 @@ class Stream(API):
     @property
     def range(self):
         if self.type is None:
-            print("NO INDEXES")
             return None
         r = self._get('types', self.type, 'range')
         if r.status_code == 200:
@@ -752,7 +754,14 @@ class RawData(API):
         else:
             resp = self._parent._parent._parent._post('tspl', json=str(self._parent).replace(' ', '\\ '), params=params, headers={'Accept': 'application/cbor'})
         if 'content-type' in resp.headers and resp.headers['content-type'] == 'application/cbor':
-            return cbor2.loads(resp.content)
+            print(self._parent.type)
+            if self._parent.type == 'datetime':
+                data = cbor2.loads(resp.content)
+                for x in data:
+                    x['value'] = np.datetime64(x['value'].value[1] * int(1e9) + x['value'].value[-12] // 1000, 'ns')
+                return data
+            else: 
+                return cbor2.loads(resp.content)
         else:
             return resp.json()
 

@@ -86,10 +86,10 @@ def td64(td):
     elif isinstance(td, np.timedelta64):
         return np.timedelta64(td)
     # IRIG J2
-    elif isinstance(td, str) and re.match('\d{3}:\d{2}:\d{2}:\d{2}.\d{0,6}', td):
+    elif isinstance(td, str) and re.match(r'\d{3}:\d{2}:\d{2}:\d{2}.\d{0,6}', td):
         return np.timedelta64(datetime.strptime(td, '%j:%H:%M:%S.%f') - datetime(1900,1,1))
     # IRIG J1
-    elif isinstance(td, str) and re.match('\d{3}:\d{2}:\d{2}:\d{2}', td):
+    elif isinstance(td, str) and re.match(r'\d{3}:\d{2}:\d{2}:\d{2}', td):
         return np.timedelta64(datetime.strptime(td, '%j:%H:%M:%S') - datetime(1900,1,1))
     elif isinstance(td, str):
         try:
@@ -269,6 +269,8 @@ class API(object):
             raise BadRequest(f"invalid request: {resp.json()}")
         elif resp.status_code == 403:
             raise AccessDenied("Invalid credentials")
+        elif resp.status_code == 409:
+            raise ResourceConflict("Index Segment Busy")
         elif resp.status_code >= 500:
             raise SentenaiError(f"Server error ({resp.status_code}): `{self._credentials.host}`\nMessage: {resp.text}")
         else:
@@ -298,6 +300,8 @@ class AccessDenied(SentenaiException): pass
 class ConnectionError(SentenaiException): pass
 class SentenaiError(SentenaiException): pass
 class BadRequest(SentenaiException): pass
+class ResourceConflict(SentenaiException): pass
+class InvalidRows(SentenaiException): pass
 
 
 

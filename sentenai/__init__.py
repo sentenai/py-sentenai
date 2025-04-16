@@ -121,7 +121,7 @@ class View(API):
     def plan(self):
         from IPython.display import IFrame
          
-        def js_ui(data, template, out_fn = None, out_path='.',
+        def js_ui(data, template, out_fn = None, out_path='/tmp/',
                   width="800px", height="600px", **kwargs):
             """Generate an IFrame containing a templated javascript package."""
             if not out_fn:
@@ -135,7 +135,8 @@ class View(API):
          
             # The data is passed in as a dictionary so we can pass different
             # arguments to the template
-            outfile.write(template.format(**data))
+            with open(out_path, 'w+') as outfile:
+                outfile.write(template.format(**data))
          
             return IFrame(src=filepath, width=width, height=height)
         
@@ -144,12 +145,10 @@ class View(API):
 
     @property
     def range(self):
-        print("RANGE")
         if self._info and False:
             return {'start': dt64(self._info['start']), 'end': dt64(self._info['end'])}
         else:
             self._info = self._post("range", json=self._tspl['value']).json()
-            print(self._info)
             return {'start': dt64(self._info['start']), 'end': dt64(self._info['end'])}
 
     @property
@@ -214,6 +213,9 @@ class View(API):
                         o = int(np.datetime64(resp.headers['origin'][:-1], 'ns').astype(int))
                         hasOrigin = True
                     d = cbor2.loads(resp.content)
+                    if t == 'datetime':
+                        for x in d:
+                            x[2] = np.datetime64(x[2].value[1] * int(1e9) + x[2].value[-12] // 1000, 'ns')
                     data = []
                     if hasOrigin:
                         if t != 'event':
@@ -274,6 +276,7 @@ class View(API):
                         results.append(data)
                 else:
                     data = resp.json()
+                    print("NOT CBOR")
                     if isinstance(data, list):
                         for evt in data:
                             if type(evt['start']) is int:
